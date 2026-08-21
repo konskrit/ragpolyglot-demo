@@ -1,4 +1,9 @@
-﻿import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+﻿import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import amqp, { ChannelModel, Channel, ConsumeMessage } from 'amqplib';
 import { ConsumerRegistration } from '@ragpolyglot-shared';
 import { Config } from './config';
@@ -13,7 +18,6 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private channel: Channel | null = null;
   private loopRunning = false;
   private shuttingDown = false;
-  private readyWaiters: Array<() => void> = [];
   private readonly consumers: ConsumerRegistration<ConsumeMessage>[] = [];
 
   onModuleInit(): void {
@@ -51,7 +55,6 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         try {
           await this.connect();
           this.logger.log('Connected to RabbitMQ');
-          this.resolveReadyWaiters();
           await this.bindAllConsumers();
           return;
         } catch (error) {
@@ -116,33 +119,6 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private resolveReadyWaiters(): void {
-    const waiters = this.readyWaiters;
-    this.readyWaiters = [];
-    for (const resolve of waiters) {
-      resolve();
-    }
-  }
-
-  private waitUntilReady(timeoutMs = 60_000): Promise<void> {
-    if (this.channel) {
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.readyWaiters = this.readyWaiters.filter((w) => w !== onReady);
-        reject(new Error('Timed out waiting for RabbitMQ'));
-      }, timeoutMs);
-
-      const onReady = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      this.readyWaiters.push(onReady);
-    });
-  }
-
   private async bindAllConsumers(): Promise<void> {
     for (const { queueName, handler } of this.consumers) {
       await this.consume(queueName, handler);
@@ -156,25 +132,17 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   ): void {
     this.consumers.push({ queueName, handler });
 
-    const attemptConsume = async (attempt: number): Promise<void> => {
-      try {
-        await this.waitUntilReady();
-        await this.consume(queueName, handler);
-        this.logger.log(`Consuming from queue "${queueName}"`);
-      } catch (error) {
-        if (this.shuttingDown) return;
-        const backoff = Math.min(
-          INITIAL_BACKOFF_MS * 2 ** attempt,
-          MAX_BACKOFF_MS,
-        );
-        this.logger.warn(
-          `Could not consume from "${queueName}" (${(error as Error).message}). Retrying in ${backoff}ms...`,
-        );
-        setTimeout(() => void attemptConsume(attempt + 1), backoff);
-      }
-    };
+    // Already connected (e.g. late registration): bind once. Otherwise
+    // connectLoop → bindAllConsumers handles first bind and reconnects.
+    if (!this.channel) return;
 
-    void attemptConsume(0);
+    void this.consume(queueName, handler)
+      .then(() => this.logger.log(`Consuming from queue "${queueName}"`))
+      .catch((error: Error) => {
+        this.logger.warn(
+          `Could not consume from "${queueName}" (${error.message})`,
+        );
+      });
   }
 
   async consume(

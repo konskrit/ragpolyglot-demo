@@ -1,4 +1,4 @@
-FROM node:22.20.0-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /workspace
 
@@ -11,7 +11,7 @@ RUN npm ci --legacy-peer-deps \
     && cd dist/apps/api-gateway \
     && npm install --omit=dev --legacy-peer-deps
 
-FROM node:22.20.0-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 ENV NODE_ENV=production \
     PORT=3000 \
