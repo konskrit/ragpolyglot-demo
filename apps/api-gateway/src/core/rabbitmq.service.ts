@@ -8,9 +8,6 @@ import amqp, { ChannelModel, Channel, ConsumeMessage } from 'amqplib';
 import { ConsumerRegistration } from '@ragpolyglot-shared';
 import { Config } from './config';
 
-const INITIAL_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 30_000;
-
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQService.name);
@@ -49,7 +46,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.loopRunning = true;
 
     const attempt = async (): Promise<void> => {
-      let backoff = INITIAL_BACKOFF_MS;
+      let waiting = false;
 
       while (!this.shuttingDown) {
         try {
@@ -58,11 +55,12 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           await this.bindAllConsumers();
           return;
         } catch (error) {
-          this.logger.warn(
-            `RabbitMQ connection failed (${(error as Error).message}). Retrying in ${backoff}ms...`,
-          );
-          await new Promise((r) => setTimeout(r, backoff));
-          backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+          if (!waiting) {
+            waiting = true;
+            this.logger.warn(
+              `Waiting for RabbitMQ (${(error as Error).message})`,
+            );
+          }
         }
       }
 
@@ -71,7 +69,6 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
     void attempt();
   }
-
   private async connect(): Promise<void> {
     const model = await amqp.connect(Config.rabbitmqUrl);
 

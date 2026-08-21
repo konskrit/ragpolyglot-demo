@@ -48,27 +48,39 @@ public sealed partial class MessageBroker(
                 return;
             }
 
-            _connection = await factory.CreateConnectionAsync(cancellationToken);
-            _publishingChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
+            var waiting = false;
+            while (!_initialized)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    _connection = await factory.CreateConnectionAsync(cancellationToken);
+                    _publishingChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
-            await _publishingChannel.ExchangeDeclareAsync(
-                exchange: ExchangeName,
-                type: ExchangeType.Topic,
-                durable: true,
-                cancellationToken: cancellationToken);
+                    await _publishingChannel.ExchangeDeclareAsync(
+                        exchange: ExchangeName,
+                        type: ExchangeType.Topic,
+                        durable: true,
+                        cancellationToken: cancellationToken);
 
-            await DeclareAndBindQueueAsync(_publishingChannel, UploadedQueue, "document.uploaded", cancellationToken);
-            await DeclareAndBindQueueAsync(_publishingChannel, DeletedQueue, "document.deleted", cancellationToken);
-            await DeclareAndBindQueueAsync(_publishingChannel, ProcessedQueue, "document.processed", cancellationToken);
-            await DeclareAndBindQueueAsync(_publishingChannel, FailedQueue, "document.failed", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, UploadedQueue, "document.uploaded", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, DeletedQueue, "document.deleted", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, ProcessedQueue, "document.processed", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, FailedQueue, "document.failed", cancellationToken);
 
-            _initialized = true;
-            LogInitialized(ExchangeName);
-        }
-        catch
-        {
-            await CleanupPartialInitAsync();
-            throw;
+                    _initialized = true;
+                    LogInitialized(ExchangeName);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    await CleanupPartialInitAsync();
+                    if (!waiting)
+                    {
+                        waiting = true;
+                        LogWaiting(ex);
+                    }
+                }
+            }
         }
         finally
         {
@@ -297,6 +309,9 @@ public sealed partial class MessageBroker(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Message broker initialized (exchange: {Exchange})")]
     private partial void LogInitialized(string exchange);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Waiting for RabbitMQ")]
+    private partial void LogWaiting(Exception ex);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Started consuming {ProcessedQueue} and {FailedQueue}")]
     private partial void LogConsuming(string processedQueue, string failedQueue);
