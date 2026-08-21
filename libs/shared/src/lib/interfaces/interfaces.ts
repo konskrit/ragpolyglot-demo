@@ -3,7 +3,8 @@ import { DocumentStatus, ChatRole } from '../types/types';
 export interface Document {
   id: string;
   title: string;
-  filePath: string;
+  /** Internal only — never return to clients from the gateway. */
+  filePath?: string;
   status: DocumentStatus;
   uploadedBy?: string;
   createdAt: string;

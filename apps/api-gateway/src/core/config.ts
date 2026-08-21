@@ -27,7 +27,12 @@ export const Config = {
   gatewayStatusQueue: 'gateway.document-status.queue',
 } as const;
 
-export function ragCacheKey(query: string, userId = 'anonymous'): string {
-  const hash = createHash('sha256').update(query.trim().toLowerCase()).digest('hex');
+export function ragCacheKey(
+  query: string,
+  userId = 'anonymous',
+  topK?: number,
+): string {
+  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}`;
+  const hash = createHash('sha256').update(normalized).digest('hex');
   return `rag:query:${hash}:${userId}`;
 }

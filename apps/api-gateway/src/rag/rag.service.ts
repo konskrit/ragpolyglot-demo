@@ -29,13 +29,17 @@ export class RagService {
     const query = queryDto.query.trim();
     const topK = clampTopK(queryDto.topK ?? Config.defaultTopK);
     const userId = queryDto.userId || 'anonymous';
-    const cacheKey = ragCacheKey(query, userId);
+    const cacheKey = ragCacheKey(query, userId, topK);
 
     const cached = await this.redis.get(cacheKey);
     if (cached) {
-      await this.redis.incr('metrics:rag:cache_hits');
-      const parsed = JSON.parse(cached) as RAGResult;
-      return { ...parsed, cacheHit: true };
+      try {
+        const parsed = JSON.parse(cached) as RAGResult;
+        await this.redis.incr('metrics:rag:cache_hits');
+        return { ...parsed, cacheHit: true };
+      } catch {
+        this.logger.warn(`Corrupt RAG cache entry for key=${cacheKey}, ignoring`);
+      }
     }
 
     await this.redis.incr('metrics:rag:cache_misses');

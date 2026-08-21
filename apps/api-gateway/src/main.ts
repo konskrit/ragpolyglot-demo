@@ -21,7 +21,6 @@ async function bootstrap() {
   if (!existsSync(Config.uploadsDir)) {
     mkdirSync(Config.uploadsDir, { recursive: true });
   }
-  app.useStaticAssets(Config.uploadsDir, { prefix: '/uploads/' });
 
   const redis = app.get(RedisService);
   await redis.connect();
@@ -34,4 +33,7 @@ async function bootstrap() {
   );
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  Logger.error(`Bootstrap failed: ${err}`, 'Bootstrap');
+  process.exit(1);
+});

@@ -1,5 +1,6 @@
 ﻿import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import amqp, { ChannelModel, Channel, ConsumeMessage } from 'amqplib';
+import { ConsumerRegistration } from '@ragpolyglot-shared';
 import { Config } from './config';
 
 const INITIAL_BACKOFF_MS = 1000;
@@ -13,6 +14,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private loopRunning = false;
   private shuttingDown = false;
   private readyWaiters: Array<() => void> = [];
+  private readonly consumers: ConsumerRegistration<ConsumeMessage>[] = [];
 
   onModuleInit(): void {
     this.start();
@@ -50,6 +52,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           await this.connect();
           this.logger.log('Connected to RabbitMQ');
           this.resolveReadyWaiters();
+          await this.bindAllConsumers();
           return;
         } catch (error) {
           this.logger.warn(
@@ -140,10 +143,19 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private async bindAllConsumers(): Promise<void> {
+    for (const { queueName, handler } of this.consumers) {
+      await this.consume(queueName, handler);
+      this.logger.log(`Consuming from queue "${queueName}"`);
+    }
+  }
+
   consumeWhenReady(
     queueName: string,
     handler: (msg: ConsumeMessage | null) => void | Promise<void>,
   ): void {
+    this.consumers.push({ queueName, handler });
+
     const attemptConsume = async (attempt: number): Promise<void> => {
       try {
         await this.waitUntilReady();

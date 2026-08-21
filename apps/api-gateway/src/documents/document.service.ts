@@ -1,8 +1,17 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { unlink } from 'fs/promises';
+import { join } from 'path';
 import { Config } from '../core/config';
 import { Document, DocumentChunk, DocumentCreateDto } from '@ragpolyglot-shared';
+
+type DocumentRecord = Document & { filePath?: string };
 
 @Injectable()
 export class DocumentService {
@@ -12,23 +21,25 @@ export class DocumentService {
 
   async getAllDocuments(): Promise<Document[]> {
     const res = await firstValueFrom(
-      this.httpService.get(`${Config.documentServiceUrl}/api/documents`),
+      this.httpService.get<DocumentRecord[]>(
+        `${Config.documentServiceUrl}/api/documents`,
+      ),
     );
-    return res.data;
+    return res.data.map((d) => this.toPublicDocument(d));
   }
 
   async getDocumentById(id: string): Promise<Document> {
     const res = await firstValueFrom(
-      this.httpService.get(
+      this.httpService.get<DocumentRecord>(
         `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
       ),
     );
-    return res.data;
+    return this.toPublicDocument(res.data);
   }
 
   async getDocumentChunks(id: string): Promise<DocumentChunk[]> {
     const res = await firstValueFrom(
-      this.httpService.get(
+      this.httpService.get<DocumentChunk[]>(
         `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}/chunks`,
       ),
     );
@@ -46,15 +57,23 @@ export class DocumentService {
     const docTitle = title || file.originalname;
     const filePath = `/uploads/${file.filename}`;
 
-    const res = await firstValueFrom(
-      this.httpService.post(`${Config.documentServiceUrl}/api/documents`, {
-        title: docTitle,
-        filePath,
-      } satisfies DocumentCreateDto),
-    );
+    try {
+      const res = await firstValueFrom(
+        this.httpService.post<DocumentRecord>(
+          `${Config.documentServiceUrl}/api/documents`,
+          {
+            title: docTitle,
+            filePath,
+          } satisfies DocumentCreateDto,
+        ),
+      );
 
-    this.logger.log(`Document created via document-service: ${res.data.id}`);
-    return res.data as Document;
+      this.logger.log(`Document created via document-service: ${res.data.id}`);
+      return this.toPublicDocument(res.data);
+    } catch (err) {
+      await unlink(join(Config.uploadsDir, file.filename)).catch(() => undefined);
+      throw err;
+    }
   }
 
   async deleteDocument(id: string): Promise<void> {
@@ -63,5 +82,19 @@ export class DocumentService {
         `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
       ),
     );
+  }
+
+  private toPublicDocument(doc: DocumentRecord): Document {
+    if (!doc?.id) {
+      throw new InternalServerErrorException('Invalid document payload');
+    }
+    return {
+      id: doc.id,
+      title: doc.title,
+      status: doc.status,
+      uploadedBy: doc.uploadedBy,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
   }
 }

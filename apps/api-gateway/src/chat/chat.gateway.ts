@@ -10,6 +10,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Config } from '../core/config';
 import { RabbitMQService } from '../core/rabbitmq.service';
 import { RagService } from '../rag/rag.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 @WebSocketGateway({
@@ -19,6 +20,7 @@ import { RagService } from '../rag/rag.service';
 export class ChatGateway implements OnModuleInit {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(ChatGateway.name);
+  /** Keyed by `${socketId}:${conversationId}` so clients cannot interrupt each other. */
   private readonly interrupted = new Set<string>();
 
   constructor(
@@ -57,24 +59,29 @@ export class ChatGateway implements OnModuleInit {
     data: { query: string; conversationId?: string; userId?: string },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const { query, conversationId = 'default', userId } = data;
-    if (!query?.trim()) return;
+    const query = data.query?.trim();
+    if (!query) return;
 
-    this.interrupted.delete(conversationId);
+    const conversationId = data.conversationId?.trim() || randomUUID();
+    const interruptKey = `${client.id}:${conversationId}`;
+    this.interrupted.delete(interruptKey);
 
     try {
-      const ragResult = await this.ragService.search({ query, userId });
+      const ragResult = await this.ragService.search({
+        query,
+        userId: data.userId,
+      });
       const answer = ragResult.answer;
       const words = answer.split(/(?<=\s)/);
 
       for (const token of words) {
-        if (this.interrupted.has(conversationId)) {
+        if (this.interrupted.has(interruptKey)) {
           client.emit('chat:complete', {
             conversationId,
             sources: ragResult.sources,
             interrupted: true,
           });
-          this.interrupted.delete(conversationId);
+          this.interrupted.delete(interruptKey);
           return;
         }
 
@@ -93,7 +100,7 @@ export class ChatGateway implements OnModuleInit {
       const errorMessage =
         'Sorry, I encountered an error processing your request.';
       for (const token of errorMessage.split(/(?<=\s)/)) {
-        if (this.interrupted.has(conversationId)) break;
+        if (this.interrupted.has(interruptKey)) break;
         client.emit('chat:token', { token, conversationId });
         await new Promise((r) => setTimeout(r, Config.chatTokenIntervalMs));
       }
@@ -102,19 +109,23 @@ export class ChatGateway implements OnModuleInit {
         conversationId,
         sources: [],
         error: true,
-        interrupted: this.interrupted.has(conversationId),
+        interrupted: this.interrupted.has(interruptKey),
       });
-      this.interrupted.delete(conversationId);
+      this.interrupted.delete(interruptKey);
     }
   }
 
   @SubscribeMessage('chat:interrupt')
   handleInterrupt(
     @MessageBody() data: { conversationId?: string },
+    @ConnectedSocket() client: Socket,
   ): void {
-    const conversationId = data.conversationId || 'default';
-    this.interrupted.add(conversationId);
-    this.logger.log(`Chat interrupted conversationId=${conversationId}`);
+    const conversationId = data.conversationId?.trim();
+    if (!conversationId) return;
+    this.interrupted.add(`${client.id}:${conversationId}`);
+    this.logger.log(
+      `Chat interrupted socket=${client.id} conversationId=${conversationId}`,
+    );
   }
 
   @SubscribeMessage('subscribe:document')
@@ -137,7 +148,6 @@ export class ChatGateway implements OnModuleInit {
     };
 
     this.server.to(`doc:${documentId}`).emit('document:status-update', payload);
-    this.server.emit('document:status-update', payload);
-    this.logger.log(`Broadcasted status "${status}" for doc:${documentId}`);
+    this.logger.log(`Emitted status "${status}" for doc:${documentId}`);
   }
 }
