@@ -1,0 +1,18 @@
+{
+  "name": "document-service-tests",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "apps/document-service.Tests",
+  "tags": ["type:test", "lang:dotnet"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": [],
+      "options": {
+        "cwd": "apps/document-service.Tests",
+        "commands": ["dotnet restore", "dotnet test --no-restore"],
+        "parallel": false
+      }
+    }
+  }
+}

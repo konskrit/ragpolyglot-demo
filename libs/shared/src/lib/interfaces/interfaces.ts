@@ -1,0 +1,91 @@
+import { DocumentStatus, ChatRole } from '../types/types';
+
+export interface Document {
+  id: string;
+  title: string;
+  filePath: string;
+  status: DocumentStatus;
+  uploadedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentChunk {
+  id?: number;
+  documentId: string;
+  chunkIndex: number;
+  content: string;
+  createdAt?: string;
+}
+
+export interface DocumentUploadedEvent {
+  type: 'document.uploaded';
+  documentId: string;
+  filePath: string;
+  userId: string;
+  timestamp: string;
+}
+
+export interface DocumentProcessedEvent {
+  type: 'document.processed';
+  documentId: string;
+  chunkCount: number;
+  timestamp: string;
+}
+
+export interface DocumentFailedEvent {
+  type: 'document.failed';
+  documentId: string;
+  errorReason: string;
+  timestamp: string;
+}
+
+export interface DocumentDeletedEvent {
+  type: 'document.deleted';
+  documentId: string;
+  timestamp: string;
+}
+
+export interface DocumentCreateDto {
+  title: string;
+  filePath: string;
+}
+
+export interface RAGQueryDto {
+  query: string;
+  topK?: number;
+  userId?: string;
+}
+
+export interface RagSearchHit {
+  documentId: string;
+  chunkIndex: number;
+  content: string;
+  similarity: number;
+}
+
+export interface Source {
+  documentId: string;
+  documentTitle: string;
+  chunkContent: string;
+  similarity: number;
+}
+
+export interface RAGResult {
+  answer: string;
+  sources: Source[];
+  cacheHit?: boolean;
+}
+
+export interface Message {
+  role: ChatRole;
+  text: string;
+  sources?: Source[];
+}
+
+export interface SystemHealth {
+  document_service: string;
+  rag_worker: string;
+  redis: string;
+  rabbitmq: string;
+}

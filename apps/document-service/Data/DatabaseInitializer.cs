@@ -1,0 +1,23 @@
+using DocumentService.Sql;
+using Npgsql;
+
+namespace DocumentService.Data;
+
+public static class DatabaseInitializer
+{
+    public static async Task InitializeDatabaseAsync(NpgsqlConnection connection, CancellationToken cancellationToken = default)
+    {
+        var dimension = GetEmbeddingDimension();
+        var sql = SqlScripts.Load("schema.sql")
+            .Replace("__EMBEDDING_DIMENSION__", dimension.ToString(), StringComparison.Ordinal);
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static int GetEmbeddingDimension()
+    {
+        var dim = Environment.GetEnvironmentVariable("EMBEDDING_DIMENSION");
+        return int.TryParse(dim, out var result) && result > 0 ? result : 1536;
+    }
+}

@@ -1,0 +1,207 @@
+name: ragpolyglot
+
+services:
+  postgresql:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - rag-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file: [.env]
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    command: ['redis-server', '--appendonly', 'yes']
+    networks:
+      - rag-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - '${RABBITMQ_PORT:-5672}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - rag-network
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  document-service:
+    build:
+      context: ./apps/document-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:5000}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__Default: ${ConnectionStrings__Default}
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION}
+    ports:
+      - '${DOCUMENT_SERVICE_PORT:-5000}:5000'
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  rag-worker:
+    build:
+      context: ./apps/rag-worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_ADDR:-${REDIS_HOST}:${REDIS_PORT}}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RAG_WORKER_HTTP_ADDR: ${RAG_WORKER_HTTP_ADDR:-:8081}
+      EMBEDDING_FALLBACK: ${EMBEDDING_FALLBACK:-true}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION}
+      LMSTUDIO_API_URL: ${LMSTUDIO_API_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - uploads_data:${UPLOADS_DIR:-/uploads}
+    ports:
+      - '${RAG_WORKER_PORT:-8081}:8081'
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  event-processor:
+    build:
+      context: ./apps/event-processor
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_ADDR:-${REDIS_HOST}:${REDIS_PORT}}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      EVENT_PROCESSOR_HTTP_ADDR: ${EVENT_PROCESSOR_HTTP_ADDR:-:8082}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+    ports:
+      - '${EVENT_PROCESSOR_PORT:-8082}:8082'
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./apps/api-gateway/Dockerfile
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      DOCUMENT_SERVICE_URL: ${DOCUMENT_SERVICE_URL}
+      RAG_WORKER_URL: ${RAG_WORKER_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: ${REDIS_URL}
+      UPLOADS_DIR: ${UPLOADS_DIR:-/uploads}
+      HTTP_TIMEOUT_MS: ${HTTP_TIMEOUT_MS:-10000}
+      RAG_CACHE_TTL_SECONDS: ${RAG_CACHE_TTL_SECONDS:-600}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      CHAT_TOKEN_INTERVAL_MS: ${CHAT_TOKEN_INTERVAL_MS:-40}
+    volumes:
+      - uploads_data:${UPLOADS_DIR:-/uploads}
+    ports:
+      - '${GATEWAY_PORT:-3000}:3000'
+    depends_on:
+      document-service:
+        condition: service_healthy
+      rag-worker:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  pgadmin:
+    profiles: ['tools']
+    image: dpage/pgadmin4:8
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_LISTEN_PORT: ${PGADMIN_LISTEN_PORT:-80}
+    ports:
+      - '${PGADMIN_PORT:-5050}:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  pgadmin_data:
+  uploads_data:
+
+networks:
+  rag-network:
+    driver: bridge
