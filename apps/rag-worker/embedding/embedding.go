@@ -3,23 +3,33 @@ package embedding
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"apps/rag-worker/models"
 )
 
 const (
-	maxBatchSize = 64
-	maxRetries   = 3
+	maxBatchSize      = 64
+	maxRetries        = 3
+	defaultModel      = "text-embedding-ada-002"
+	defaultDimension  = 1536
+	defaultOpenAIURL  = "https://api.openai.com/v1/embeddings"
+	httpClientTimeout = 30 * time.Second
 )
+
+var httpClient = &http.Client{Timeout: httpClientTimeout}
 
 type Request struct {
 	Model string   `json:"model"`
@@ -39,10 +49,11 @@ func GenerateAndAttach(textChunks []string, allowFallback bool) ([]models.TextCh
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
-	apiURL := apiURL()
-	usingDefaultOpenAI := apiURL == "https://api.openai.com/v1/embeddings"
+	endpoint := apiURL()
+	needsOpenAIKey := endpoint == defaultOpenAIURL
 
-	if apiKey == "" && usingDefaultOpenAI {
+	// Local/demo path: no cloud key and no custom endpoint → deterministic hash vectors.
+	if apiKey == "" && needsOpenAIKey {
 		if !allowFallback {
 			return nil, fmt.Errorf("embedding API not configured")
 		}
@@ -52,36 +63,30 @@ func GenerateAndAttach(textChunks []string, allowFallback bool) ([]models.TextCh
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		result, err := generateViaAPI(textChunks, apiKey, apiURL)
+		result, err := generateViaAPI(textChunks, apiKey, endpoint)
 		if err == nil {
 			return result, nil
 		}
 		lastErr = err
 		log.Printf("[Embedding] Attempt %d/%d failed: %v", attempt, maxRetries, err)
-		if attempt < maxRetries {
+		if attempt < maxRetries && retryable(err) {
 			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+			continue
 		}
+		break
 	}
 
-	if allowFallback && usingDefaultOpenAI && apiKey == "" {
-		log.Printf("[Embedding] Falling back after API failures: %v", lastErr)
-		return fallbackEmbeddings(textChunks), nil
-	}
-
-	return nil, fmt.Errorf("embedding failed after %d retries: %w", maxRetries, lastErr)
+	return nil, fmt.Errorf("embedding failed after retries: %w", lastErr)
 }
 
-func generateViaAPI(textChunks []string, apiKey, apiURL string) ([]models.TextChunk, error) {
-	var result []models.TextChunk
+func generateViaAPI(textChunks []string, apiKey, endpoint string) ([]models.TextChunk, error) {
+	result := make([]models.TextChunk, 0, len(textChunks))
 
 	for i := 0; i < len(textChunks); i += maxBatchSize {
-		end := i + maxBatchSize
-		if end > len(textChunks) {
-			end = len(textChunks)
-		}
-
+		end := min(i+maxBatchSize, len(textChunks))
 		batch := textChunks[i:end]
-		embeddings, err := callAPI(batch, apiKey, apiURL)
+
+		embeddings, err := callAPI(batch, apiKey, endpoint)
 		if err != nil {
 			return nil, err
 		}
@@ -98,19 +103,31 @@ func generateViaAPI(textChunks []string, apiKey, apiURL string) ([]models.TextCh
 }
 
 func apiURL() string {
-	if lm := os.Getenv("LMSTUDIO_API_URL"); lm != "" {
-		return lm + "/embeddings"
+	if lm := strings.TrimSpace(os.Getenv("LMSTUDIO_API_URL")); lm != "" {
+		return joinEmbeddingsURL(lm)
 	}
-	if base := os.Getenv("OPENAI_API_BASE_URL"); base != "" {
-		return base + "/embeddings"
+	if base := strings.TrimSpace(os.Getenv("OPENAI_API_BASE_URL")); base != "" {
+		return joinEmbeddingsURL(base)
 	}
-	return "https://api.openai.com/v1/embeddings"
+	return defaultOpenAIURL
 }
 
-func callAPI(texts []string, apiKey, apiURL string) ([][]float32, error) {
+func joinEmbeddingsURL(base string) string {
+	base = strings.TrimRight(base, "/")
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return base + "/embeddings"
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/embeddings"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
+func callAPI(texts []string, apiKey, endpoint string) ([][]float32, error) {
 	model := os.Getenv("EMBEDDING_MODEL")
 	if model == "" {
-		model = "text-embedding-ada-002"
+		model = defaultModel
 	}
 
 	body, err := json.Marshal(Request{Model: model, Input: texts})
@@ -118,7 +135,7 @@ func callAPI(texts []string, apiKey, apiURL string) ([][]float32, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -127,15 +144,15 @@ func callAPI(texts []string, apiKey, apiURL string) ([][]float32, error) {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(b))
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, &httpStatusError{code: resp.StatusCode, body: string(b)}
 	}
 
 	var parsed Response
@@ -185,19 +202,64 @@ func embeddingDimension() int {
 			return n
 		}
 	}
-	return 1536
+	return defaultDimension
 }
 
+// hashToVector builds a deterministic unit-ish vector for local/dev when no
+// embedding API is configured. Not semantically meaningful — only for pipeline demos.
 func hashToVector(input string, dimensions int) []float32 {
-	hash := sha256.Sum256([]byte(input))
 	vec := make([]float32, dimensions)
+	seed := []byte(input)
+	var digest [sha256.Size]byte
+	var counter [4]byte
+	offset := sha256.Size
+
 	for i := 0; i < dimensions; i++ {
-		byteIndex := (i * 4) % len(hash)
-		val := float64(hash[byteIndex]) +
-			float64(hash[(byteIndex+1)%len(hash)])*256 +
-			float64(hash[(byteIndex+2)%len(hash)])*65536 +
-			float64(hash[(byteIndex+3)%len(hash)])*16777216
-		vec[i] = float32(math.Sin(val * 0.01))
+		if offset+4 > sha256.Size {
+			binary.BigEndian.PutUint32(counter[:], uint32(i))
+			h := sha256.New()
+			_, _ = h.Write(seed)
+			_, _ = h.Write(counter[:])
+			h.Sum(digest[:0])
+			offset = 0
+		}
+		bits := binary.BigEndian.Uint32(digest[offset : offset+4])
+		offset += 4
+		// Map uint32 into [-1, 1].
+		vec[i] = float32(bits)/float32(math.MaxUint32)*2 - 1
+	}
+
+	return l2Normalize(vec)
+}
+
+func l2Normalize(vec []float32) []float32 {
+	var sum float64
+	for _, v := range vec {
+		sum += float64(v) * float64(v)
+	}
+	if sum == 0 {
+		return vec
+	}
+	inv := float32(1 / math.Sqrt(sum))
+	for i := range vec {
+		vec[i] *= inv
 	}
 	return vec
+}
+
+type httpStatusError struct {
+	code int
+	body string
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("status %d: %s", e.code, e.body)
+}
+
+func retryable(err error) bool {
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.code == http.StatusTooManyRequests || statusErr.code >= 500
+	}
+	return true
 }

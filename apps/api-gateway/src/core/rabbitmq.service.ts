@@ -29,17 +29,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private async disconnect(): Promise<void> {
     this.shuttingDown = true;
     if (this.channel) {
-      try {
-        await this.channel.close();
-      } catch {
-      }
+      await this.channel.close().catch(() => undefined);
       this.channel = null;
     }
     if (this.channelModel) {
-      try {
-        await this.channelModel.close();
-      } catch {
-      }
+      await this.channelModel.close().catch(() => undefined);
       this.channelModel = null;
     }
   }

@@ -28,10 +28,16 @@ func TestHashToVector_DeterministicAndFixedDim(t *testing.T) {
 	if same {
 		t.Fatal("different inputs should produce different vectors")
 	}
+
+	var norm float64
 	for _, v := range a {
 		if math.IsNaN(float64(v)) {
 			t.Fatal("NaN in vector")
 		}
+		norm += float64(v) * float64(v)
+	}
+	if math.Abs(math.Sqrt(norm)-1) > 1e-5 {
+		t.Fatalf("expected unit vector, L2=%f", math.Sqrt(norm))
 	}
 }
 
@@ -43,5 +49,28 @@ func TestFallbackEmbeddings(t *testing.T) {
 	}
 	if len(out[0].Embedding) != 16 || out[0].Text != "a" {
 		t.Fatalf("unexpected first chunk: %#v", out[0])
+	}
+}
+
+func TestJoinEmbeddingsURL(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"http://localhost:1234/v1", "http://localhost:1234/v1/embeddings"},
+		{"http://localhost:1234/v1/", "http://localhost:1234/v1/embeddings"},
+	}
+	for _, tt := range tests {
+		if got := joinEmbeddingsURL(tt.in); got != tt.want {
+			t.Fatalf("joinEmbeddingsURL(%q)=%q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestRetryable(t *testing.T) {
+	if !retryable(&httpStatusError{code: 503}) {
+		t.Fatal("503 should retry")
+	}
+	if retryable(&httpStatusError{code: 400}) {
+		t.Fatal("400 should not retry")
 	}
 }

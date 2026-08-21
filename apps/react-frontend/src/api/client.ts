@@ -24,10 +24,8 @@ function extractErrorMessage(body: unknown, fallback: string): string {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = `Server responded with ${res.status}`;
-    try {
-      detail = extractErrorMessage(await res.json(), detail);
-    } catch {
-    }
+    const body = await res.json().catch(() => null);
+    detail = extractErrorMessage(body, detail);
     throw new ApiError(res.status, detail);
   }
 

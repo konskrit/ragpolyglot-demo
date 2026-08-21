@@ -76,7 +76,8 @@ export class RedisService implements OnModuleDestroy {
     if (!this.ready) return;
     try {
       await this.client.incr(key);
-    } catch {
+    } catch (err) {
+      this.logger.warn(`Redis INCR failed: ${(err as Error).message}`);
     }
   }
 }

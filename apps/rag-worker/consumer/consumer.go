@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 
 	"apps/rag-worker/chunker"
 	"apps/rag-worker/embedding"
@@ -19,10 +19,10 @@ import (
 )
 
 type Processor struct {
-	store           *storage.Store
-	publisher       *publisher.Publisher
-	redis           *redis.Client
-	allowFallback   bool
+	store         *storage.Store
+	publisher     *publisher.Publisher
+	redis         *redis.Client
+	allowFallback bool
 }
 
 func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool) *Processor {

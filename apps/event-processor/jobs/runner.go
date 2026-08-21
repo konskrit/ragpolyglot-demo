@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 
 	"apps/event-processor/models"
 	rmq "apps/event-processor/rabbitmq"
@@ -236,9 +236,9 @@ func (r *Runner) purgeArchivedLogs(ctx context.Context, payload map[string]any) 
 		return nil, err
 	}
 	return map[string]any{
-		"retentionDays":     days,
-		"systemLogsPurged":  systemDeleted,
-		"queryLogsPurged":   queryDeleted,
+		"retentionDays":    days,
+		"systemLogsPurged": systemDeleted,
+		"queryLogsPurged":  queryDeleted,
 	}, nil
 }
 

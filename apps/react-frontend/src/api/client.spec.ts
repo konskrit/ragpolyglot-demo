@@ -1,8 +1,8 @@
+import { ApiError, getJson } from './client';
+
 jest.mock('../config', () => ({
   API_BASE_URL: '',
 }));
-
-import { ApiError, getJson } from './client';
 
 describe('getJson', () => {
   const originalFetch = globalThis.fetch;

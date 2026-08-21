@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
+
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 type TextExtractor func(content []byte, filePath string) string
@@ -56,72 +58,21 @@ func ExtractText(content []byte, filePath string) string {
 }
 
 func detectAndConvertEncoding(content []byte) string {
-	if len(content) >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF {
-		return string(content[3:])
+	if len(content) == 0 {
+		return ""
 	}
 
-	if len(content) >= 2 && content[0] == 0xFF && content[1] == 0xFE {
-		return convertUTF16ToUTF8(content[2:], false)
+	decoded, _, err := transform.Bytes(unicode.BOMOverride(unicode.UTF8.NewDecoder()), content)
+	if err != nil {
+		log.Printf("[Extractor] Encoding conversion failed: %v", err)
+		return strings.ToValidUTF8(string(content), "")
 	}
 
-	if len(content) >= 2 && content[0] == 0xFE && content[1] == 0xFF {
-		return convertUTF16ToUTF8(content[2:], true)
-	}
-
-	if utf8.Valid(content) {
-		return string(content)
-	}
-
-	log.Printf("[Extractor] Content is not valid UTF-8, attempting cleanup")
-	return sanitizeInvalidUTF8Bytes(string(content))
-}
-
-func convertUTF16ToUTF8(data []byte, bigEndian bool) string {
-	var result strings.Builder
-	for i := 0; i+1 < len(data); i += 2 {
-		var code uint32
-		if bigEndian {
-			code = uint32(data[i])<<8 | uint32(data[i+1])
-		} else {
-			code = uint32(data[i+1])<<8 | uint32(data[i])
-		}
-
-		if code >= 0xD800 && code <= 0xDBFF && i+3 < len(data) {
-			var low uint32
-			if bigEndian {
-				low = uint32(data[i+2])<<8 | uint32(data[i+3])
-			} else {
-				low = uint32(data[i+3])<<8 | uint32(data[i+2])
-			}
-
-			if low >= 0xDC00 && low <= 0xDFFF {
-				code = 0x10000 + ((code-0xD800)<<10) + (low - 0xDC00)
-				i++
-			}
-		}
-
-		if code != 0xFFFD {
-			result.WriteRune(rune(code))
-		}
-	}
-	return result.String()
-}
-
-func sanitizeInvalidUTF8Bytes(s string) string {
-	var buf strings.Builder
-	for _, r := range s {
-		if r != '\uFFFD' {
-			buf.WriteRune(r)
-		}
-	}
-	return buf.String()
+	return ensureValidUTF8(string(decoded))
 }
 
 func ensureValidUTF8(s string) string {
-	if utf8.ValidString(s) {
-		return s
-	}
-	return sanitizeInvalidUTF8Bytes(s)
+	return strings.ToValidUTF8(s, "")
 }
 
 func extractPlainText(content []byte, filePath string) string {
