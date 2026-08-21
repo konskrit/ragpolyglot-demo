@@ -34,6 +34,7 @@ node_modules/
 
 # ----- Nx / JS / TS build & cache -----
 /dist/
+**/dist/
 /tmp/
 /out-tsc/
 /build/
@@ -70,6 +71,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 **/obj/
 **/out/
 **/artifacts/
+**/publish/
 *.user
 *.userosscache
 *.suo
@@ -82,6 +84,8 @@ packages/
 .vs/
 *.nupkg
 *.snupkg
+appsettings.Local.json
+appsettings.*.local.json
 
 # ----- Go -----
 **/vendor/
@@ -92,6 +96,12 @@ packages/
 *.dylib
 *.test
 *.out
+coverage.html
+*.coverprofile
+*.prof
+__debug_bin*
+apps/rag-worker/rag-worker
+apps/event-processor/event-processor
 go.work
 go.work.sum
 
