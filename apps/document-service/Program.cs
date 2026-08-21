@@ -4,7 +4,7 @@ using DocumentService.Services;
 using Microsoft.AspNetCore.Diagnostics;
 using Npgsql;
 
-EnvFile.LoadFromAncestors();
+DotNetEnv.Env.NoClobber().TraversePath().Load();
 
 var builder = WebApplication.CreateBuilder(args);
 

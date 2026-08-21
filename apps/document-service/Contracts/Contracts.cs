@@ -1,4 +1,4 @@
-namespace DemoRAGPolyglot.Shared.Contracts;
+namespace DocumentService.Contracts;
 
 public record Document
 {

@@ -1,11 +1,13 @@
 using System.Text.Json;
-using DemoRAGPolyglot.Shared.Contracts;
+using DocumentService.Contracts;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace DocumentService.Services;
 
-public sealed class MessageBroker : IAsyncDisposable
+public sealed partial class MessageBroker(
+    ConnectionFactory factory,
+    ILogger<MessageBroker> logger) : IAsyncDisposable
 {
     public const string ExchangeName = "document.events";
 
@@ -20,8 +22,6 @@ public sealed class MessageBroker : IAsyncDisposable
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly ConnectionFactory _factory;
-    private readonly ILogger<MessageBroker> _logger;
     private readonly SemaphoreSlim _publishLock = new(1, 1);
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
@@ -30,12 +30,6 @@ public sealed class MessageBroker : IAsyncDisposable
     private IChannel? _processedChannel;
     private IChannel? _failedChannel;
     private bool _initialized;
-
-    public MessageBroker(ConnectionFactory factory, ILogger<MessageBroker> logger)
-    {
-        _factory = factory;
-        _logger = logger;
-    }
 
     public bool IsConnected => _connection is { IsOpen: true };
 
@@ -54,7 +48,7 @@ public sealed class MessageBroker : IAsyncDisposable
                 return;
             }
 
-            _connection = await _factory.CreateConnectionAsync(cancellationToken);
+            _connection = await factory.CreateConnectionAsync(cancellationToken);
             _publishingChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
             await _publishingChannel.ExchangeDeclareAsync(
@@ -69,11 +63,31 @@ public sealed class MessageBroker : IAsyncDisposable
             await DeclareAndBindQueueAsync(_publishingChannel, FailedQueue, "document.failed", cancellationToken);
 
             _initialized = true;
-            _logger.LogInformation("Message broker initialized (exchange: {Exchange})", ExchangeName);
+            LogInitialized(ExchangeName);
+        }
+        catch
+        {
+            await CleanupPartialInitAsync();
+            throw;
         }
         finally
         {
             _initLock.Release();
+        }
+    }
+
+    private async Task CleanupPartialInitAsync()
+    {
+        if (_publishingChannel is not null)
+        {
+            await _publishingChannel.DisposeAsync();
+            _publishingChannel = null;
+        }
+
+        if (_connection is not null)
+        {
+            await _connection.DisposeAsync();
+            _connection = null;
         }
     }
 
@@ -112,6 +126,18 @@ public sealed class MessageBroker : IAsyncDisposable
             throw new InvalidOperationException("RabbitMQ connection is not initialized.");
         }
 
+        if (_processedChannel is not null)
+        {
+            await _processedChannel.DisposeAsync();
+            _processedChannel = null;
+        }
+
+        if (_failedChannel is not null)
+        {
+            await _failedChannel.DisposeAsync();
+            _failedChannel = null;
+        }
+
         _processedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _failedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
@@ -121,7 +147,7 @@ public sealed class MessageBroker : IAsyncDisposable
             async body =>
             {
                 var message = JsonSerializer.Deserialize<DocumentProcessedEvent>(body, JsonOptions)
-                    ?? throw new InvalidOperationException("Failed to deserialize document.processed event");
+                    ?? throw new JsonException("Failed to deserialize document.processed event");
                 await onProcessed(message);
             },
             cancellationToken);
@@ -132,12 +158,12 @@ public sealed class MessageBroker : IAsyncDisposable
             async body =>
             {
                 var message = JsonSerializer.Deserialize<DocumentFailedEvent>(body, JsonOptions)
-                    ?? throw new InvalidOperationException("Failed to deserialize document.failed event");
+                    ?? throw new JsonException("Failed to deserialize document.failed event");
                 await onFailed(message);
             },
             cancellationToken);
 
-        _logger.LogInformation("Started consuming {ProcessedQueue} and {FailedQueue}", ProcessedQueue, FailedQueue);
+        LogConsuming(ProcessedQueue, FailedQueue);
     }
 
     private static async Task DeclareAndBindQueueAsync(
@@ -176,9 +202,9 @@ public sealed class MessageBroker : IAsyncDisposable
                 await handler(body);
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: CancellationToken.None);
             }
-            catch (Exception ex) when (IsPoisonMessage(ex))
+            catch (Exception ex) when (MessageClassification.IsPoison(ex))
             {
-                _logger.LogError(ex, "Dropping poison message from {Queue}", queueName);
+                LogPoison(ex, queueName);
                 await channel.BasicNackAsync(
                     ea.DeliveryTag,
                     multiple: false,
@@ -187,7 +213,7 @@ public sealed class MessageBroker : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Transient failure handling message from {Queue}; requeueing", queueName);
+                LogTransient(ex, queueName);
                 await channel.BasicNackAsync(
                     ea.DeliveryTag,
                     multiple: false,
@@ -202,9 +228,6 @@ public sealed class MessageBroker : IAsyncDisposable
             consumer: consumer,
             cancellationToken: cancellationToken);
     }
-
-    private static bool IsPoisonMessage(Exception ex) =>
-        MessageClassification.IsPoison(ex);
 
     private async Task SendMessageAsync<T>(string routingKey, T message, CancellationToken cancellationToken)
         where T : class
@@ -237,7 +260,7 @@ public sealed class MessageBroker : IAsyncDisposable
                 body: body,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation("Published {RoutingKey}", routingKey);
+            LogPublished(routingKey);
         }
         finally
         {
@@ -271,4 +294,19 @@ public sealed class MessageBroker : IAsyncDisposable
         _initLock.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Message broker initialized (exchange: {Exchange})")]
+    private partial void LogInitialized(string exchange);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Started consuming {ProcessedQueue} and {FailedQueue}")]
+    private partial void LogConsuming(string processedQueue, string failedQueue);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Dropping poison message from {Queue}")]
+    private partial void LogPoison(Exception ex, string queue);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Transient failure handling message from {Queue}; requeueing")]
+    private partial void LogTransient(Exception ex, string queue);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Published {RoutingKey}")]
+    private partial void LogPublished(string routingKey);
 }

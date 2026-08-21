@@ -1,24 +1,17 @@
-using DemoRAGPolyglot.Shared.Contracts;
+using DocumentService.Contracts;
 using DocumentService.Sql;
 using Npgsql;
 using NpgsqlTypes;
 
 namespace DocumentService.Data;
 
-public sealed class DocumentRepository
+public sealed class DocumentRepository(NpgsqlConnection db)
 {
-    private readonly NpgsqlConnection _db;
-
-    public DocumentRepository(NpgsqlConnection db)
-    {
-        _db = db;
-    }
-
     public async Task EnsureOpenAsync(CancellationToken cancellationToken = default)
     {
-        if (_db.State != System.Data.ConnectionState.Open)
+        if (db.State != System.Data.ConnectionState.Open)
         {
-            await _db.OpenAsync(cancellationToken);
+            await db.OpenAsync(cancellationToken);
         }
     }
 
@@ -26,7 +19,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/list.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/list.sql"), db);
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
         var docs = new List<Document>();
@@ -42,7 +35,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/get_by_id.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/get_by_id.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -58,7 +51,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("chunks/list_by_document.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("chunks/list_by_document.sql"), db);
         cmd.Parameters.AddWithValue("id", documentId);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -83,7 +76,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/create.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/create.sql"), db);
         cmd.Parameters.AddWithValue("title", title);
         cmd.Parameters.AddWithValue("filePath", filePath);
         cmd.Parameters.AddWithValue("status", "uploading");
@@ -102,7 +95,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/delete.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/delete.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
         var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
@@ -112,7 +105,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_ready.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_ready.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
         var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
@@ -122,7 +115,7 @@ public sealed class DocumentRepository
     {
         await EnsureOpenAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_failed.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_failed.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
         var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
@@ -131,7 +124,7 @@ public sealed class DocumentRepository
     public async Task PingAsync(CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);
-        await using var cmd = new NpgsqlCommand(SqlScripts.Load("health/ping.sql"), _db);
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("health/ping.sql"), db);
         await cmd.ExecuteScalarAsync(cancellationToken);
     }
 

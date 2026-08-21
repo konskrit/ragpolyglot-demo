@@ -1,4 +1,4 @@
-using DemoRAGPolyglot.Shared.Contracts;
+using DocumentService.Contracts;
 using DocumentService.Data;
 using DocumentService.Services;
 
@@ -72,8 +72,8 @@ public static class DocumentEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        var deleted = await repo.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
         {
             return Results.NotFound(new { error = "Document not found" });
         }
@@ -85,15 +85,13 @@ public static class DocumentEndpoints
         catch (Exception ex)
         {
             var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-            logger.LogError(
-                ex,
-                "Document {DocumentId} deleted from DB but document.deleted publish failed",
-                id);
-
+            logger.LogError(ex, "Failed to publish document.deleted for {DocumentId}", id);
             return Results.Problem(
-                detail: "Document was deleted but the delete event could not be published.",
+                detail: "Delete event could not be published; document was not removed.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
+
+        await repo.DeleteAsync(id, cancellationToken);
 
         return Results.Ok(new
         {
