@@ -24,7 +24,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Match local toolchain (npm 11). Node 22 ships npm 10, which rejects this lockfile.
+          node-version: 24
           cache: npm
 
       - uses: actions/setup-go@v5
