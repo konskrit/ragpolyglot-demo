@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+          cache-dependency-path: |
+            apps/rag-worker/go.sum
+            apps/event-processor/go.sum
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - run: npm ci
+
+      - name: Derive Nx SHAs
+        id: setSHAs
+        uses: nrwl/nx-set-shas@v5
+
+      # Skip Playwright e2e until browsers/services are wired for CI.
+      - name: Lint and test affected projects
+        run: |
+          EXCLUDE='react-frontend-e2e,api-gateway-e2e'
+          if [ "${{ steps.setSHAs.outputs.noPreviousBuild }}" = "true" ]; then
+            npx nx run-many -t lint test --exclude="$EXCLUDE"
+          else
+            npx nx affected -t lint test --exclude="$EXCLUDE"
+          fi
