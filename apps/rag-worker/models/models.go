@@ -59,3 +59,15 @@ type SearchResponse struct {
 	TopK    int         `json:"topK"`
 	Results []SearchHit `json:"results"`
 }
+
+type ChatRequest struct {
+	Query string `json:"query"`
+	TopK  int    `json:"topK"`
+}
+
+type ChatResponse struct {
+	Query   string      `json:"query"`
+	TopK    int         `json:"topK"`
+	Answer  string      `json:"answer"`
+	Sources []SearchHit `json:"sources"`
+}

@@ -7,6 +7,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.14.0
 	github.com/redis/go-redis/v9 v9.22.0
+	github.com/sashabaranov/go-openai v1.42.0
 	golang.org/x/text v0.41.0
 )
 

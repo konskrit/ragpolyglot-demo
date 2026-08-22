@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"apps/rag-worker/embedding"
+	"apps/rag-worker/llm"
 	"apps/rag-worker/models"
 	"apps/rag-worker/storage"
 )
@@ -29,6 +31,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("POST /api/search", s.search)
+	mux.HandleFunc("POST /api/chat", s.chat)
 	return mux
 }
 
@@ -79,6 +82,64 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		Query:   req.Query,
 		TopK:    topK,
 		Results: hits,
+	})
+}
+
+func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	var req models.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.Query == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "query is required"})
+		return
+	}
+
+	topK := ClampTopK(req.TopK, s.defaultTopK)
+
+	vec, err := embedding.EmbedQuery(req.Query, s.allowFallback)
+	if err != nil {
+		log.Printf("[API] chat embed failed: %v", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "embedding failed"})
+		return
+	}
+
+	hits, err := s.store.SearchSimilar(r.Context(), vec, topK)
+	if err != nil {
+		log.Printf("[API] chat search failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "search failed"})
+		return
+	}
+
+	chunkTexts := make([]string, 0, len(hits))
+	for _, h := range hits {
+		if t := strings.TrimSpace(h.Content); t != "" {
+			chunkTexts = append(chunkTexts, t)
+		}
+	}
+
+	answer, err := llm.Generate(r.Context(), req.Query, chunkTexts, s.allowFallback)
+	if err != nil {
+		log.Printf("[API] chat generate failed: %v", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "generation failed"})
+		return
+	}
+
+	duration := time.Since(start)
+	s.store.LogQuery(r.Context(), req.Query, topK, len(hits), duration)
+	s.store.LogSystem(r.Context(), "rag_chat", "", duration, map[string]any{
+		"topK":        topK,
+		"resultCount": len(hits),
+	})
+
+	writeJSON(w, http.StatusOK, models.ChatResponse{
+		Query:   req.Query,
+		TopK:    topK,
+		Answer:  answer,
+		Sources: hits,
 	})
 }
 
