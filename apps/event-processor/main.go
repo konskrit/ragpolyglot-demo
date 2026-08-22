@@ -15,7 +15,6 @@ import (
 	"apps/event-processor/api"
 	"apps/event-processor/config"
 	"apps/event-processor/jobs"
-	rmq "apps/event-processor/rabbitmq"
 	"apps/event-processor/storage"
 )
 
@@ -40,7 +39,7 @@ func main() {
 		log.Fatalf("schema ensure: %v", err)
 	}
 
-	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	redisClient := redis.NewClient(cfg.RedisOpts)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Printf("Redis unavailable, job locks/counters disabled: %v", err)
 		_ = redisClient.Close()
@@ -50,18 +49,8 @@ func main() {
 		defer redisClient.Close()
 	}
 
-	rabbitConn := rmq.Connect(cfg.RabbitMQURL)
-	defer rabbitConn.Close()
-	log.Println("Connected to RabbitMQ")
-
-	setupCh := rmq.OpenChannel(rabbitConn)
-	if err := rmq.SetupTopology(setupCh); err != nil {
-		log.Fatalf("rabbitmq topology: %v", err)
-	}
-	_ = setupCh.Close()
-
 	runner := jobs.NewRunner(store, redisClient, cfg.LogRetentionD)
-	runner.Start(rabbitConn)
+	runner.Start(cfg.RabbitMQURL)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,

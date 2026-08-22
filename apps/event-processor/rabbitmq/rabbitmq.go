@@ -2,7 +2,6 @@ package rabbitmq
 
 import (
 	"fmt"
-	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -12,22 +11,6 @@ const (
 	JobsQueue    = "background.jobs.queue"
 	RoutingJobs  = "job.#"
 )
-
-func Connect(url string) *amqp.Connection {
-	conn, err := amqp.Dial(url)
-	if err != nil {
-		log.Fatalf("[RabbitMQ] connect failed: %v", err)
-	}
-	return conn
-}
-
-func OpenChannel(conn *amqp.Connection) *amqp.Channel {
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("[RabbitMQ] open channel failed: %v", err)
-	}
-	return ch
-}
 
 func SetupTopology(ch *amqp.Channel) error {
 	if err := ch.ExchangeDeclare(ExchangeName, "topic", true, false, false, false, nil); err != nil {

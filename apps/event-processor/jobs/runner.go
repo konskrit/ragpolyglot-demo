@@ -3,9 +3,11 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -15,6 +17,8 @@ import (
 	rmq "apps/event-processor/rabbitmq"
 	"apps/event-processor/storage"
 )
+
+var errUnknownJob = errors.New("unknown job type")
 
 type Runner struct {
 	store         *storage.Store
@@ -30,26 +34,64 @@ func NewRunner(store *storage.Store, redisClient *redis.Client, logRetentionDays
 	}
 }
 
-func (r *Runner) Start(conn *amqp.Connection) {
-	go r.consume(conn)
-	log.Printf("[Jobs] listening on %s", rmq.JobsQueue)
+func (r *Runner) Start(rabbitURL string) {
+	go r.reconnectLoop(rabbitURL)
+	log.Printf("[Jobs] listening on %s (with reconnect)", rmq.JobsQueue)
 }
 
-func (r *Runner) consume(conn *amqp.Connection) {
-	ch := rmq.OpenChannel(conn)
-	defer ch.Close()
+func (r *Runner) reconnectLoop(rabbitURL string) {
+	waiting := false
+	for {
+		conn, err := amqp.Dial(rabbitURL)
+		if err != nil {
+			if !waiting {
+				log.Printf("[Jobs] waiting for RabbitMQ: %v", err)
+				waiting = true
+			}
+			continue
+		}
 
-	if err := rmq.SetupTopology(ch); err != nil {
-		log.Fatalf("[Jobs] topology setup failed: %v", err)
-	}
+		ch, err := conn.Channel()
+		if err != nil {
+			_ = conn.Close()
+			if !waiting {
+				log.Printf("[Jobs] waiting for channel: %v", err)
+				waiting = true
+			}
+			continue
+		}
 
-	msgs, err := rmq.Consume(ch, rmq.JobsQueue)
-	if err != nil {
-		log.Fatalf("[Jobs] consume failed: %v", err)
-	}
+		if err := rmq.SetupTopology(ch); err != nil {
+			_ = ch.Close()
+			_ = conn.Close()
+			if !waiting {
+				log.Printf("[Jobs] waiting for topology: %v", err)
+				waiting = true
+			}
+			continue
+		}
 
-	for msg := range msgs {
-		r.handle(msg)
+		msgs, err := rmq.Consume(ch, rmq.JobsQueue)
+		if err != nil {
+			_ = ch.Close()
+			_ = conn.Close()
+			if !waiting {
+				log.Printf("[Jobs] waiting to consume: %v", err)
+				waiting = true
+			}
+			continue
+		}
+
+		log.Printf("[Jobs] connected queue=%s", rmq.JobsQueue)
+		waiting = false
+		for msg := range msgs {
+			r.handle(msg)
+		}
+
+		_ = ch.Close()
+		_ = conn.Close()
+		log.Printf("[Jobs] disconnected; reconnecting")
+		waiting = true
 	}
 }
 
@@ -79,8 +121,8 @@ func (r *Runner) handle(msg amqp.Delivery) {
 			return
 		}
 		if !acquired {
-			log.Printf("[Jobs] already locked, skip id=%s", job.ID)
-			_ = msg.Ack(false)
+			log.Printf("[Jobs] already locked, requeue id=%s", job.ID)
+			_ = msg.Nack(false, true)
 			return
 		}
 		defer r.releaseLock(ctx, job.ID)
@@ -90,7 +132,7 @@ func (r *Runner) handle(msg amqp.Delivery) {
 	duration := time.Since(start)
 
 	if err != nil {
-		if isUnknownJob(err) {
+		if errors.Is(err, errUnknownJob) {
 			log.Printf("[Jobs] unknown type=%s id=%s", job.Type, job.ID)
 			r.store.LogSystem(ctx, "job.unknown", duration, map[string]any{
 				"jobId": job.ID,
@@ -140,7 +182,7 @@ func (r *Runner) dispatch(ctx context.Context, job models.BackgroundJob) (map[st
 	case models.JobSnapshotRedisStats:
 		return r.snapshotRedisStats(ctx)
 	default:
-		return nil, unknownJobError(job.Type)
+		return nil, fmt.Errorf("%w: %s", errUnknownJob, job.Type)
 	}
 }
 
@@ -148,31 +190,10 @@ func (r *Runner) cleanupExpiredSessions(ctx context.Context) (map[string]any, er
 	if r.redis == nil {
 		return nil, fmt.Errorf("redis unavailable")
 	}
-
-	cleaned := 0
-	var cursor uint64
-	for {
-		keys, next, err := r.redis.Scan(ctx, cursor, "session:*", 100).Result()
-		if err != nil {
-			return nil, err
-		}
-		for _, key := range keys {
-			ttl, err := r.redis.TTL(ctx, key).Result()
-			if err != nil {
-				continue
-			}
-			if ttl == -1 {
-				if err := r.redis.Del(ctx, key).Err(); err == nil {
-					cleaned++
-				}
-			}
-		}
-		cursor = next
-		if cursor == 0 {
-			break
-		}
+	cleaned, err := r.deleteKeysWithoutTTL(ctx, "session:*")
+	if err != nil {
+		return nil, err
 	}
-
 	return map[string]any{"cleanedSessions": cleaned}, nil
 }
 
@@ -180,13 +201,20 @@ func (r *Runner) cleanupStaleJobLocks(ctx context.Context) (map[string]any, erro
 	if r.redis == nil {
 		return nil, fmt.Errorf("redis unavailable")
 	}
+	cleaned, err := r.deleteKeysWithoutTTL(ctx, "job:*:processing")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"cleanedLocks": cleaned}, nil
+}
 
+func (r *Runner) deleteKeysWithoutTTL(ctx context.Context, pattern string) (int, error) {
 	cleaned := 0
 	var cursor uint64
 	for {
-		keys, next, err := r.redis.Scan(ctx, cursor, "job:*:processing", 100).Result()
+		keys, next, err := r.redis.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		for _, key := range keys {
 			ttl, err := r.redis.TTL(ctx, key).Result()
@@ -204,8 +232,7 @@ func (r *Runner) cleanupStaleJobLocks(ctx context.Context) (map[string]any, erro
 			break
 		}
 	}
-
-	return map[string]any{"cleanedLocks": cleaned}, nil
+	return cleaned, nil
 }
 
 func (r *Runner) archiveOldLogs(ctx context.Context, payload map[string]any) (map[string]any, error) {
@@ -255,7 +282,12 @@ func (r *Runner) snapshotRedisStats(ctx context.Context) (map[string]any, error)
 	completed, _ := r.redis.Get(ctx, "metrics:event-processor:jobs_completed").Int64()
 	stats := map[string]any{
 		"jobsCompleted": completed,
-		"infoBytes":     len(info),
+	}
+	if used, ok := infoInt(info, "used_memory"); ok {
+		stats["usedMemoryBytes"] = used
+	}
+	if peak, ok := infoInt(info, "used_memory_peak"); ok {
+		stats["usedMemoryPeakBytes"] = peak
 	}
 
 	r.store.LogSystem(ctx, "redis.stats", 0, stats)
@@ -263,12 +295,15 @@ func (r *Runner) snapshotRedisStats(ctx context.Context) (map[string]any, error)
 }
 
 func (r *Runner) acquireLock(ctx context.Context, jobID string) (bool, error) {
-	key := "job:" + jobID + ":processing"
-	return r.redis.SetNX(ctx, key, "1", 5*time.Minute).Result()
+	return r.redis.SetNX(ctx, lockKey(jobID), "1", 5*time.Minute).Result()
 }
 
 func (r *Runner) releaseLock(ctx context.Context, jobID string) {
-	_ = r.redis.Del(ctx, "job:"+jobID+":processing").Err()
+	_ = r.redis.Del(ctx, lockKey(jobID)).Err()
+}
+
+func lockKey(jobID string) string {
+	return "job:" + jobID + ":processing"
 }
 
 func intFromPayload(payload map[string]any, key string) (int, bool) {
@@ -295,13 +330,18 @@ func intFromPayload(payload map[string]any, key string) (int, bool) {
 	}
 }
 
-type unknownJob string
-
-func (e unknownJob) Error() string { return "unknown job type: " + string(e) }
-
-func unknownJobError(t string) error { return unknownJob(t) }
-
-func isUnknownJob(err error) bool {
-	_, ok := err.(unknownJob)
-	return ok
+func infoInt(info, key string) (int64, bool) {
+	prefix := key + ":"
+	for _, line := range strings.Split(info, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		n, err := strconv.ParseInt(strings.TrimPrefix(line, prefix), 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	}
+	return 0, false
 }

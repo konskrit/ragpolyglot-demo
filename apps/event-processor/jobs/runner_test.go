@@ -1,6 +1,10 @@
 package jobs
 
-import "testing"
+import (
+	"errors"
+	"fmt"
+	"testing"
+)
 
 func TestIntFromPayload(t *testing.T) {
 	n, ok := intFromPayload(nil, "retentionDays")
@@ -30,15 +34,33 @@ func TestIntFromPayload(t *testing.T) {
 }
 
 func TestUnknownJob(t *testing.T) {
-	err := unknownJobError("made.up")
-	if !isUnknownJob(err) {
+	err := fmt.Errorf("%w: made.up", errUnknownJob)
+	if !errors.Is(err, errUnknownJob) {
 		t.Fatal("expected unknown job")
 	}
-	if isUnknownJob(assertError("boom")) {
+	if errors.Is(errors.New("boom"), errUnknownJob) {
 		t.Fatal("regular error should not match")
 	}
 }
 
-type assertError string
+func TestInfoInt(t *testing.T) {
+	info := "# Memory\r\nused_memory:1048576\r\nused_memory_peak:2097152\r\n"
+	used, ok := infoInt(info, "used_memory")
+	if !ok || used != 1048576 {
+		t.Fatalf("used_memory: %v %v", used, ok)
+	}
+	peak, ok := infoInt(info, "used_memory_peak")
+	if !ok || peak != 2097152 {
+		t.Fatalf("used_memory_peak: %v %v", peak, ok)
+	}
+	_, ok = infoInt(info, "missing")
+	if ok {
+		t.Fatal("missing key should fail")
+	}
+}
 
-func (e assertError) Error() string { return string(e) }
+func TestLockKey(t *testing.T) {
+	if got := lockKey("abc"); got != "job:abc:processing" {
+		t.Fatalf("lockKey=%s", got)
+	}
+}
