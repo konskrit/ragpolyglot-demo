@@ -42,7 +42,7 @@ func main() {
 		log.Fatalf("schema ensure: %v", err)
 	}
 
-	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	redisClient := redis.NewClient(cfg.RedisOpts)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Printf("Redis unavailable, continuing without cache counters: %v", err)
 		redisClient = nil
@@ -57,18 +57,20 @@ func main() {
 	defer rabbitConn.Close()
 	log.Println("Connected to RabbitMQ")
 
-	setupCh := rmq.OpenChannel(rabbitConn)
-	if err := rmq.SetupTopology(setupCh); err != nil {
+	pubCh, err := rmq.OpenChannel(rabbitConn)
+	if err != nil {
+		log.Fatalf("rabbitmq: %v", err)
+	}
+	defer pubCh.Close()
+
+	if err := rmq.SetupTopology(pubCh); err != nil {
 		log.Fatalf("rabbitmq topology: %v", err)
 	}
-	setupCh.Close()
 
-	pubCh := rmq.OpenChannel(rabbitConn)
-	defer pubCh.Close()
 	pub := publisher.New(pubCh)
 
 	proc := consumer.NewProcessor(store, pub, redisClient, cfg.EmbeddingFallback)
-	consumer.Start(rabbitConn, proc)
+	consumer.Start(cfg.RabbitMQURL, proc)
 
 	server := api.NewServer(store, cfg.DefaultTopK, cfg.EmbeddingFallback)
 	httpServer := &http.Server{

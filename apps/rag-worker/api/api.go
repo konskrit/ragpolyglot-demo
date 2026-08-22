@@ -67,9 +67,6 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "search failed"})
 		return
 	}
-	if hits == nil {
-		hits = []models.SearchHit{}
-	}
 
 	duration := time.Since(start)
 	s.store.LogQuery(r.Context(), req.Query, topK, len(hits), duration)

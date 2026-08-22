@@ -21,19 +21,25 @@ const (
 )
 
 func Connect(url string) *amqp.Connection {
-	conn, err := amqp.Dial(url)
-	if err != nil {
-		log.Fatalf("[RabbitMQ] connect failed: %v", err)
+	waiting := false
+	for {
+		conn, err := amqp.Dial(url)
+		if err == nil {
+			return conn
+		}
+		if !waiting {
+			log.Printf("[RabbitMQ] waiting for connection: %v", err)
+			waiting = true
+		}
 	}
-	return conn
 }
 
-func OpenChannel(conn *amqp.Connection) *amqp.Channel {
+func OpenChannel(conn *amqp.Connection) (*amqp.Channel, error) {
 	ch, err := conn.Channel()
 	if err != nil {
-		log.Fatalf("[RabbitMQ] open channel failed: %v", err)
+		return nil, fmt.Errorf("open channel: %w", err)
 	}
-	return ch
+	return ch, nil
 }
 
 func SetupTopology(ch *amqp.Channel) error {
@@ -41,22 +47,17 @@ func SetupTopology(ch *amqp.Channel) error {
 		return fmt.Errorf("declare exchange: %w", err)
 	}
 
-	queues := []struct {
-		name       string
-		routingKey string
-	}{
-		{UploadedQueue, RoutingUploaded},
-		{DeletedQueue, RoutingDeleted},
-		{ProcessedQueue, RoutingProcessed},
-		{FailedQueue, RoutingFailed},
-	}
-
-	for _, q := range queues {
-		if _, err := ch.QueueDeclare(q.name, true, false, false, false, nil); err != nil {
-			return fmt.Errorf("declare queue %s: %w", q.name, err)
+	for queue, routingKey := range map[string]string{
+		UploadedQueue:  RoutingUploaded,
+		DeletedQueue:   RoutingDeleted,
+		ProcessedQueue: RoutingProcessed,
+		FailedQueue:    RoutingFailed,
+	} {
+		if _, err := ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
+			return fmt.Errorf("declare queue %s: %w", queue, err)
 		}
-		if err := ch.QueueBind(q.name, q.routingKey, ExchangeName, false, nil); err != nil {
-			return fmt.Errorf("bind queue %s: %w", q.name, err)
+		if err := ch.QueueBind(queue, routingKey, ExchangeName, false, nil); err != nil {
+			return fmt.Errorf("bind queue %s: %w", queue, err)
 		}
 	}
 

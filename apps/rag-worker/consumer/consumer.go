@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -34,27 +35,46 @@ func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *r
 	}
 }
 
-func Start(conn *amqp.Connection, proc *Processor) {
-	go consumeQueue(conn, rmq.UploadedQueue, proc.handleUploaded)
-	go consumeQueue(conn, rmq.DeletedQueue, proc.handleDeleted)
-	log.Printf("[Consumer] listening on %s and %s", rmq.UploadedQueue, rmq.DeletedQueue)
+func Start(rabbitURL string, proc *Processor) {
+	go reconnectLoop(rabbitURL, rmq.UploadedQueue, proc.handleUploaded)
+	go reconnectLoop(rabbitURL, rmq.DeletedQueue, proc.handleDeleted)
+	log.Printf("[Consumer] listening on %s and %s (with reconnect)", rmq.UploadedQueue, rmq.DeletedQueue)
 }
 
-func consumeQueue(conn *amqp.Connection, queueName string, handler func(amqp.Delivery)) {
-	ch := rmq.OpenChannel(conn)
-	defer ch.Close()
+func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
+	for {
+		conn := rmq.Connect(rabbitURL)
 
-	if err := rmq.SetupTopology(ch); err != nil {
-		log.Fatalf("[Consumer] topology setup failed: %v", err)
-	}
+		ch, err := conn.Channel()
+		if err != nil {
+			_ = conn.Close()
+			log.Printf("[Consumer] channel failed (%s): %v", queueName, err)
+			continue
+		}
 
-	msgs, err := rmq.Consume(ch, queueName)
-	if err != nil {
-		log.Fatalf("[Consumer] consume %s failed: %v", queueName, err)
-	}
+		if err := rmq.SetupTopology(ch); err != nil {
+			_ = ch.Close()
+			_ = conn.Close()
+			log.Printf("[Consumer] topology failed (%s): %v", queueName, err)
+			continue
+		}
 
-	for msg := range msgs {
-		handler(msg)
+		msgs, err := rmq.Consume(ch, queueName)
+		if err != nil {
+			_ = ch.Close()
+			_ = conn.Close()
+			log.Printf("[Consumer] consume failed (%s): %v", queueName, err)
+			continue
+		}
+
+		log.Printf("[Consumer] connected queue=%s", queueName)
+		for msg := range msgs {
+			handler(msg)
+		}
+
+		_ = ch.Close()
+		_ = conn.Close()
+		log.Printf("[Consumer] disconnected queue=%s; reconnecting", queueName)
 	}
 }
 
@@ -62,6 +82,11 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 	var event models.DocumentUploadedEvent
 	if err := json.Unmarshal(msg.Body, &event); err != nil {
 		log.Printf("[Consumer] bad document.uploaded payload: %v", err)
+		_ = msg.Nack(false, false)
+		return
+	}
+	if event.DocumentID == "" {
+		log.Printf("[Consumer] poison document.uploaded (missing documentId)")
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -83,6 +108,7 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		_ = msg.Ack(false)
 	}
 
+	chunkingStart := time.Now()
 	content, err := extractor.ReadFile(event.FilePath)
 	if err != nil {
 		fail("chunking_error", err)
@@ -91,24 +117,24 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 
 	text := extractor.ExtractText(content, event.FilePath)
 	if text == "" {
-		fail("chunking_error", errString("no text extracted"))
+		fail("chunking_error", fmt.Errorf("no text extracted"))
 		return
 	}
 
 	textChunks := chunker.ChunkText(text)
 	if len(textChunks) == 0 {
-		fail("chunking_error", errString("chunker produced zero chunks"))
+		fail("chunking_error", fmt.Errorf("chunker produced zero chunks"))
 		return
 	}
+	chunkingDuration := time.Since(chunkingStart)
 
-	chunkStart := time.Now()
+	embedStart := time.Now()
 	embedded, err := embedding.GenerateAndAttach(textChunks, p.allowFallback)
-	chunkingDuration := chunkStart.Sub(start)
 	if err != nil {
 		fail("embedding_error", err)
 		return
 	}
-	embeddingDuration := time.Since(chunkStart)
+	embeddingDuration := time.Since(embedStart)
 
 	chunks := make([]models.DocumentChunk, 0, len(embedded))
 	for i, tc := range embedded {
@@ -156,6 +182,11 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 		_ = msg.Nack(false, false)
 		return
 	}
+	if event.DocumentID == "" {
+		log.Printf("[Consumer] poison document.deleted (missing documentId)")
+		_ = msg.Nack(false, false)
+		return
+	}
 
 	ctx := context.Background()
 	start := time.Now()
@@ -178,9 +209,3 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 	_ = msg.Ack(false)
 	log.Printf("[Consumer] document %s chunks deleted count=%d", event.DocumentID, deleted)
 }
-
-type stringError string
-
-func (e stringError) Error() string { return string(e) }
-
-func errString(s string) error { return stringError(s) }

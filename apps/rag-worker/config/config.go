@@ -1,20 +1,20 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 type Config struct {
 	DatabaseURL       string
-	RedisAddr         string
+	RedisOpts         *redis.Options
 	RabbitMQURL       string
 	HTTPAddr          string
-	OpenAIAPIKey      string
-	EmbeddingModel    string
 	DefaultTopK       int
 	EmbeddingFallback bool
 }
@@ -22,29 +22,30 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load(".env", "../../.env")
 
+	redisOpts, err := loadRedisOptions()
+	if err != nil {
+		panic(fmt.Sprintf("redis config: %v", err))
+	}
+
 	return &Config{
 		DatabaseURL:       getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/app_db?sslmode=disable"),
-		RedisAddr:         redisAddr(),
+		RedisOpts:         redisOpts,
 		RabbitMQURL:       getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
 		HTTPAddr:          getEnv("RAG_WORKER_HTTP_ADDR", ":8081"),
-		OpenAIAPIKey:      os.Getenv("OPENAI_API_KEY"),
-		EmbeddingModel:    getEnv("EMBEDDING_MODEL", "text-embedding-ada-002"),
 		DefaultTopK:       getEnvInt("RAG_TOP_K", 5),
 		EmbeddingFallback: getEnvBool("EMBEDDING_FALLBACK", true),
 	}
 }
 
-func redisAddr() string {
+func loadRedisOptions() (*redis.Options, error) {
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
-		return v
+		return &redis.Options{Addr: v}, nil
 	}
-	raw := getEnv("REDIS_URL", "localhost:6379")
-	raw = strings.TrimPrefix(raw, "redis://")
-	raw = strings.TrimPrefix(raw, "rediss://")
-	if i := strings.IndexByte(raw, '/'); i >= 0 {
-		raw = raw[:i]
+	raw := getEnv("REDIS_URL", "redis://localhost:6379")
+	if strings.Contains(raw, "://") {
+		return redis.ParseURL(raw)
 	}
-	return raw
+	return &redis.Options{Addr: raw}, nil
 }
 
 func getEnv(key, fallback string) string {

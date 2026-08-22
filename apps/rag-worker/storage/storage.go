@@ -85,13 +85,6 @@ func (s *Store) DeleteChunks(ctx context.Context, documentID string) (int64, err
 }
 
 func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int) ([]models.SearchHit, error) {
-	if topK < 5 {
-		topK = 5
-	}
-	if topK > 10 {
-		topK = 10
-	}
-
 	rows, err := s.pool.Query(ctx, `
 SELECT document_id::text, chunk_index, content, 1 - (embedding <=> $1::vector) AS similarity
 FROM document_chunks

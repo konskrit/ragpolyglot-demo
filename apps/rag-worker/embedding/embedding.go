@@ -166,10 +166,17 @@ func callAPI(texts []string, apiKey, endpoint string) ([][]float32, error) {
 	}
 
 	out := make([][]float32, len(texts))
+	expectedDim := embeddingDimension()
 	for i := range texts {
 		emb, ok := byIndex[i]
 		if !ok {
 			return nil, fmt.Errorf("missing embedding for index %d", i)
+		}
+		if len(emb) != expectedDim {
+			return nil, fmt.Errorf(
+				"embedding dimension mismatch at index %d: got %d, EMBEDDING_DIMENSION=%d",
+				i, len(emb), expectedDim,
+			)
 		}
 		out[i] = emb
 	}
