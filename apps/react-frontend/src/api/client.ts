@@ -1,5 +1,7 @@
 import { API_BASE_URL } from '../config';
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -41,13 +43,35 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError(408, 'Request timed out');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`);
+  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`);
   return handleResponse<T>(res);
 }
 
-export async function postFormData<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+export async function postFormData<T>(
+  path: string,
+  formData: FormData,
+): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: 'POST',
     body: formData,
   });
@@ -55,6 +79,8 @@ export async function postFormData<T>(path: string, formData: FormData): Promise
 }
 
 export async function deleteJson<T = void>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE' });
+  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+  });
   return handleResponse<T>(res);
 }

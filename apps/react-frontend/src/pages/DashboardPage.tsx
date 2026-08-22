@@ -9,6 +9,7 @@ import type { SystemHealth } from '@ragpolyglot-shared';
 export function DashboardPage() {
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { documents, loading, error, remove } = useDocuments();
   const { connected: wsConnected } = useWebSocketStatus();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -16,18 +17,14 @@ export function DashboardPage() {
   const loadHealth = useCallback(async () => {
     try {
       setHealthError(null);
-      const healthData = await getJson<{
-        document_service?: string;
-        rag_worker?: string;
-        redis?: string;
-        rabbitmq?: string;
-      }>('/api/health');
-
+      const data = await getJson<SystemHealth & { status?: string }>(
+        '/api/health',
+      );
       setHealth({
-        document_service: healthData.document_service || 'unknown',
-        rag_worker: healthData.rag_worker || 'unknown',
-        redis: healthData.redis || 'unknown',
-        rabbitmq: healthData.rabbitmq || 'unknown',
+        document_service: data.document_service ?? 'unknown',
+        rag_worker: data.rag_worker ?? 'unknown',
+        redis: data.redis ?? 'unknown',
+        rabbitmq: data.rabbitmq ?? 'unknown',
       });
     } catch (e) {
       setHealthError(e instanceof Error ? e.message : 'Health check failed');
@@ -43,8 +40,11 @@ export function DashboardPage() {
   const onDelete = async (id: string) => {
     if (deletingId) return;
     setDeletingId(id);
+    setDeleteError(null);
     try {
       await remove(id);
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Delete failed');
     } finally {
       setDeletingId(null);
     }
@@ -80,13 +80,18 @@ export function DashboardPage() {
 
       {(health || healthError) && (
         <section>
-          <h2 className="text-lg font-medium mb-4 text-gray-300">System Health</h2>
+          <h2 className="text-lg font-medium mb-4 text-gray-300">
+            System Health
+          </h2>
           {healthError && (
             <p className="text-sm text-red-400 mb-3">{healthError}</p>
           )}
           {health && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <HealthCard label="Document Service" status={health.document_service} />
+              <HealthCard
+                label="Document Service"
+                status={health.document_service}
+              />
               <HealthCard label="RAG Worker" status={health.rag_worker} />
               <HealthCard label="Redis" status={health.redis} />
               <HealthCard label="RabbitMQ" status={health.rabbitmq} />
@@ -102,7 +107,9 @@ export function DashboardPage() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-white mb-1">Upload Documents</h3>
+              <h3 className="text-lg font-medium text-white mb-1">
+                Upload Documents
+              </h3>
               <p className="text-sm text-gray-400">
                 Add new files to your knowledge base
               </p>
@@ -119,7 +126,9 @@ export function DashboardPage() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-white mb-1">Agent Mode</h3>
+              <h3 className="text-lg font-medium text-white mb-1">
+                Agent Mode
+              </h3>
               <p className="text-sm text-gray-400">
                 Chat with your documents using retrieval
               </p>
@@ -132,12 +141,18 @@ export function DashboardPage() {
       </section>
 
       {error && (
-        <p className="text-sm text-red-400">Failed to load documents: {error}</p>
+        <p className="text-sm text-red-400">
+          Failed to load documents: {error}
+        </p>
       )}
+
+      {deleteError && <p className="text-sm text-red-400">{deleteError}</p>}
 
       {documents.length > 0 ? (
         <section>
-          <h2 className="text-lg font-medium mb-4 text-gray-300">Recent Documents</h2>
+          <h2 className="text-lg font-medium mb-4 text-gray-300">
+            Recent Documents
+          </h2>
           <ul className="space-y-2">
             {documents.map((doc) => (
               <li
@@ -188,7 +203,9 @@ function HealthCard({ label, status }: { label: string; status?: string }) {
   return (
     <div
       className={`p-4 rounded-lg border ${
-        ok ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'
+        ok
+          ? 'border-green-500/30 bg-green-500/10'
+          : 'border-red-500/30 bg-red-500/10'
       }`}
     >
       <div className="flex items-center justify-between gap-2">

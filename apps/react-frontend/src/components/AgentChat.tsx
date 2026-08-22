@@ -8,7 +8,6 @@ interface ChatCompletePayload {
   sources?: Source[];
   error?: boolean;
   interrupted?: boolean;
-  cacheHit?: boolean;
 }
 
 function sourceLabel(source: Source): string {
@@ -23,7 +22,6 @@ export function AgentChat({ hasDocuments }: { hasDocuments: boolean }) {
   const [loading, setLoading] = useState(false);
   const activeConversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useWebSocketEvent<{ token: string; conversationId: string }>(
     'chat:token',
@@ -79,6 +77,30 @@ export function AgentChat({ hasDocuments }: { hasDocuments: boolean }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const timer = window.setTimeout(() => {
+      if (!activeConversationIdRef.current) return;
+      emitWebSocket('chat:interrupt', {
+        conversationId: activeConversationIdRef.current,
+      });
+      setLoading(false);
+      activeConversationIdRef.current = null;
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last || last.role !== 'assistant') return prev;
+        return [
+          ...prev.slice(0, -1),
+          {
+            ...last,
+            text: last.text.trim() || 'Request timed out.',
+          },
+        ];
+      });
+    }, 60_000);
+    return () => window.clearTimeout(timer);
+  }, [loading]);
 
   const interrupt = useCallback(() => {
     const conversationId = activeConversationIdRef.current;
@@ -168,7 +190,9 @@ export function AgentChat({ hasDocuments }: { hasDocuments: boolean }) {
                           {formatSimilarityPercent(s.similarity)}
                         </span>
                       </div>
-                      <p className="text-gray-500 line-clamp-2">{s.chunkContent}</p>
+                      <p className="text-gray-500 line-clamp-2">
+                        {s.chunkContent}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -185,7 +209,6 @@ export function AgentChat({ hasDocuments }: { hasDocuments: boolean }) {
         </label>
         <input
           id="agent-chat-input"
-          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

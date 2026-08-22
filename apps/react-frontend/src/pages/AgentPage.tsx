@@ -15,11 +15,6 @@ export function AgentPage() {
         synthesis yet).
       </p>
       <AgentChat hasDocuments={hasReadyDocuments} />
-      {!hasReadyDocuments && (
-        <p className="text-amber-400 mt-4 text-sm" role="status">
-          Agent mode unlocks when at least one document is Ready.
-        </p>
-      )}
     </div>
   );
 }

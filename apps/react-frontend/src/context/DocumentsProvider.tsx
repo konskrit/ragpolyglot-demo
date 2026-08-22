@@ -28,6 +28,8 @@ interface DocumentsContextValue {
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
 
+const IN_FLIGHT_STATUSES = new Set(['uploading', 'processing']);
+
 export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<UiDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       setDocuments(mapped);
 
       for (const doc of mapped) {
-        if (doc.status === 'uploading' || doc.status === 'processing') {
+        if (IN_FLIGHT_STATUSES.has(doc.status)) {
           subscribeDocument(doc.id);
         }
       }
@@ -65,9 +67,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    const inFlight = documents.some(
-      (d) => d.status === 'uploading' || d.status === 'processing',
-    );
+    const inFlight = documents.some((d) => IN_FLIGHT_STATUSES.has(d.status));
     if (!inFlight) return;
 
     const timer = window.setInterval(() => {
@@ -83,16 +83,21 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       const normalized = normalizeDocumentStatus(status);
       if (!normalized) return;
 
+      let missing = false;
       setDocuments((prev) => {
         const exists = prev.some((d) => d.id === documentId);
         if (!exists) {
-          void refresh();
+          missing = true;
           return prev;
         }
         return prev.map((doc) =>
           doc.id === documentId ? { ...doc, status: normalized } : doc,
         );
       });
+
+      if (missing) {
+        void refresh();
+      }
     },
   );
 

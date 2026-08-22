@@ -68,9 +68,11 @@ export function emitWebSocket<T>(event: string, payload?: T): void {
     return;
   }
 
-  socket.once('connect', () => {
+  const onConnect = () => {
+    socket.off('connect', onConnect);
     socket.emit(event, payload);
-  });
+  };
+  socket.on('connect', onConnect);
 }
 
 export function subscribeDocument(documentId: string): void {

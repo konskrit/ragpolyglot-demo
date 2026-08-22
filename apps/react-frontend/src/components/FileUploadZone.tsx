@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { postFormData } from '../api/client';
+import { useState, useRef, useEffect } from 'react';
+import { ApiError, postFormData } from '../api/client';
 import { subscribeDocument } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
 import { StatusBadge } from './StatusBadge';
@@ -12,6 +12,16 @@ export function FileUploadZone() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const successResetRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(
+    () => () => {
+      if (successResetRef.current) {
+        clearTimeout(successResetRef.current);
+      }
+    },
+    [],
+  );
 
   const { documents, refresh, remove } = useDocuments();
 
@@ -52,23 +62,32 @@ export function FileUploadZone() {
         formData.append('file', file);
         formData.append('title', file.name);
 
-        const doc = await postFormData<{ id: string }>('/api/documents/upload', formData);
+        const doc = await postFormData<{ id: string }>(
+          '/api/documents/upload',
+          formData,
+        );
         if (doc?.id) {
           subscribeDocument(doc.id);
         }
         successCount++;
       } catch (e) {
+        const detail =
+          e instanceof ApiError ? e.message : `Upload failed (${file.name})`;
         console.error(`Failed to upload ${file.name}:`, e);
-        failedFiles.push(file.name);
+        failedFiles.push(`${file.name}: ${detail}`);
       }
     }
 
     await refresh();
 
     if (failedFiles.length > 0) {
-      setFiles((prev) => prev.filter((f) => failedFiles.includes(f.name)));
+      setFiles((prev) =>
+        prev.filter((f) =>
+          failedFiles.some((entry) => entry.startsWith(`${f.name}:`)),
+        ),
+      );
       setErrorMessage(
-        `${successCount} uploaded, ${failedFiles.length} failed: ${failedFiles.join(', ')}`,
+        `${successCount} uploaded, ${failedFiles.length} failed: ${failedFiles.join('; ')}`,
       );
       setUploadState('error');
       return;
@@ -76,7 +95,10 @@ export function FileUploadZone() {
 
     setFiles([]);
     setUploadState('success');
-    setTimeout(() => setUploadState('idle'), 2500);
+    if (successResetRef.current) {
+      clearTimeout(successResetRef.current);
+    }
+    successResetRef.current = setTimeout(() => setUploadState('idle'), 2500);
   };
 
   const onDelete = async (id: string) => {
@@ -186,7 +208,9 @@ export function FileUploadZone() {
 
       {documents.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-lg font-medium mb-4 text-gray-300">Your Documents</h2>
+          <h2 className="text-lg font-medium mb-4 text-gray-300">
+            Your Documents
+          </h2>
           <ul className="space-y-2">
             {documents.map((doc) => (
               <li
