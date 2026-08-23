@@ -69,7 +69,7 @@ jobs:
 
       - run: cp .env.example .env
 
-      - run: docker compose --profile test --env-file .env --env-file .env.test -p ragpolyglot-ci up -d --wait --build
+      - run: docker compose --profile test --env-file .env --env-file .env.test.example -p ragpolyglot-ci up -d --wait --build
 
       - run: npx nx run api-gateway-e2e:e2e
         env:

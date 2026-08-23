@@ -5,4 +5,4 @@ npm run test:integration
 docker compose --profile test -p ragpolyglot-ci down -v
 ```
 
-Requires `.env` (from `.env.example`) and `.env.test`. Project name `ragpolyglot-ci` keeps volumes separate from local `docker compose up`.
+Requires `.env` (from `.env.example`) and `.env.test.example`. Project name `ragpolyglot-ci` keeps volumes separate from local `docker compose up`.
