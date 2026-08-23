@@ -5,6 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { mkdirSync, existsSync } from 'fs';
 import { AppModule } from './app.module';
 import { RedisService } from './core/redis.service';
+import { PostgresService } from './core/postgres.service';
 import { Config } from './core/config';
 import { AllExceptionsFilter } from './core/filters/all-exceptions.filter';
 
@@ -24,6 +25,9 @@ async function bootstrap() {
 
   const redis = app.get(RedisService);
   await redis.connect();
+
+  const postgres = app.get(PostgresService);
+  await postgres.connect();
 
   await app.listen(Config.port);
 

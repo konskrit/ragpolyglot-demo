@@ -13,6 +13,10 @@ export const Config = {
 
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
 
+  databaseUrl:
+    process.env.DATABASE_URL ||
+    'postgres://postgres:postgres@localhost:5432/app_db?sslmode=disable',
+
   port: Number(process.env.PORT) || 3000,
 
   httpTimeoutMs: Number(process.env.HTTP_TIMEOUT_MS) || 10_000,

@@ -90,3 +90,28 @@ export interface SystemHealth {
   redis: string;
   rabbitmq: string;
 }
+
+export interface MetricsSnapshot {
+  cache: {
+    hits: number;
+    misses: number;
+    hitRate: number | null;
+  };
+  queries: {
+    last24h: number;
+    avgLatencyMs: number | null;
+    series: Array<{ hour: string; count: number; avgMs: number }>;
+  };
+  ingest: {
+    processed24h: number;
+    failed24h: number;
+    avgChunkingMs: number | null;
+    avgEmbeddingMs: number | null;
+  };
+  documents: {
+    uploading: number;
+    processing: number;
+    ready: number;
+    failed: number;
+  };
+}
