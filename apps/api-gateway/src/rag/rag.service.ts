@@ -32,7 +32,10 @@ export class RagService {
     private readonly redis: RedisService,
   ) {}
 
-  async search(queryDto: RAGQueryDto): Promise<RAGResult> {
+  async search(
+    queryDto: RAGQueryDto,
+    signal?: AbortSignal,
+  ): Promise<RAGResult> {
     if (!queryDto?.query?.trim()) {
       throw new BadRequestException('Query is required');
     }
@@ -63,10 +66,13 @@ export class RagService {
         this.httpService.post<RagWorkerChatResponse>(
           `${Config.ragWorkerUrl}/api/chat`,
           { query, topK },
-          { timeout: RAG_CHAT_TIMEOUT_MS },
+          { timeout: RAG_CHAT_TIMEOUT_MS, signal },
         ),
       );
     } catch (err) {
+      if (signal?.aborted) {
+        throw err;
+      }
       throw this.toChatUpstreamError(err);
     }
 

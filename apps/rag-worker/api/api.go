@@ -87,6 +87,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	ctx := r.Context()
 
 	var req models.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -107,8 +108,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hits, err := s.store.SearchSimilar(r.Context(), vec, topK)
+	hits, err := s.store.SearchSimilar(ctx, vec, topK)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		log.Printf("[API] chat search failed: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "search failed"})
 		return
@@ -121,16 +125,19 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	answer, err := llm.Generate(r.Context(), req.Query, chunkTexts)
+	answer, err := llm.Generate(ctx, req.Query, chunkTexts)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		log.Printf("[API] chat generate failed: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "llm unavailable"})
 		return
 	}
 
 	duration := time.Since(start)
-	s.store.LogQuery(r.Context(), req.Query, topK, len(hits), duration)
-	s.store.LogSystem(r.Context(), "rag_chat", "", duration, map[string]any{
+	s.store.LogQuery(ctx, req.Query, topK, len(hits), duration)
+	s.store.LogSystem(ctx, "rag_chat", "", duration, map[string]any{
 		"topK":        topK,
 		"resultCount": len(hits),
 	})

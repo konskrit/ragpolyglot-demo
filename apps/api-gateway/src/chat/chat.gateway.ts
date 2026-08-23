@@ -25,8 +25,7 @@ import { randomUUID } from 'crypto';
 export class ChatGateway implements OnModuleInit {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(ChatGateway.name);
-  /** Keyed by `${socketId}:${conversationId}` so clients cannot interrupt each other. */
-  private readonly interrupted = new Set<string>();
+  private readonly abortControllers = new Map<string, AbortController>();
 
   constructor(
     private readonly rabbitMQ: RabbitMQService,
@@ -69,24 +68,24 @@ export class ChatGateway implements OnModuleInit {
 
     const conversationId = data.conversationId?.trim() || randomUUID();
     const interruptKey = `${client.id}:${conversationId}`;
-    this.interrupted.delete(interruptKey);
+
+    const abortController = new AbortController();
+    this.abortControllers.set(interruptKey, abortController);
 
     try {
-      const ragResult = await this.ragService.search({
-        query,
-        userId: data.userId,
-      });
+      const ragResult = await this.ragService.search(
+        { query, userId: data.userId },
+        abortController.signal,
+      );
+
+      if (abortController.signal.aborted) {
+        return;
+      }
       const answer = ragResult.answer;
       const words = answer.split(/(?<=\s)/);
 
       for (const token of words) {
-        if (this.interrupted.has(interruptKey)) {
-          client.emit('chat:complete', {
-            conversationId,
-            sources: ragResult.sources,
-            interrupted: true,
-          });
-          this.interrupted.delete(interruptKey);
+        if (abortController.signal.aborted) {
           return;
         }
 
@@ -100,6 +99,10 @@ export class ChatGateway implements OnModuleInit {
         cacheHit: ragResult.cacheHit ?? false,
       });
     } catch (error) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       this.logger.error(`Chat query failed: ${(error as Error).message}`);
 
       const errorMessage =
@@ -107,7 +110,7 @@ export class ChatGateway implements OnModuleInit {
           ? String(error.message)
           : 'Sorry, I encountered an error processing your request.';
       for (const token of errorMessage.split(/(?<=\s)/)) {
-        if (this.interrupted.has(interruptKey)) break;
+        if (abortController.signal.aborted) break;
         client.emit('chat:token', { token, conversationId });
         await new Promise((r) => setTimeout(r, Config.chatTokenIntervalMs));
       }
@@ -116,9 +119,10 @@ export class ChatGateway implements OnModuleInit {
         conversationId,
         sources: [],
         error: true,
-        interrupted: this.interrupted.has(interruptKey),
+        interrupted: abortController.signal.aborted,
       });
-      this.interrupted.delete(interruptKey);
+    } finally {
+      this.abortControllers.delete(interruptKey);
     }
   }
 
@@ -129,7 +133,16 @@ export class ChatGateway implements OnModuleInit {
   ): void {
     const conversationId = data.conversationId?.trim();
     if (!conversationId) return;
-    this.interrupted.add(`${client.id}:${conversationId}`);
+
+    const interruptKey = `${client.id}:${conversationId}`;
+    this.abortControllers.get(interruptKey)?.abort();
+
+    client.emit('chat:complete', {
+      conversationId,
+      sources: [],
+      interrupted: true,
+    });
+
     this.logger.log(
       `Chat interrupted socket=${client.id} conversationId=${conversationId}`,
     );

@@ -61,9 +61,16 @@ func Generate(ctx context.Context, query string, contextChunks []string) (string
 			}
 		} else {
 			lastErr = err
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return "", err
+			}
 			log.Printf("[LLM] attempt %d/%d failed: %v", attempt, maxRetries, err)
 			if attempt < maxRetries && retryable(err) {
-				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+				}
 				continue
 			}
 		}
