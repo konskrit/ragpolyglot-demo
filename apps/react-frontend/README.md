@@ -2,7 +2,7 @@
 
 > **WIP** — React + Vite UI for RAGPolyglot.
 
-Dashboard (health + documents), upload, and agent chat. Uses a shared documents context, WebSocket status updates, and Vite proxies to the gateway in dev.
+Dashboard (health + documents), upload, and agent chat with cited sources. Chat uses WebSocket streaming; **Stop** sends `chat:interrupt` to cancel the in-flight LLM request.
 
 ```bash
 npx nx serve react-frontend   # http://localhost:4200

@@ -2,7 +2,9 @@
 
 > **WIP** — NestJS BFF for RAGPolyglot.
 
-Routes document CRUD to the .NET service, RAG search to the Go worker, caches query results in Redis, and streams chat + document status over Socket.IO (`/ws`).
+Routes document CRUD to the .NET service, RAG chat to the Go worker (`POST /api/chat`), caches query results in Redis, and streams chat + document status over Socket.IO (`/ws`).
+
+WebSocket events: `chat:query`, `chat:token`, `chat:complete`, `chat:interrupt` (aborts in-flight worker request), `document:status-update`.
 
 ```bash
 npx nx serve api-gateway   # local (needs deps up)
