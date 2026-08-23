@@ -4,12 +4,16 @@ import { firstValueFrom } from 'rxjs';
 import { Config, ragCacheKey } from '../core/config';
 import { RedisService } from '../core/redis.service';
 import { RAGQueryDto, RAGResult, RagSearchHit } from '@ragpolyglot-shared';
-import { buildAnswer, clampTopK, toSources } from './rag.helpers';
+import { clampTopK, toSources } from './rag.helpers';
 
-interface RagWorkerSearchResponse {
+/** LLM + embed + search can exceed the default HttpModule timeout. */
+const RAG_CHAT_TIMEOUT_MS = 120_000;
+
+interface RagWorkerChatResponse {
   query: string;
   topK: number;
-  results: RagSearchHit[];
+  answer: string;
+  sources: RagSearchHit[];
 }
 
 @Injectable()
@@ -38,22 +42,25 @@ export class RagService {
         await this.redis.incr('metrics:rag:cache_hits');
         return { ...parsed, cacheHit: true };
       } catch {
-        this.logger.warn(`Corrupt RAG cache entry for key=${cacheKey}, ignoring`);
+        this.logger.warn(
+          `Corrupt RAG cache entry for key=${cacheKey}, ignoring`,
+        );
       }
     }
 
     await this.redis.incr('metrics:rag:cache_misses');
 
     const res = await firstValueFrom(
-      this.httpService.post<RagWorkerSearchResponse>(
-        `${Config.ragWorkerUrl}/api/search`,
+      this.httpService.post<RagWorkerChatResponse>(
+        `${Config.ragWorkerUrl}/api/chat`,
         { query, topK },
+        { timeout: RAG_CHAT_TIMEOUT_MS },
       ),
     );
 
-    const hits = res.data.results ?? [];
+    const hits = res.data.sources ?? [];
     const result: RAGResult = {
-      answer: buildAnswer(hits),
+      answer: res.data.answer,
       sources: toSources(hits),
       cacheHit: false,
     };
@@ -65,7 +72,7 @@ export class RagService {
     );
 
     this.logger.log(
-      `RAG search complete queryLen=${query.length} hits=${hits.length}`,
+      `RAG chat complete queryLen=${query.length} sources=${hits.length}`,
     );
 
     return result;
