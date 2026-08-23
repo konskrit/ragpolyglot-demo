@@ -11,8 +11,8 @@ export function AgentPage() {
         Ask questions grounded in your uploaded documents.
       </p>
       <p className="text-sm text-gray-500 mb-8">
-        Answers are retrieved document excerpts ranked by similarity (no LLM
-        synthesis yet).
+        Answers are generated from retrieved document chunks using the
+        configured LLM.
       </p>
       <AgentChat hasDocuments={hasReadyDocuments} />
     </div>
