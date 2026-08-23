@@ -121,10 +121,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	answer, err := llm.Generate(r.Context(), req.Query, chunkTexts, s.allowFallback)
+	answer, err := llm.Generate(r.Context(), req.Query, chunkTexts)
 	if err != nil {
 		log.Printf("[API] chat generate failed: %v", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "generation failed"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "llm unavailable"})
 		return
 	}
 

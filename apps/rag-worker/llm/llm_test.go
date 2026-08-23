@@ -6,22 +6,12 @@ import (
 )
 
 func TestGenerateNoContext(t *testing.T) {
-	answer, err := Generate(t.Context(), "what is this?", nil, true)
+	answer, err := Generate(t.Context(), "what is this?", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if answer != noContextAnswer {
 		t.Fatalf("got %q", answer)
-	}
-}
-
-func TestExtractiveAnswer(t *testing.T) {
-	got := extractiveAnswer([]string{"  alpha  ", "", "beta"})
-	if got != "alpha\n\nbeta" {
-		t.Fatalf("got %q", got)
-	}
-	if extractiveAnswer(nil) != noContextAnswer {
-		t.Fatal("empty chunks")
 	}
 }
 

@@ -21,21 +21,15 @@ const (
 		"If the answer is not in the context, say: \"I don't know based on the documents.\""
 )
 
-func Generate(ctx context.Context, query string, contextChunks []string, allowFallback bool) (string, error) {
+func Generate(ctx context.Context, query string, contextChunks []string) (string, error) {
 	if len(contextChunks) == 0 {
 		return noContextAnswer, nil
 	}
 
 	baseURL := chatBaseURL()
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	needsOpenAIKey := baseURL == defaultOpenAIBase
-
-	if apiKey == "" && needsOpenAIKey {
-		if !allowFallback {
-			return "", fmt.Errorf("LLM API not configured")
-		}
-		log.Println("[LLM] No API configured, using extractive fallback")
-		return extractiveAnswer(contextChunks), nil
+	if baseURL == defaultOpenAIBase && apiKey == "" {
+		return "", fmt.Errorf("LLM API not configured")
 	}
 
 	cfg := openai.DefaultConfig(apiKey)
@@ -71,28 +65,11 @@ func Generate(ctx context.Context, query string, contextChunks []string, allowFa
 		break
 	}
 
-	if allowFallback {
-		log.Printf("[LLM] using extractive fallback: %v", lastErr)
-		return extractiveAnswer(contextChunks), nil
-	}
 	return "", fmt.Errorf("LLM failed after retries: %w", lastErr)
 }
 
 func userPrompt(query string, chunks []string) string {
 	return fmt.Sprintf("Context:\n%s\n\nUser question:\n%s", strings.Join(chunks, "\n\n"), query)
-}
-
-func extractiveAnswer(chunks []string) string {
-	parts := make([]string, 0, len(chunks))
-	for _, c := range chunks {
-		if t := strings.TrimSpace(c); t != "" {
-			parts = append(parts, t)
-		}
-	}
-	if len(parts) == 0 {
-		return noContextAnswer
-	}
-	return strings.Join(parts, "\n\n")
 }
 
 func chatBaseURL() string {

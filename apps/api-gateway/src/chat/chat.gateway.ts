@@ -6,7 +6,12 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  HttpException,
+} from '@nestjs/common';
 import { Config } from '../core/config';
 import { RabbitMQService } from '../core/rabbitmq.service';
 import { RagService } from '../rag/rag.service';
@@ -98,7 +103,9 @@ export class ChatGateway implements OnModuleInit {
       this.logger.error(`Chat query failed: ${(error as Error).message}`);
 
       const errorMessage =
-        'Sorry, I encountered an error processing your request.';
+        error instanceof HttpException
+          ? String(error.message)
+          : 'Sorry, I encountered an error processing your request.';
       for (const token of errorMessage.split(/(?<=\s)/)) {
         if (this.interrupted.has(interruptKey)) break;
         client.emit('chat:token', { token, conversationId });
