@@ -90,6 +90,7 @@
   },
   "scripts": {
     "prepare": "husky",
-    "lint:staged": "lint-staged"
+    "lint:staged": "lint-staged",
+    "test:integration": "docker compose --profile test --env-file .env --env-file .env.test -p ragpolyglot-ci up -d --wait --build && nx run api-gateway-e2e:e2e"
   }
 }

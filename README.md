@@ -33,12 +33,14 @@ Upload → api-gateway → document-service (metadata)
 ```
 UI chat:query → gateway (Redis cache check)
              → rag-worker POST /api/chat (embed → search → LLM)
-             → gateway streams chat:token → chat:complete
+             → gateway streams chat:token → chat:complete (simulated token playback)
 
 Stop → chat:interrupt → abort in-flight worker request → LLM stops
 ```
 
-Agent answers are **LLM-generated from retrieved chunks** (OpenAI-compatible API). If the LLM is down, chat returns an error — there is no extractive fallback for answers. Ingestion can still use deterministic embedding fallback when `EMBEDDING_FALLBACK=true`.
+Agent answers are **LLM-generated from retrieved chunks** (OpenAI-compatible API). If the LLM is down, chat returns an error — there is no extractive fallback for answers.
+
+When `EMBEDDING_FALLBACK=true`, ingestion uses hash-based embeddings if the embedding API is missing or fails (typical when LM Studio serves chat only).
 
 ## Quick start
 
@@ -72,26 +74,40 @@ Start your LLM server before asking questions in Agent mode.
 
 ## Tests
 
+**Unit** (no Docker):
+
 ```bash
-npx nx run-many -t test
+npx nx run-many -t test --exclude=api-gateway-e2e,react-frontend-e2e
 ```
+
+**Integration** (CI — `--profile test` starts stub LLM; isolated project `ragpolyglot-ci`):
+
+```bash
+npm run test:integration
+docker compose --profile test -p ragpolyglot-ci down -v   # when done
+```
+
+**Manual** (local LM Studio): upload → Ready → chat in Agent mode.
 
 ## Layout
 
 ```
 apps/
   api-gateway/        Nest BFF — REST, WebSocket chat, Redis cache
+  api-gateway-e2e/    Integration tests (--profile test + llm-stub)
   document-service/   .NET metadata + events
   rag-worker/         Go RAG pipeline + /api/chat
   event-processor/    Go non-RAG jobs
   react-frontend/     UI (dashboard, upload, agent chat)
 libs/
   shared/             TS contracts + status helpers
+tools/
+  llm-stub/           OpenAI-compatible stub for CI
 ```
 
 ## Status
 
-**WIP** — end-to-end upload, vector search, LLM chat with stop/interrupt, and unit coverage on critical paths. Not production-hardened (no auth, limited e2e).
+**WIP** — end-to-end upload, vector search, LLM chat with stop/interrupt, unit tests, and CI integration tests (stub LLM). Not production-hardened (no auth, no browser e2e).
 
 ## License
 

@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  main:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,6 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Match local toolchain (npm 11). Node 22 ships npm 10, which rejects this lockfile.
           node-version: 24
           cache: npm
 
@@ -46,8 +45,7 @@ jobs:
         id: setSHAs
         uses: nrwl/nx-set-shas@v5
 
-      # Skip Playwright e2e until browsers/services are wired for CI.
-      - name: Lint and test affected projects
+      - name: Lint and unit test
         run: |
           EXCLUDE='react-frontend-e2e,api-gateway-e2e'
           if [ "${{ steps.setSHAs.outputs.noPreviousBuild }}" = "true" ]; then
@@ -55,3 +53,27 @@ jobs:
           else
             npx nx affected -t lint test --exclude="$EXCLUDE"
           fi
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: cp .env.example .env
+
+      - run: docker compose --profile test --env-file .env --env-file .env.test -p ragpolyglot-ci up -d --wait --build
+
+      - run: npx nx run api-gateway-e2e:e2e
+        env:
+          STUB_LLM_ANSWER: Integration test answer from stub LLM.
+
+      - if: always()
+        run: docker compose --profile test -p ragpolyglot-ci down -v

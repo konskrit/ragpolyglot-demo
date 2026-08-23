@@ -6,11 +6,8 @@
   "targets": {
     "e2e": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/{e2eProjectRoot}"],
-      "dependsOn": ["api-gateway:build", "api-gateway:serve"],
       "options": {
-        "jestConfig": "apps/api-gateway-e2e/jest.config.cts",
-        "passWithNoTests": true
+        "jestConfig": "apps/api-gateway-e2e/jest.config.js"
       }
     }
   }

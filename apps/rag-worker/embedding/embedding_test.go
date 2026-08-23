@@ -2,6 +2,8 @@ package embedding
 
 import (
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -63,6 +65,25 @@ func TestJoinEmbeddingsURL(t *testing.T) {
 		if got := joinEmbeddingsURL(tt.in); got != tt.want {
 			t.Fatalf("joinEmbeddingsURL(%q)=%q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestGenerateAndAttach_FallsBackWhenAPIFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	t.Setenv("LMSTUDIO_API_URL", srv.URL+"/v1")
+	t.Setenv("EMBEDDING_DIMENSION", "16")
+	t.Setenv("OPENAI_API_KEY", "")
+
+	out, err := GenerateAndAttach([]string{"hello"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || len(out[0].Embedding) != 16 {
+		t.Fatalf("unexpected %#v", out)
 	}
 }
 

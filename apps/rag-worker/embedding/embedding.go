@@ -76,6 +76,11 @@ func GenerateAndAttach(textChunks []string, allowFallback bool) ([]models.TextCh
 		break
 	}
 
+	if allowFallback {
+		log.Printf("[Embedding] API failed (%v), using fallback embeddings", lastErr)
+		return fallbackEmbeddings(textChunks), nil
+	}
+
 	return nil, fmt.Errorf("embedding failed after retries: %w", lastErr)
 }
 

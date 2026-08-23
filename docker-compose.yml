@@ -91,6 +91,26 @@ services:
     networks:
       - rag-network
 
+  llm-stub:
+    profiles: [test]
+    build:
+      context: ./tools/llm-stub
+      dockerfile: Dockerfile
+    environment:
+      STUB_LLM_ANSWER: ${STUB_LLM_ANSWER:-Integration test answer from stub LLM.}
+      STUB_DELAY_MS: ${STUB_DELAY_MS:-3000}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:8090/health >/dev/null || exit 1',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - rag-network
+
   rag-worker:
     build:
       context: ./apps/rag-worker
@@ -122,6 +142,9 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      llm-stub:
+        condition: service_healthy
+        required: false
     healthcheck:
       test:
         [
