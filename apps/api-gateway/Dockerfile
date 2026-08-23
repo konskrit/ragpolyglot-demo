@@ -11,11 +11,9 @@ RUN npm ci --legacy-peer-deps \
     && cd dist/apps/api-gateway \
     && npm install --omit=dev --legacy-peer-deps
 
-FROM node:24-alpine AS runtime
+FROM node:24-alpine
 
-ENV NODE_ENV=production \
-    PORT=3000 \
-    UPLOADS_DIR=/uploads
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -26,8 +24,5 @@ COPY --from=builder --chown=node:node /workspace/dist/apps/api-gateway/ ./
 USER node
 
 EXPOSE 3000
-
-HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["node", "main.js"]

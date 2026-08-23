@@ -21,7 +21,4 @@ USER app
 
 EXPOSE 8082
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
-  CMD wget -qO- http://127.0.0.1:8082/health >/dev/null || exit 1
-
 ENTRYPOINT ["/app/event-processor"]
