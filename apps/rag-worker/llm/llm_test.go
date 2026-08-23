@@ -15,6 +15,14 @@ func TestGenerateNoContext(t *testing.T) {
 	}
 }
 
+func TestGenerateRequiresModel(t *testing.T) {
+	t.Setenv("LLM_MODEL", "")
+	_, err := Generate(t.Context(), "q?", []string{"chunk"})
+	if err == nil || !strings.Contains(err.Error(), "LLM_MODEL not configured") {
+		t.Fatalf("got err=%v", err)
+	}
+}
+
 func TestUserPrompt(t *testing.T) {
 	got := userPrompt("q?", []string{"chunk one"})
 	if !strings.Contains(got, "Context:") || !strings.Contains(got, "chunk one") || !strings.Contains(got, "q?") {

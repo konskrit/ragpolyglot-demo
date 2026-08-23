@@ -26,6 +26,11 @@ func Generate(ctx context.Context, query string, contextChunks []string) (string
 		return noContextAnswer, nil
 	}
 
+	model, err := modelName()
+	if err != nil {
+		return "", err
+	}
+
 	baseURL := chatBaseURL()
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if baseURL == defaultOpenAIBase && apiKey == "" {
@@ -38,7 +43,7 @@ func Generate(ctx context.Context, query string, contextChunks []string) (string
 	client := openai.NewClientWithConfig(cfg)
 
 	req := openai.ChatCompletionRequest{
-		Model: modelName(),
+		Model: model,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: userPrompt(query, contextChunks)},
@@ -82,14 +87,12 @@ func chatBaseURL() string {
 	return defaultOpenAIBase
 }
 
-func modelName() string {
-	if m := strings.TrimSpace(os.Getenv("LLM_MODEL")); m != "" {
-		return m
+func modelName() (string, error) {
+	m := strings.TrimSpace(os.Getenv("LLM_MODEL"))
+	if m == "" {
+		return "", fmt.Errorf("LLM_MODEL not configured")
 	}
-	if chatBaseURL() == defaultOpenAIBase {
-		return "gpt-4o-mini"
-	}
-	return "local-model"
+	return m, nil
 }
 
 func retryable(err error) bool {
