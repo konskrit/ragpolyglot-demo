@@ -2,17 +2,17 @@
 
 > **WIP** — NestJS BFF for RAGPolyglot.
 
-Routes document CRUD to the .NET service, RAG chat to the Go worker (`POST /api/chat`), caches query results in Redis, and streams chat + document status over Socket.IO (`/ws`).
+Routes document CRUD to document-service, RAG chat to rag-worker (`POST /api/chat`), caches answers in Redis, and serves `GET /api/metrics` from Redis counters plus Postgres logs (`DATABASE_URL`). Streams chat and document status over Socket.IO (`/ws`).
 
-WebSocket events: `chat:query`, `chat:token`, `chat:complete`, `chat:interrupt` (aborts in-flight worker request), `document:status-update`.
+WebSocket: `chat:query`, `chat:token`, `chat:complete`, `chat:interrupt` (aborts the in-flight worker request), `document:status-update`.
 
-Token streaming is simulated playback after the full LLM response returns.
+`chat:token` is paced playback of the full LLM answer, not native model streaming.
 
 ```bash
-npx nx serve api-gateway   # local (needs deps up)
+npx nx serve api-gateway   # needs Postgres, Redis, RabbitMQ, workers
 npx nx test api-gateway
 ```
 
-Docker: root `docker compose up` (port `3000`).
+Docker: `docker compose up` (port `3000`).
 
-Integration tests: `docker compose --profile test` + `apps/api-gateway-e2e`.
+Integration: `npm run test:integration` (`--profile test` + `apps/api-gateway-e2e`).

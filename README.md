@@ -2,7 +2,7 @@
 
 > **Work in progress.** Local polyglot RAG demo — architecture and pipeline are in place; features and polish are still evolving.
 
-Event-driven retrieval system in an Nx monorepo: upload documents, chunk + embed, query with pgvector, generate LLM answers from retrieved context, and stream results through a Nest gateway to a React UI.
+Event-driven retrieval in an Nx monorepo: upload documents, chunk + embed, search with pgvector, generate LLM answers from retrieved context, and show health/performance in a React UI.
 
 ## Stack
 
@@ -33,14 +33,19 @@ Upload → api-gateway → document-service (metadata)
 ```
 UI chat:query → gateway (Redis cache check)
              → rag-worker POST /api/chat (embed → search → LLM)
-             → gateway streams chat:token → chat:complete (simulated token playback)
+             → gateway emits chat:token → chat:complete
+               (word-by-word playback of the full answer)
 
-Stop → chat:interrupt → abort in-flight worker request → LLM stops
+Stop → chat:interrupt → abort in-flight worker HTTP → LLM request cancels
 ```
 
-Agent answers are **LLM-generated from retrieved chunks** (OpenAI-compatible API). If the LLM is down, chat returns an error — there is no extractive fallback for answers.
+Answers are **LLM-generated from retrieved chunks**. If the LLM is down, chat fails — no extractive fallback.
 
-When `EMBEDDING_FALLBACK=true`, ingestion uses hash-based embeddings if the embedding API is missing or fails (typical when LM Studio serves chat only).
+When `EMBEDDING_FALLBACK=true`, ingestion uses hash embeddings if the embedding API is missing or fails (typical when LM Studio serves chat only).
+
+### Dashboard
+
+The UI polls `GET /api/health` and `GET /api/metrics`. Metrics come from Redis cache counters plus Postgres `query_logs`, `system_logs`, and document status counts.
 
 ## Quick start
 
@@ -66,26 +71,28 @@ Auth is disabled for local/dev.
 Set in `.env`:
 
 - `LLM_MODEL` — model id (required; e.g. `local-model` for LM Studio)
-- `LMSTUDIO_API_URL` — local OpenAI-compatible endpoint (default in `.env.example`: `http://host.docker.internal:1234/v1`)
+- `LMSTUDIO_API_URL` — OpenAI-compatible endpoint (`.env.example` uses `http://host.docker.internal:1234/v1`)
 
-For OpenAI instead, set `OPENAI_API_KEY` and optionally `OPENAI_API_BASE_URL`. Chat uses `LMSTUDIO_API_URL` when set, otherwise OpenAI.
+For OpenAI, set `OPENAI_API_KEY` and optionally `OPENAI_API_BASE_URL`. Chat uses `LMSTUDIO_API_URL` when set, otherwise OpenAI.
 
-Start your LLM server before asking questions in Agent mode.
+Start the LLM before using Agent mode.
 
 ## Tests
 
-**Unit** (no Docker):
+**Unit** (no Docker stack):
 
 ```bash
 npx nx run-many -t test --exclude=api-gateway-e2e,react-frontend-e2e
 ```
 
-**Integration** (CI — `--profile test` starts stub LLM; isolated project `ragpolyglot-ci`):
+**Integration** (CI — `--profile test` starts `llm-stub`; isolated compose project `ragpolyglot-ci`):
 
 ```bash
 npm run test:integration
-docker compose --profile test -p ragpolyglot-ci down -v   # when done
+docker compose --profile test -p ragpolyglot-ci down -v
 ```
+
+Uses `.env` (from `.env.example`) plus `.env.test.example`. No LM Studio.
 
 **Manual** (local LM Studio): upload → Ready → chat in Agent mode.
 
@@ -93,21 +100,21 @@ docker compose --profile test -p ragpolyglot-ci down -v   # when done
 
 ```
 apps/
-  api-gateway/        Nest BFF — REST, WebSocket chat, Redis cache
+  api-gateway/        Nest BFF — REST, WebSocket, Redis cache, /api/metrics
   api-gateway-e2e/    Integration tests (--profile test + llm-stub)
   document-service/   .NET metadata + events
   rag-worker/         Go RAG pipeline + /api/chat
-  event-processor/    Go non-RAG jobs
+  event-processor/    Go job handlers (no in-repo publisher yet)
   react-frontend/     UI (dashboard, upload, agent chat)
 libs/
-  shared/             TS contracts + status helpers
+  shared/             TS contracts
 tools/
   llm-stub/           OpenAI-compatible stub for CI
 ```
 
 ## Status
 
-**WIP** — end-to-end upload, vector search, LLM chat with stop/interrupt, unit tests, and CI integration tests (stub LLM). Not production-hardened (no auth, no browser e2e).
+**WIP** — upload → vector store → LLM chat with interrupt, dashboard metrics, unit tests, CI integration with a stub LLM. Not production-hardened (no auth, no browser e2e). Event-processor job handlers exist but nothing in this repo publishes jobs yet.
 
 ## License
 

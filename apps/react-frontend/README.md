@@ -2,13 +2,13 @@
 
 > **WIP** — React + Vite UI for RAGPolyglot.
 
-Dashboard (health + documents), upload, and agent chat with cited sources. Chat uses WebSocket streaming; **Stop** sends `chat:interrupt` to cancel the in-flight LLM request.
+Dashboard (health, 24h metrics from `/api/metrics`, documents), upload, and agent chat with sources. **Stop** emits `chat:interrupt`.
 
-Requires LM Studio for real chat locally. CI tests the pipeline via `apps/api-gateway-e2e`.
+Chat tokens arrive over WebSocket after the gateway has the full answer. Real answers need LM Studio (or another OpenAI-compatible server) locally. CI covers the pipeline via `apps/api-gateway-e2e`, not the browser.
 
 ```bash
 npx nx serve react-frontend   # http://localhost:4200
 npx nx test react-frontend
 ```
 
-Leave `VITE_API_URL` / `VITE_WS_URL` empty in `.env` so the proxy and `/ws` namespace work.
+Leave `VITE_API_URL` / `VITE_WS_URL` empty so Vite proxies `/api` and `/ws`.

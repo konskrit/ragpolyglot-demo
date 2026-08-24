@@ -1,8 +1,8 @@
 # @ragpolyglot-shared
 
-> **WIP** — shared TypeScript contracts for the monorepo.
+> **WIP** — shared TypeScript contracts.
 
-Document/RAG DTOs, event shapes, and status helpers (`DOCUMENT_STATUSES`, `normalizeDocumentStatus`).
+Document/RAG DTOs, events, `MetricsSnapshot`, and status helpers (`DOCUMENT_STATUSES`, `normalizeDocumentStatus`).
 
 ```bash
 npx nx test shared
