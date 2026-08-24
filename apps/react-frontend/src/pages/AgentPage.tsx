@@ -1,9 +1,6 @@
 import { AgentChat } from '../components/AgentChat';
-import { useDocuments } from '../context/DocumentsProvider';
 
 export function AgentPage() {
-  const { hasReadyDocuments } = useDocuments();
-
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-semibold mb-2">Agent Mode</h1>
@@ -14,7 +11,7 @@ export function AgentPage() {
         Answers are generated from retrieved document chunks using the
         configured LLM.
       </p>
-      <AgentChat hasDocuments={hasReadyDocuments} />
+      <AgentChat />
     </div>
   );
 }

@@ -12,7 +12,9 @@ export function FileUploadZone() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const successResetRef = useRef<ReturnType<typeof setTimeout>>();
+  const successResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   useEffect(
     () => () => {

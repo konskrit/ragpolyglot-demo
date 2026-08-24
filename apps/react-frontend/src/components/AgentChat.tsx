@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { emitWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
-import { formatSimilarityPercent } from '../lib/documents';
+import { useDocuments } from '../context/DocumentsProvider';
+import { formatSimilarityPercent } from '../lib/formatSimilarity';
 import type { Message, Source } from '@ragpolyglot-shared';
 
 interface ChatCompletePayload {
@@ -16,12 +17,32 @@ function sourceLabel(source: Source): string {
   return 'Source';
 }
 
-export function AgentChat({ hasDocuments }: { hasDocuments: boolean }) {
+export function AgentChat() {
+  const { documents } = useDocuments();
+  const hasDocuments = documents.some((d) => d.status === 'ready');
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const activeConversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const finishAssistant = (fallbackText: string, sources?: Source[]) => {
+    setLoading(false);
+    activeConversationIdRef.current = null;
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (!last || last.role !== 'assistant') return prev;
+      return [
+        ...prev.slice(0, -1),
+        {
+          ...last,
+          text: last.text.trim() || fallbackText,
+          ...(sources ? { sources } : {}),
+        },
+      ];
+    });
+  };
 
   useWebSocketEvent<{ token: string; conversationId: string }>(
     'chat:token',
@@ -85,43 +106,17 @@ export function AgentChat({ hasDocuments }: { hasDocuments: boolean }) {
       emitWebSocket('chat:interrupt', {
         conversationId: activeConversationIdRef.current,
       });
-      setLoading(false);
-      activeConversationIdRef.current = null;
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (!last || last.role !== 'assistant') return prev;
-        return [
-          ...prev.slice(0, -1),
-          {
-            ...last,
-            text: last.text.trim() || 'Request timed out.',
-          },
-        ];
-      });
+      finishAssistant('Request timed out.');
     }, 120_000);
     return () => window.clearTimeout(timer);
   }, [loading]);
 
-  const interrupt = useCallback(() => {
+  const interrupt = () => {
     const conversationId = activeConversationIdRef.current;
     if (!conversationId) return;
-
     emitWebSocket('chat:interrupt', { conversationId });
-    setLoading(false);
-    activeConversationIdRef.current = null;
-
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (!last || last.role !== 'assistant') return prev;
-      return [
-        ...prev.slice(0, -1),
-        {
-          ...last,
-          text: last.text.trim() || '(interrupted)',
-        },
-      ];
-    });
-  }, []);
+    finishAssistant('(interrupted)');
+  };
 
   const send = () => {
     if (!input.trim() || !hasDocuments || loading) return;

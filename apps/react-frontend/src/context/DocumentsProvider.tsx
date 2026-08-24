@@ -21,7 +21,6 @@ interface DocumentsContextValue {
   documents: UiDocument[];
   loading: boolean;
   error: string | null;
-  hasReadyDocuments: boolean;
   refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
@@ -106,7 +105,6 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       documents,
       loading,
       error,
-      hasReadyDocuments: documents.some((d) => d.status === 'ready'),
       refresh,
       remove,
     }),

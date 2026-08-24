@@ -1,6 +1,12 @@
 import { normalizeDocumentStatus } from '@ragpolyglot-shared';
 import type { DocumentStatus } from '@ragpolyglot-shared';
-import { statusLabel } from '../lib/statusLabel';
+
+const labels: Record<DocumentStatus, string> = {
+  ready: 'Ready',
+  processing: 'Processing',
+  uploading: 'Uploading',
+  failed: 'Failed',
+};
 
 const styles: Record<DocumentStatus, string> = {
   ready: 'bg-green-500/20 text-green-400',
@@ -15,7 +21,7 @@ export function StatusBadge({ status }: { status: DocumentStatus | string }) {
   if (!normalized) {
     return (
       <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">
-        {statusLabel(status)}
+        {String(status ?? 'unknown')}
       </span>
     );
   }
@@ -24,7 +30,7 @@ export function StatusBadge({ status }: { status: DocumentStatus | string }) {
     <span
       className={`px-2 py-1 rounded-full text-xs font-medium ${styles[normalized]}`}
     >
-      {statusLabel(normalized)}
+      {labels[normalized]}
     </span>
   );
 }
