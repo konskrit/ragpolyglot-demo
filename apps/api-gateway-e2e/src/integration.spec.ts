@@ -13,6 +13,7 @@ describe('integration (--profile test + llm-stub)', () => {
     expect(res.data.status).toBe('ok');
     expect(res.data.document_service).toBe('ok');
     expect(res.data.rag_worker).toBe('ok');
+    expect(res.data.event_processor).toBe('ok');
     expect(res.data.redis).toBe('ok');
     expect(res.data.rabbitmq).toBe('ok');
   });

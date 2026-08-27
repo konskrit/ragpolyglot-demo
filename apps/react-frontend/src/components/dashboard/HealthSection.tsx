@@ -14,12 +14,13 @@ export function HealthSection({
       <h2 className="text-lg font-medium mb-4 text-gray-300">System Health</h2>
       {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
       {health && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           <HealthCard
             label="Document Service"
             status={health.document_service}
           />
           <HealthCard label="RAG Worker" status={health.rag_worker} />
+          <HealthCard label="Event Processor" status={health.event_processor} />
           <HealthCard label="Redis" status={health.redis} />
           <HealthCard label="RabbitMQ" status={health.rabbitmq} />
         </div>

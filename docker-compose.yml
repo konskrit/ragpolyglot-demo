@@ -179,6 +179,16 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:8082/health >/dev/null || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - rag-network
 
@@ -193,6 +203,7 @@ services:
       PORT: ${PORT:-3000}
       DOCUMENT_SERVICE_URL: ${DOCUMENT_SERVICE_URL}
       RAG_WORKER_URL: ${RAG_WORKER_URL}
+      EVENT_PROCESSOR_URL: ${EVENT_PROCESSOR_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
       REDIS_URL: ${REDIS_URL}
       DATABASE_URL: ${DATABASE_URL}
@@ -208,6 +219,8 @@ services:
       document-service:
         condition: service_healthy
       rag-worker:
+        condition: service_healthy
+      event-processor:
         condition: service_healthy
       redis:
         condition: service_healthy

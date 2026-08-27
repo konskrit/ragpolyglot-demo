@@ -9,6 +9,8 @@ export const Config = {
 
   ragWorkerUrl: process.env.RAG_WORKER_URL || 'http://localhost:8081',
 
+  eventProcessorUrl: process.env.EVENT_PROCESSOR_URL || 'http://localhost:8082',
+
   rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/',
 
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',

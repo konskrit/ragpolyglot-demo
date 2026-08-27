@@ -87,6 +87,7 @@ export interface Message {
 export interface SystemHealth {
   document_service: string;
   rag_worker: string;
+  event_processor: string;
   redis: string;
   rabbitmq: string;
 }

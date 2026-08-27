@@ -21,6 +21,7 @@ export class HealthController {
       timestamp: new Date().toISOString(),
       document_service: await this.probe(`${Config.documentServiceUrl}/health`),
       rag_worker: await this.probe(`${Config.ragWorkerUrl}/health`),
+      event_processor: await this.probe(`${Config.eventProcessorUrl}/health`),
       redis: this.redis.isReady() ? 'ok' : 'error',
       rabbitmq: this.rabbitMQ.isConnected() ? 'ok' : 'error',
     };
@@ -28,6 +29,7 @@ export class HealthController {
     const healthy =
       checks.document_service === 'ok' &&
       checks.rag_worker === 'ok' &&
+      checks.event_processor === 'ok' &&
       checks.redis === 'ok' &&
       checks.rabbitmq === 'ok';
 
