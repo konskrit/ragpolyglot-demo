@@ -33,8 +33,8 @@ Upload → api-gateway → document-service (metadata)
 ```
 UI chat:query → gateway (Redis cache check)
              → rag-worker POST /api/chat (embed → search → LLM)
-             → gateway emits chat:token → chat:complete
-               (word-by-word playback of the full answer)
+             → gateway relays chat:token → chat:complete
+               (native LLM token stream from rag-worker)
 
 Stop → chat:interrupt → abort in-flight worker HTTP → LLM request cancels
 ```
@@ -89,10 +89,9 @@ npx nx run-many -t test --exclude=api-gateway-e2e,react-frontend-e2e
 
 ```bash
 npm run test:integration
-docker compose --profile test -p ragpolyglot-ci down -v
 ```
 
-Uses `.env` (from `.env.example`) plus `.env.test.example`. No LM Studio.
+Uses `.env` (from `.env.example`) plus `.env.test.example`. No LM Studio. Tears down with `-p ragpolyglot-ci` when the run succeeds.
 
 **Manual** (local LM Studio): upload → Ready → chat in Agent mode.
 

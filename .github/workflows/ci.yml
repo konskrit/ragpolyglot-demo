@@ -76,4 +76,4 @@ jobs:
           STUB_LLM_ANSWER: Integration test answer from stub LLM.
 
       - if: always()
-        run: docker compose --profile test -p ragpolyglot-ci down -v
+        run: docker compose --profile test -p ragpolyglot-ci down -v --remove-orphans

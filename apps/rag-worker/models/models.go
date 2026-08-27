@@ -71,3 +71,22 @@ type ChatResponse struct {
 	Answer  string      `json:"answer"`
 	Sources []SearchHit `json:"sources"`
 }
+
+// NDJSON events for POST /api/chat/stream
+type ChatStreamTokenEvent struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+type ChatStreamDoneEvent struct {
+	Type    string      `json:"type"`
+	Query   string      `json:"query"`
+	TopK    int         `json:"topK"`
+	Answer  string      `json:"answer"`
+	Sources []SearchHit `json:"sources"`
+}
+
+type ChatStreamErrorEvent struct {
+	Type  string `json:"type"`
+	Error string `json:"error"`
+}

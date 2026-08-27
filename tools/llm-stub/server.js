@@ -14,6 +14,18 @@ function readBody(req) {
   });
 }
 
+function parseJson(raw) {
+  try {
+    return JSON.parse(raw.toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeSSE(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`);
 
@@ -24,10 +36,34 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
-    await readBody(req);
+    const body = parseJson(await readBody(req));
+    const stream = Boolean(body?.stream);
+
     if (DELAY_MS > 0) {
       await new Promise((r) => setTimeout(r, DELAY_MS));
     }
+
+    if (stream) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      const mid = Math.max(1, Math.floor(ANSWER.length / 2));
+      for (const part of [ANSWER.slice(0, mid), ANSWER.slice(mid)]) {
+        if (!part) continue;
+        writeSSE(res, {
+          choices: [{ delta: { content: part }, finish_reason: null }],
+        });
+      }
+      writeSSE(res, {
+        choices: [{ delta: {}, finish_reason: 'stop' }],
+      });
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({

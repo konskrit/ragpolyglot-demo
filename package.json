@@ -91,6 +91,6 @@
   "scripts": {
     "prepare": "husky",
     "lint:staged": "lint-staged",
-    "test:integration": "docker compose --profile test --env-file .env --env-file .env.test.example -p ragpolyglot-ci up -d --wait --build && nx run api-gateway-e2e:e2e"
+    "test:integration": "docker compose --profile test --env-file .env --env-file .env.test.example -p ragpolyglot-ci up -d --wait --build && nx run api-gateway-e2e:e2e && docker compose --profile test -p ragpolyglot-ci down -v --remove-orphans"
   }
 }

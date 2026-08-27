@@ -25,8 +25,6 @@ export const Config = {
 
   defaultTopK: Number(process.env.RAG_TOP_K) || 5,
 
-  chatTokenIntervalMs: Number(process.env.CHAT_TOKEN_INTERVAL_MS) || 40,
-
   documentEventsExchange: 'document.events',
   gatewayStatusQueue: 'gateway.document-status.queue',
 } as const;

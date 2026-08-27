@@ -73,24 +73,17 @@ export class ChatGateway implements OnModuleInit {
     this.abortControllers.set(interruptKey, abortController);
 
     try {
-      const ragResult = await this.ragService.search(
+      const ragResult = await this.ragService.streamSearch(
         { query, userId: data.userId },
+        (token) => {
+          if (abortController.signal.aborted) return;
+          client.emit('chat:token', { token, conversationId });
+        },
         abortController.signal,
       );
 
       if (abortController.signal.aborted) {
         return;
-      }
-      const answer = ragResult.answer;
-      const words = answer.split(/(?<=\s)/);
-
-      for (const token of words) {
-        if (abortController.signal.aborted) {
-          return;
-        }
-
-        client.emit('chat:token', { token, conversationId });
-        await new Promise((r) => setTimeout(r, Config.chatTokenIntervalMs));
       }
 
       client.emit('chat:complete', {
@@ -107,19 +100,15 @@ export class ChatGateway implements OnModuleInit {
 
       const errorMessage =
         error instanceof HttpException
-          ? String(error.message)
+          ? error.message
           : 'Sorry, I encountered an error processing your request.';
-      for (const token of errorMessage.split(/(?<=\s)/)) {
-        if (abortController.signal.aborted) break;
-        client.emit('chat:token', { token, conversationId });
-        await new Promise((r) => setTimeout(r, Config.chatTokenIntervalMs));
-      }
 
+      client.emit('chat:token', { token: errorMessage, conversationId });
       client.emit('chat:complete', {
         conversationId,
         sources: [],
         error: true,
-        interrupted: abortController.signal.aborted,
+        interrupted: false,
       });
     } finally {
       this.abortControllers.delete(interruptKey);

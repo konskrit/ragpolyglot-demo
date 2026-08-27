@@ -200,7 +200,6 @@ services:
       HTTP_TIMEOUT_MS: ${HTTP_TIMEOUT_MS:-10000}
       RAG_CACHE_TTL_SECONDS: ${RAG_CACHE_TTL_SECONDS:-600}
       RAG_TOP_K: ${RAG_TOP_K:-5}
-      CHAT_TOKEN_INTERVAL_MS: ${CHAT_TOKEN_INTERVAL_MS:-40}
     volumes:
       - uploads_data:${UPLOADS_DIR:-/uploads}
     ports:
