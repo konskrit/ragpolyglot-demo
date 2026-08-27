@@ -7,9 +7,13 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { unlink } from 'fs/promises';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { Config } from '../core/config';
-import { Document, DocumentChunk, DocumentCreateDto } from '@ragpolyglot-shared';
+import {
+  Document,
+  DocumentChunk,
+  DocumentCreateDto,
+} from '@ragpolyglot-shared';
 
 type DocumentRecord = Document & { filePath?: string };
 
@@ -71,17 +75,32 @@ export class DocumentService {
       this.logger.log(`Document created via document-service: ${res.data.id}`);
       return this.toPublicDocument(res.data);
     } catch (err) {
-      await unlink(join(Config.uploadsDir, file.filename)).catch(() => undefined);
+      await unlink(join(Config.uploadsDir, file.filename)).catch(
+        () => undefined,
+      );
       throw err;
     }
   }
 
   async deleteDocument(id: string): Promise<void> {
+    const existing = await firstValueFrom(
+      this.httpService.get<DocumentRecord>(
+        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
+      ),
+    );
+    const filename = existing.data.filePath
+      ? basename(existing.data.filePath)
+      : '';
+
     await firstValueFrom(
       this.httpService.delete(
         `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
       ),
     );
+
+    if (filename && filename !== '.' && filename !== '..') {
+      await unlink(join(Config.uploadsDir, filename)).catch(() => undefined);
+    }
   }
 
   private toPublicDocument(doc: DocumentRecord): Document {
