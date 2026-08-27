@@ -2,7 +2,7 @@
 
 > **WIP** — Go RAG pipeline worker.
 
-Consumes `document.uploaded` / `document.deleted`, chunks (~750 tokens, 10% overlap), embeds (API or hash fallback when `EMBEDDING_FALLBACK=true`), writes pgvector chunks, publishes `document.processed` / `document.failed`. Logs query and ingest timings to Postgres.
+Consumes `document.uploaded` / `document.deleted`, chunks (~750 tokens, 10% overlap), embeds (API; hash fallback only when `EMBEDDING_FALLBACK=true`), writes pgvector chunks, publishes `document.processed` / `document.failed`. Logs query and ingest timings to Postgres.
 
 HTTP:
 

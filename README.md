@@ -41,7 +41,7 @@ Stop → chat:interrupt → abort in-flight worker HTTP → LLM request cancels
 
 Answers are **LLM-generated from retrieved chunks**. If the LLM is down, chat fails — no extractive fallback.
 
-When `EMBEDDING_FALLBACK=true`, ingestion uses hash embeddings if the embedding API is missing or fails (typical when LM Studio serves chat only).
+Hash embedding fallback is off by default (`EMBEDDING_FALLBACK=false`). Set `true` for chat-only LM Studio or CI (`--profile test` via `.env.test.example`).
 
 ### Dashboard
 
