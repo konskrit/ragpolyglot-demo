@@ -115,4 +115,11 @@ export interface MetricsSnapshot {
     ready: number;
     failed: number;
   };
+  jobs: {
+    completed24h: number;
+    failed24h: number;
+  };
+  redis: {
+    usedMemoryBytes: number | null;
+  };
 }

@@ -12,32 +12,50 @@ export class MetricsService {
   ) {}
 
   async getSnapshot(): Promise<MetricsSnapshot> {
-    const [hits, misses, querySummary, series, ingest, failures, docs] =
-      await Promise.all([
-        this.readCounter('metrics:rag:cache_hits'),
-        this.readCounter('metrics:rag:cache_misses'),
-        this.postgres.query<{ count: string; avg_ms: string | null }>(
-          loadSql('query-summary.sql'),
-        ),
-        this.postgres.query<{
-          hour: Date;
-          count: string;
-          avg_ms: string;
-        }>(loadSql('query-series.sql')),
-        this.postgres.query<{
-          processed: string;
-          avg_chunking: string | null;
-          avg_embedding: string | null;
-        }>(loadSql('ingest-summary.sql')),
-        this.postgres.query<{ count: string }>(loadSql('ingest-failures.sql')),
-        this.postgres.query<{ status: string; count: string }>(
-          loadSql('document-counts.sql'),
-        ),
-      ]);
+    const [
+      hits,
+      misses,
+      querySummary,
+      series,
+      ingest,
+      failures,
+      docs,
+      jobs,
+      redisStats,
+    ] = await Promise.all([
+      this.readCounter('metrics:rag:cache_hits'),
+      this.readCounter('metrics:rag:cache_misses'),
+      this.postgres.query<{ count: string; avg_ms: string | null }>(
+        loadSql('query-summary.sql'),
+      ),
+      this.postgres.query<{
+        hour: Date;
+        count: string;
+        avg_ms: string;
+      }>(loadSql('query-series.sql')),
+      this.postgres.query<{
+        processed: string;
+        avg_chunking: string | null;
+        avg_embedding: string | null;
+      }>(loadSql('ingest-summary.sql')),
+      this.postgres.query<{ count: string }>(loadSql('ingest-failures.sql')),
+      this.postgres.query<{ status: string; count: string }>(
+        loadSql('document-counts.sql'),
+      ),
+      this.postgres.query<{ completed: string; failed: string }>(
+        loadSql('jobs-summary.sql'),
+      ),
+      this.postgres.query<{ used_memory: string | null }>(
+        loadSql('redis-stats-latest.sql'),
+      ),
+    ]);
 
     const total = hits + misses;
     const q = querySummary[0];
     const ing = ingest[0];
+    const j = jobs[0];
+    const memRaw = redisStats[0]?.used_memory;
+    const mem = memRaw == null || memRaw === '' ? NaN : Number(memRaw);
 
     const documents = {
       uploading: 0,
@@ -76,6 +94,13 @@ export class MetricsService {
           ing?.avg_embedding == null ? null : Number(ing.avg_embedding),
       },
       documents,
+      jobs: {
+        completed24h: Number(j?.completed) || 0,
+        failed24h: Number(j?.failed) || 0,
+      },
+      redis: {
+        usedMemoryBytes: Number.isFinite(mem) ? mem : null,
+      },
     };
   }
 

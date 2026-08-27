@@ -16,7 +16,7 @@ export function MetricsSection({
       {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
       {metrics && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <MetricCard
               label="Cache hit rate"
               value={
@@ -44,6 +44,16 @@ export function MetricsSection({
               label="Documents"
               value={String(metrics.documents.ready)}
               hint={`${metrics.documents.failed} failed · ${metrics.documents.uploading + metrics.documents.processing} in flight`}
+            />
+            <MetricCard
+              label="Background jobs"
+              value={String(metrics.jobs.completed24h)}
+              hint={`${metrics.jobs.failed24h} failed`}
+            />
+            <MetricCard
+              label="Redis memory"
+              value={formatBytes(metrics.redis.usedMemoryBytes)}
+              hint="latest snapshot"
             />
           </div>
 
@@ -76,6 +86,13 @@ function MetricCard({
       <p className="text-xs text-gray-500 mt-1">{hint}</p>
     </div>
   );
+}
+
+function formatBytes(bytes: number | null): string {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function LatencyChart({
