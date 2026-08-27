@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"fmt"
 	"log"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -31,6 +32,7 @@ func Connect(url string) *amqp.Connection {
 			log.Printf("[RabbitMQ] waiting for connection: %v", err)
 			waiting = true
 		}
+		time.Sleep(2 * time.Second)
 	}
 }
 

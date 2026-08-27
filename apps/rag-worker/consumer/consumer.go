@@ -49,6 +49,7 @@ func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
 		if err != nil {
 			_ = conn.Close()
 			log.Printf("[Consumer] channel failed (%s): %v", queueName, err)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -56,6 +57,7 @@ func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
 			_ = ch.Close()
 			_ = conn.Close()
 			log.Printf("[Consumer] topology failed (%s): %v", queueName, err)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -64,6 +66,7 @@ func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
 			_ = ch.Close()
 			_ = conn.Close()
 			log.Printf("[Consumer] consume failed (%s): %v", queueName, err)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -75,6 +78,7 @@ func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
 		_ = ch.Close()
 		_ = conn.Close()
 		log.Printf("[Consumer] disconnected queue=%s; reconnecting", queueName)
+		time.Sleep(2 * time.Second)
 	}
 }
 

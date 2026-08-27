@@ -79,6 +79,7 @@ public sealed partial class MessageBroker(
                         waiting = true;
                         LogWaiting(ex);
                     }
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                 }
             }
         }
