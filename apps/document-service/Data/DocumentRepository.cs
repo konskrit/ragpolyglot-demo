@@ -101,6 +101,16 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return rows > 0;
     }
 
+    public async Task<bool> MarkProcessingAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_processing.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+        var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
+        return rows > 0;
+    }
+
     public async Task<bool> MarkReadyAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);

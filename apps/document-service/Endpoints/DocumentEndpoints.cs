@@ -62,6 +62,9 @@ public static class DocumentEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
+        await repo.MarkProcessingAsync(doc.Id, cancellationToken);
+        doc = await repo.GetByIdAsync(doc.Id, cancellationToken) ?? doc;
+
         return Results.Created($"/api/documents/{doc.Id}", doc);
     }
 
