@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DocumentService.Contracts;
 using DocumentService.Sql;
 using Npgsql;
@@ -136,6 +137,22 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         await EnsureOpenAsync(cancellationToken);
         await using var cmd = new NpgsqlCommand(SqlScripts.Load("health/ping.sql"), db);
         await cmd.ExecuteScalarAsync(cancellationToken);
+    }
+
+    public async Task LogSystemAsync(
+        string eventType,
+        object? metadata = null,
+        Guid? documentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("system_logs/insert.sql"), db);
+        cmd.Parameters.AddWithValue("eventType", eventType);
+        cmd.Parameters.AddWithValue("documentId", NpgsqlDbType.Uuid, documentId is null ? DBNull.Value : documentId.Value);
+        var metaParam = cmd.Parameters.Add("metadata", NpgsqlDbType.Jsonb);
+        metaParam.Value = metadata is null ? DBNull.Value : JsonSerializer.Serialize(metadata);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static Document ReadDocument(NpgsqlDataReader reader) => new()

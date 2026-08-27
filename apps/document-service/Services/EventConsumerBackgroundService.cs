@@ -1,3 +1,4 @@
+using System.Text;
 using DocumentService.Contracts;
 using DocumentService.Data;
 
@@ -18,6 +19,7 @@ public sealed partial class EventConsumerBackgroundService(
             await messageBroker.StartConsumingAsync(
                 onProcessed: HandleDocumentProcessedAsync,
                 onFailed: HandleDocumentFailedAsync,
+                onInvalidPayload: LogInvalidAsync,
                 cancellationToken: stoppingToken);
 
             await Task.Delay(Timeout.Infinite, stoppingToken);
@@ -35,6 +37,11 @@ public sealed partial class EventConsumerBackgroundService(
 
     private async Task HandleDocumentProcessedAsync(DocumentProcessedEvent evt)
     {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
@@ -50,6 +57,11 @@ public sealed partial class EventConsumerBackgroundService(
 
     private async Task HandleDocumentFailedAsync(DocumentFailedEvent evt)
     {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
@@ -60,6 +72,29 @@ public sealed partial class EventConsumerBackgroundService(
         else
         {
             LogFailedNotFound(evt.DocumentId);
+        }
+    }
+
+    private async Task LogInvalidAsync(string queue, Exception ex, byte[]? body)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+
+            var preview = body is { Length: > 0 }
+                ? Encoding.UTF8.GetString(body.AsSpan(0, Math.Min(body.Length, 512)))
+                : null;
+
+            await repo.LogSystemAsync(
+                "invalid_event",
+                new { queue, error = ex.Message, preview });
+
+            LogInvalidEvent(queue, ex.Message);
+        }
+        catch (Exception logEx)
+        {
+            logger.LogWarning(logEx, "Failed to persist invalid_event for queue {Queue}", queue);
         }
     }
 
@@ -83,4 +118,7 @@ public sealed partial class EventConsumerBackgroundService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not found for document.failed event")]
     private partial void LogFailedNotFound(Guid documentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Invalid event from {Queue}: {Error}")]
+    private partial void LogInvalidEvent(string queue, string error);
 }

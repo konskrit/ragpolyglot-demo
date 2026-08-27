@@ -130,6 +130,7 @@ public sealed partial class MessageBroker(
     public async Task StartConsumingAsync(
         Func<DocumentProcessedEvent, Task> onProcessed,
         Func<DocumentFailedEvent, Task> onFailed,
+        Func<string, Exception, byte[]?, Task> onInvalidPayload,
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
@@ -163,6 +164,7 @@ public sealed partial class MessageBroker(
                     ?? throw new JsonException("Failed to deserialize document.processed event");
                 await onProcessed(message);
             },
+            onInvalidPayload,
             cancellationToken);
 
         await BindConsumerAsync(
@@ -174,6 +176,7 @@ public sealed partial class MessageBroker(
                     ?? throw new JsonException("Failed to deserialize document.failed event");
                 await onFailed(message);
             },
+            onInvalidPayload,
             cancellationToken);
 
         LogConsuming(ProcessedQueue, FailedQueue);
@@ -203,21 +206,24 @@ public sealed partial class MessageBroker(
         IChannel channel,
         string queueName,
         Func<byte[], Task> handler,
+        Func<string, Exception, byte[]?, Task> onInvalidPayload,
         CancellationToken cancellationToken)
     {
         var consumer = new AsyncEventingBasicConsumer(channel);
 
         consumer.ReceivedAsync += async (_, ea) =>
         {
+            byte[]? body = null;
             try
             {
-                var body = ea.Body.ToArray();
+                body = ea.Body.ToArray();
                 await handler(body);
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: CancellationToken.None);
             }
             catch (Exception ex) when (MessageClassification.IsPoison(ex))
             {
                 LogPoison(ex, queueName);
+                await onInvalidPayload(queueName, ex, body);
                 await channel.BasicNackAsync(
                     ea.DeliveryTag,
                     multiple: false,
@@ -305,24 +311,5 @@ public sealed partial class MessageBroker(
 
         _publishLock.Dispose();
         _initLock.Dispose();
-        GC.SuppressFinalize(this);
     }
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Message broker initialized (exchange: {Exchange})")]
-    private partial void LogInitialized(string exchange);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Waiting for RabbitMQ")]
-    private partial void LogWaiting(Exception ex);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Started consuming {ProcessedQueue} and {FailedQueue}")]
-    private partial void LogConsuming(string processedQueue, string failedQueue);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Dropping poison message from {Queue}")]
-    private partial void LogPoison(Exception ex, string queue);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Transient failure handling message from {Queue}; requeueing")]
-    private partial void LogTransient(Exception ex, string queue);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Published {RoutingKey}")]
-    private partial void LogPublished(string routingKey);
 }
