@@ -4,7 +4,7 @@
 
 Listens on `background.jobs.queue` (`system.events` exchange) for cleanup, log archive/purge, and Redis snapshots. Must not run the RAG pipeline or change document metadata.
 
-Handlers are implemented. Nothing else in this repo publishes jobs, so the service idles until a message is sent (manual or a future scheduler).
+An in-process scheduler publishes: Redis snapshot (1m), stale lock cleanup (5m), log archive (24h), archive purge (7d).
 
 ```bash
 cd apps/event-processor && go run .

@@ -36,7 +36,8 @@ func NewRunner(store *storage.Store, redisClient *redis.Client, logRetentionDays
 
 func (r *Runner) Start(rabbitURL string) {
 	go r.reconnectLoop(rabbitURL)
-	log.Printf("[Jobs] listening on %s (with reconnect)", rmq.JobsQueue)
+	go schedulerLoop(rabbitURL)
+	log.Printf("[Jobs] listening on %s (scheduler enabled)", rmq.JobsQueue)
 }
 
 func (r *Runner) reconnectLoop(rabbitURL string) {
@@ -48,6 +49,7 @@ func (r *Runner) reconnectLoop(rabbitURL string) {
 				log.Printf("[Jobs] waiting for RabbitMQ: %v", err)
 				waiting = true
 			}
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -58,6 +60,7 @@ func (r *Runner) reconnectLoop(rabbitURL string) {
 				log.Printf("[Jobs] waiting for channel: %v", err)
 				waiting = true
 			}
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -68,6 +71,7 @@ func (r *Runner) reconnectLoop(rabbitURL string) {
 				log.Printf("[Jobs] waiting for topology: %v", err)
 				waiting = true
 			}
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -79,6 +83,7 @@ func (r *Runner) reconnectLoop(rabbitURL string) {
 				log.Printf("[Jobs] waiting to consume: %v", err)
 				waiting = true
 			}
+			time.Sleep(2 * time.Second)
 			continue
 		}
 

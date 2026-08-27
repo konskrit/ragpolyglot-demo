@@ -103,7 +103,7 @@ apps/
   api-gateway-e2e/    Integration tests (--profile test + llm-stub)
   document-service/   .NET metadata + events
   rag-worker/         Go RAG pipeline + /api/chat
-  event-processor/    Go job handlers (no in-repo publisher yet)
+  event-processor/    Go job runner + in-process scheduler
   react-frontend/     UI (dashboard, upload, agent chat)
 libs/
   shared/             TS contracts
@@ -113,7 +113,7 @@ tools/
 
 ## Status
 
-**WIP** — upload → vector store → LLM chat with interrupt, dashboard metrics, unit tests, CI integration with a stub LLM. Not production-hardened (no auth, no browser e2e). Event-processor job handlers exist but nothing in this repo publishes jobs yet.
+**WIP** — upload → vector store → LLM chat with interrupt, dashboard metrics, unit tests, CI integration with a stub LLM. Not production-hardened (no auth, no browser e2e). Event-processor runs scheduled background jobs (snapshot, archive, lock cleanup).
 
 ## License
 
