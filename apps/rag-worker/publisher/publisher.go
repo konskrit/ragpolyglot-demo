@@ -21,6 +21,10 @@ func New(ch *amqp.Channel) *Publisher {
 	return &Publisher{ch: ch}
 }
 
+func (p *Publisher) Connected() bool {
+	return p.ch != nil && !p.ch.IsClosed()
+}
+
 func (p *Publisher) PublishProcessed(documentID string, chunkCount int) error {
 	event := models.DocumentProcessedEvent{
 		Type:       rmq.RoutingProcessed,

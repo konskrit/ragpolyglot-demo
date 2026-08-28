@@ -21,6 +21,10 @@ func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 func (s *Store) EnsureSchema(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
 CREATE TABLE IF NOT EXISTS system_logs (

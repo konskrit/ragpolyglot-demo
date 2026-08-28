@@ -72,7 +72,7 @@ func main() {
 	proc := consumer.NewProcessor(store, pub, redisClient, cfg.EmbeddingFallback)
 	consumer.Start(cfg.RabbitMQURL, proc)
 
-	server := api.NewServer(store, cfg.DefaultTopK, cfg.EmbeddingFallback)
+	server := api.NewServer(store, cfg.DefaultTopK, cfg.EmbeddingFallback, pub.Connected)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),

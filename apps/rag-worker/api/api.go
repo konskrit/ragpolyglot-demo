@@ -18,6 +18,7 @@ type Server struct {
 	store         *storage.Store
 	defaultTopK   int
 	allowFallback bool
+	rabbitOK      func() bool
 }
 
 type chatPrep struct {
@@ -27,11 +28,12 @@ type chatPrep struct {
 	chunks []string
 }
 
-func NewServer(store *storage.Store, defaultTopK int, allowFallback bool) *Server {
+func NewServer(store *storage.Store, defaultTopK int, allowFallback bool, rabbitOK func() bool) *Server {
 	return &Server{
 		store:         store,
 		defaultTopK:   defaultTopK,
 		allowFallback: allowFallback,
+		rabbitOK:      rabbitOK,
 	}
 }
 
@@ -44,9 +46,27 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.Ping(r.Context()); err != nil {
+		writeUnhealthy(w, "database")
+		return
+	}
+
+	if s.rabbitOK == nil || !s.rabbitOK() {
+		writeUnhealthy(w, "rabbitmq")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":    "healthy",
+		"timestamp": time.Now().UTC(),
+	})
+}
+
+func writeUnhealthy(w http.ResponseWriter, reason string) {
+	writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+		"status":    "unhealthy",
+		"reason":    reason,
 		"timestamp": time.Now().UTC(),
 	})
 }
