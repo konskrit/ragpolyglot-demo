@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS documents (
     file_path TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('uploading', 'processing', 'ready', 'failed')),
     uploaded_by UUID,
+    error_reason TEXT,
+    retry_count INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

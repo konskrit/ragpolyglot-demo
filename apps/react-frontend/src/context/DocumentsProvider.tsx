@@ -7,8 +7,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { deleteJson, getJson } from '../api/client';
-import { mapApiDocuments, type UiDocument } from '../lib/documents';
+import { deleteJson, getJson, postJson } from '../api/client';
+import {
+  mapApiDocument,
+  mapApiDocuments,
+  type UiDocument,
+} from '../lib/documents';
 import { subscribeDocument, useWebSocketEvent } from '../hooks/useWebSocket';
 import { normalizeDocumentStatus } from '@ragpolyglot-shared';
 
@@ -23,6 +27,7 @@ interface DocumentsContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
+  retry: (id: string) => Promise<void>;
 }
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
@@ -61,6 +66,29 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     setDocuments((prev) => prev.filter((d) => d.id !== id));
   }, []);
 
+  const retry = useCallback(
+    async (id: string) => {
+      try {
+        const updated = await postJson<unknown>(
+          `/api/documents/${encodeURIComponent(id)}/retry`,
+        );
+        const mapped = mapApiDocument(updated);
+        if (!mapped) {
+          throw new Error('Invalid retry response');
+        }
+
+        setDocuments((prev) =>
+          prev.map((doc) => (doc.id === id ? mapped : doc)),
+        );
+        subscribeDocument(id);
+      } catch (e) {
+        void refresh();
+        throw e;
+      }
+    },
+    [refresh],
+  );
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -82,6 +110,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       const normalized = normalizeDocumentStatus(status);
       if (!normalized) return;
 
+      if (normalized === 'failed') {
+        void refresh();
+        return;
+      }
+
       let missing = false;
       setDocuments((prev) => {
         const exists = prev.some((d) => d.id === documentId);
@@ -90,7 +123,9 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           return prev;
         }
         return prev.map((doc) =>
-          doc.id === documentId ? { ...doc, status: normalized } : doc,
+          doc.id === documentId
+            ? { ...doc, status: normalized, errorReason: undefined }
+            : doc,
         );
       });
 
@@ -107,8 +142,9 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       remove,
+      retry,
     }),
-    [documents, loading, error, refresh, remove],
+    [documents, loading, error, refresh, remove, retry],
   );
 
   return (

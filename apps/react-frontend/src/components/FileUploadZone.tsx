@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ApiError, postFormData } from '../api/client';
 import { subscribeDocument } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
-import { StatusBadge } from './StatusBadge';
+import { DocumentRow } from './DocumentRow';
 import type { UploadState } from '@ragpolyglot-shared';
 
 export function FileUploadZone() {
@@ -10,7 +10,6 @@ export function FileUploadZone() {
   const [dragOver, setDragOver] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const successResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -25,7 +24,7 @@ export function FileUploadZone() {
     [],
   );
 
-  const { documents, refresh, remove } = useDocuments();
+  const { documents, refresh, remove, retry } = useDocuments();
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -101,19 +100,6 @@ export function FileUploadZone() {
       clearTimeout(successResetRef.current);
     }
     successResetRef.current = setTimeout(() => setUploadState('idle'), 2500);
-  };
-
-  const onDelete = async (id: string) => {
-    if (deletingId) return;
-    setDeletingId(id);
-    try {
-      await remove(id);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Delete failed';
-      setErrorMessage(message);
-    } finally {
-      setDeletingId(null);
-    }
   };
 
   const isUploading = uploadState === 'uploading';
@@ -215,22 +201,12 @@ export function FileUploadZone() {
           </h2>
           <ul className="space-y-2">
             {documents.map((doc) => (
-              <li
+              <DocumentRow
                 key={doc.id}
-                className="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-3"
-              >
-                <span className="truncate mr-4">{doc.title}</span>
-                <div className="flex items-center gap-3 shrink-0">
-                  <StatusBadge status={doc.status} />
-                  <button
-                    onClick={() => void onDelete(doc.id)}
-                    disabled={deletingId === doc.id}
-                    className="text-xs text-gray-500 hover:text-red-400 disabled:opacity-40"
-                  >
-                    {deletingId === doc.id ? '…' : 'Delete'}
-                  </button>
-                </div>
-              </li>
+                doc={doc}
+                onRemove={remove}
+                onRetry={retry}
+              />
             ))}
           </ul>
         </div>

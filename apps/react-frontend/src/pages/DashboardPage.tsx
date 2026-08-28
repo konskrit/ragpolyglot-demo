@@ -11,7 +11,7 @@ export function DashboardPage() {
     usePolledJson<SystemHealth>('/api/health');
   const { data: metrics, error: metricsError } =
     usePolledJson<MetricsSnapshot>('/api/metrics');
-  const { documents, loading, error, remove } = useDocuments();
+  const { documents, loading, error, remove, retry } = useDocuments();
 
   if (loading && documents.length === 0) {
     return (
@@ -77,6 +77,7 @@ export function DashboardPage() {
         documents={documents}
         listError={error}
         onRemove={remove}
+        onRetry={retry}
       />
     </div>
   );

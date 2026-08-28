@@ -65,7 +65,7 @@ public sealed partial class EventConsumerBackgroundService(
         await using var scope = scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
-        if (await repo.MarkFailedAsync(evt.DocumentId))
+        if (await repo.MarkFailedAsync(evt.DocumentId, evt.ErrorReason))
         {
             LogMarkedFailed(evt.DocumentId, evt.ErrorReason);
         }

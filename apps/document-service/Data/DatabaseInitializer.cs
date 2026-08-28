@@ -13,6 +13,10 @@ public static class DatabaseInitializer
 
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        var migration = SqlScripts.Load("migrations/001_document_retry_columns.sql");
+        await using var migrationCmd = new NpgsqlCommand(migration, connection);
+        await migrationCmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static int GetEmbeddingDimension()

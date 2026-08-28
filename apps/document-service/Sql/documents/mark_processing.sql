@@ -1,3 +1,3 @@
 UPDATE documents
-SET status = 'processing', updated_at = NOW()
+SET status = 'processing', error_reason = NULL, updated_at = NOW()
 WHERE id = @id;

@@ -12,6 +12,7 @@ public static class DocumentEndpoints
         app.MapGet("/api/documents/{id:guid}", GetDocumentById);
         app.MapGet("/api/documents/{id:guid}/chunks", GetDocumentChunks);
         app.MapPost("/api/documents", CreateDocument);
+        app.MapPost("/api/documents/{id:guid}/retry", RetryDocument);
         app.MapDelete("/api/documents/{id:guid}", DeleteDocument);
     }
 
@@ -46,17 +47,10 @@ public static class DocumentEndpoints
         }
 
         var doc = await repo.CreateAsync(dto.Title.Trim(), dto.FilePath.Trim(), cancellationToken);
+        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
 
-        try
+        if (!await PublishUploadedOrMarkFailedAsync(doc.Id, doc.FilePath, repo, messageBroker, logger, cancellationToken))
         {
-            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-            logger.LogError(ex, "Failed to publish document.uploaded for {DocumentId}", doc.Id);
-            await repo.MarkFailedAsync(doc.Id, cancellationToken);
-
             return Results.Problem(
                 detail: "Document was created but the upload event could not be published.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -66,6 +60,33 @@ public static class DocumentEndpoints
         doc = await repo.GetByIdAsync(doc.Id, cancellationToken) ?? doc;
 
         return Results.Created($"/api/documents/{doc.Id}", doc);
+    }
+
+    private static async Task<IResult> RetryDocument(
+        Guid id,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        var doc = await repo.ClaimRetryAsync(id, cancellationToken);
+        if (doc is null)
+        {
+            return await repo.GetByIdAsync(id, cancellationToken) is null
+                ? Results.NotFound(new { error = "Document not found" })
+                : Results.Conflict(new { error = "Only failed documents can be retried." });
+        }
+
+        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
+        if (!await PublishUploadedOrMarkFailedAsync(doc.Id, doc.FilePath, repo, messageBroker, logger, cancellationToken))
+        {
+            return Results.Problem(
+                detail: "Retry could not be queued.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        doc = await repo.CompleteRetryAsync(doc.Id, cancellationToken) ?? doc;
+        return Results.Ok(doc);
     }
 
     private static async Task<IResult> DeleteDocument(
@@ -101,6 +122,27 @@ public static class DocumentEndpoints
             success = true,
             message = "Document deleted successfully"
         });
+    }
+
+    private static async Task<bool> PublishUploadedOrMarkFailedAsync(
+        Guid documentId,
+        string filePath,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await messageBroker.PublishDocumentUploadedAsync(documentId, filePath, cancellationToken);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to publish document.uploaded for {DocumentId}", documentId);
+            await repo.MarkFailedAsync(documentId, "publish_error", cancellationToken);
+            return false;
+        }
     }
 }
 

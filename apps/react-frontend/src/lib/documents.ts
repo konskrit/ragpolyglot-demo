@@ -2,7 +2,10 @@ import type { Document, DocumentStatus } from '@ragpolyglot-shared';
 import { normalizeDocumentStatus } from '@ragpolyglot-shared';
 
 /** Client document row — subset of shared Document (no filePath). */
-export type UiDocument = Pick<Document, 'id' | 'title' | 'status'> & {
+export type UiDocument = Pick<
+  Document,
+  'id' | 'title' | 'status' | 'errorReason'
+> & {
   createdAt?: string;
 };
 
@@ -17,6 +20,7 @@ export function mapApiDocuments(data: unknown): UiDocument[] {
         id: string;
         title: string;
         status?: unknown;
+        errorReason?: string;
         createdAt?: string;
       } =>
         !!item &&
@@ -29,6 +33,12 @@ export function mapApiDocuments(data: unknown): UiDocument[] {
       title: d.title,
       status: (normalizeDocumentStatus(d.status) ??
         'uploading') as DocumentStatus,
+      errorReason:
+        typeof d.errorReason === 'string' ? d.errorReason : undefined,
       createdAt: d.createdAt,
     }));
+}
+
+export function mapApiDocument(data: unknown): UiDocument | null {
+  return mapApiDocuments([data])[0] ?? null;
 }

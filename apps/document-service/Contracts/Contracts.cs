@@ -7,6 +7,8 @@ public record Document
     public string FilePath { get; init; } = string.Empty;
     public DocumentStatus Status { get; init; }
     public Guid? UploadedBy { get; init; }
+    public string? ErrorReason { get; init; }
+    public int RetryCount { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }

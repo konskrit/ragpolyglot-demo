@@ -122,14 +122,47 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return rows > 0;
     }
 
-    public async Task<bool> MarkFailedAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<bool> MarkFailedAsync(Guid id, string? errorReason = null, CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);
 
         await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_failed.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("errorReason", (object?)errorReason ?? DBNull.Value);
         var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
+    }
+
+    public async Task<Document?> ClaimRetryAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/claim_retry.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return ReadDocument(reader);
+    }
+
+    public async Task<Document?> CompleteRetryAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/complete_retry.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return ReadDocument(reader);
     }
 
     public async Task PingAsync(CancellationToken cancellationToken = default)
@@ -162,7 +195,9 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         FilePath = reader.GetString(2),
         Status = Enum.Parse<DocumentStatus>(reader.GetString(3), ignoreCase: true),
         UploadedBy = reader.IsDBNull(4) ? null : reader.GetGuid(4),
-        CreatedAt = reader.GetDateTime(5),
-        UpdatedAt = reader.GetDateTime(6)
+        ErrorReason = reader.IsDBNull(5) ? null : reader.GetString(5),
+        RetryCount = reader.GetInt32(6),
+        CreatedAt = reader.GetDateTime(7),
+        UpdatedAt = reader.GetDateTime(8)
     };
 }

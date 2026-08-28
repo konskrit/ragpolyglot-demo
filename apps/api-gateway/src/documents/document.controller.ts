@@ -80,6 +80,12 @@ export class DocumentController {
     return this.documentService.uploadDocument(file, title);
   }
 
+  @Post(':id/retry')
+  @HttpCode(200)
+  retryDocument(@Param('id') id: string) {
+    return this.documentService.retryDocument(id);
+  }
+
   @Delete(':id')
   @HttpCode(200)
   deleteDocument(@Param('id') id: string) {

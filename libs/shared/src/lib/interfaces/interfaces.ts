@@ -6,6 +6,7 @@ export interface Document {
   /** Internal only — never return to clients from the gateway. */
   filePath?: string;
   status: DocumentStatus;
+  errorReason?: string;
   uploadedBy?: string;
   createdAt: string;
   updatedAt: string;

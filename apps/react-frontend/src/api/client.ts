@@ -78,6 +78,13 @@ export async function postFormData<T>(
   return handleResponse<T>(res);
 }
 
+export async function postJson<T>(path: string): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+  });
+  return handleResponse<T>(res);
+}
+
 export async function deleteJson<T = void>(path: string): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: 'DELETE',
