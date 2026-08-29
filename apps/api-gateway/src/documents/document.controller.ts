@@ -24,8 +24,6 @@ const ALLOWED_EXTENSIONS = new Set([
   '.pdf',
 ]);
 
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-
 const storage = diskStorage({
   destination: Config.uploadsDir,
   filename: (_req, file, cb) => {
@@ -57,7 +55,7 @@ export class DocumentController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage,
-      limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
+      limits: { fileSize: Config.maxUploadBytes, files: 1 },
       fileFilter: (_req, file, cb) => {
         const ext = extname(file.originalname).toLowerCase();
         if (!ALLOWED_EXTENSIONS.has(ext)) {

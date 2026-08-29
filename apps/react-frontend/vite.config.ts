@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { resolve } from 'path';
 
+// Large uploads need a longer proxy timeout than the default 15s API calls.
+const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+
 export default defineConfig({
   root: __dirname,
   envDir: resolve(__dirname, '../..'),
@@ -14,6 +17,7 @@ export default defineConfig({
       '/api': {
         target: process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:3000',
         changeOrigin: true,
+        timeout: UPLOAD_TIMEOUT_MS,
       },
       '/socket.io': {
         target: process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:3000',

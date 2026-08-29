@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '../config';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 
 export class ApiError extends Error {
   constructor(
@@ -71,10 +72,14 @@ export async function postFormData<T>(
   path: string,
   formData: FormData,
 ): Promise<T> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    body: formData,
-  });
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}${path}`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+    UPLOAD_TIMEOUT_MS,
+  );
   return handleResponse<T>(res);
 }
 

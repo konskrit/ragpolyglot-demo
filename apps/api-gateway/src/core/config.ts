@@ -1,8 +1,24 @@
 import { createHash } from 'crypto';
 import { join } from 'path';
 
+const DEFAULT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+function envPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    return fallback;
+  }
+  return Math.floor(n);
+}
+
 export const Config = {
   uploadsDir: process.env.UPLOADS_DIR || join(process.cwd(), 'uploads'),
+
+  maxUploadBytes: envPositiveInt('MAX_UPLOAD_BYTES', DEFAULT_MAX_UPLOAD_BYTES),
 
   documentServiceUrl:
     process.env.DOCUMENT_SERVICE_URL || 'http://localhost:5000',

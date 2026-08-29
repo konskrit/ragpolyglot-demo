@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { AxiosError } from 'axios';
 import { Response } from 'express';
+import { MulterError } from 'multer';
+import { Config } from '../config';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -18,6 +20,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       return this.send(response, exception);
+    }
+
+    if (exception instanceof MulterError) {
+      if (exception.code === 'LIMIT_FILE_SIZE') {
+        const limitMb = Math.round(Config.maxUploadBytes / (1024 * 1024));
+        return this.send(
+          response,
+          new HttpException(`File exceeds the ${limitMb} MB upload limit`, 413),
+        );
+      }
+      return this.send(response, new HttpException(exception.message, 400));
     }
 
     if (this.isAxiosError(exception)) {
