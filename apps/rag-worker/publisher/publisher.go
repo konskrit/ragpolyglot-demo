@@ -35,6 +35,18 @@ func (p *Publisher) PublishProcessed(documentID string, chunkCount int) error {
 	return p.publish(rmq.RoutingProcessed, event)
 }
 
+func (p *Publisher) PublishProgress(documentID, stage string, done, total int) error {
+	event := models.DocumentProgressEvent{
+		Type:       rmq.RoutingProgress,
+		DocumentID: documentID,
+		Stage:      stage,
+		Done:       done,
+		Total:      total,
+		Timestamp:  time.Now().UTC(),
+	}
+	return p.publish(rmq.RoutingProgress, event)
+}
+
 func (p *Publisher) PublishFailed(documentID, errorReason string) error {
 	event := models.DocumentFailedEvent{
 		Type:        rmq.RoutingFailed,

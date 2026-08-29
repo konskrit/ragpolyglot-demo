@@ -15,6 +15,7 @@ public sealed partial class MessageBroker(
     public const string DeletedQueue = "document.deleted.queue";
     public const string ProcessedQueue = "document.processed.queue";
     public const string FailedQueue = "document.failed.queue";
+    public const string ProgressQueue = "document.progress.queue";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -29,6 +30,7 @@ public sealed partial class MessageBroker(
     private IChannel? _publishingChannel;
     private IChannel? _processedChannel;
     private IChannel? _failedChannel;
+    private IChannel? _progressChannel;
     private bool _initialized;
 
     public bool IsConnected => _connection is { IsOpen: true };
@@ -67,6 +69,7 @@ public sealed partial class MessageBroker(
                     await DeclareAndBindQueueAsync(_publishingChannel, DeletedQueue, "document.deleted", cancellationToken);
                     await DeclareAndBindQueueAsync(_publishingChannel, ProcessedQueue, "document.processed", cancellationToken);
                     await DeclareAndBindQueueAsync(_publishingChannel, FailedQueue, "document.failed", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, ProgressQueue, "document.progress", cancellationToken);
 
                     _initialized = true;
                     LogInitialized(ExchangeName);
@@ -130,6 +133,7 @@ public sealed partial class MessageBroker(
     public async Task StartConsumingAsync(
         Func<DocumentProcessedEvent, Task> onProcessed,
         Func<DocumentFailedEvent, Task> onFailed,
+        Func<DocumentProgressEvent, Task> onProgress,
         Func<string, Exception, byte[]?, Task> onInvalidPayload,
         CancellationToken cancellationToken = default)
     {
@@ -152,8 +156,15 @@ public sealed partial class MessageBroker(
             _failedChannel = null;
         }
 
+        if (_progressChannel is not null)
+        {
+            await _progressChannel.DisposeAsync();
+            _progressChannel = null;
+        }
+
         _processedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _failedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
+        _progressChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
         await BindConsumerAsync(
             _processedChannel,
@@ -179,7 +190,19 @@ public sealed partial class MessageBroker(
             onInvalidPayload,
             cancellationToken);
 
-        LogConsuming(ProcessedQueue, FailedQueue);
+        await BindConsumerAsync(
+            _progressChannel,
+            ProgressQueue,
+            async body =>
+            {
+                var message = JsonSerializer.Deserialize<DocumentProgressEvent>(body, JsonOptions)
+                    ?? throw new JsonException("Failed to deserialize document.progress event");
+                await onProgress(message);
+            },
+            onInvalidPayload,
+            cancellationToken);
+
+        LogConsuming(ProcessedQueue, FailedQueue, ProgressQueue);
     }
 
     private static async Task DeclareAndBindQueueAsync(
@@ -297,6 +320,11 @@ public sealed partial class MessageBroker(
         if (_failedChannel is not null)
         {
             await _failedChannel.DisposeAsync();
+        }
+
+        if (_progressChannel is not null)
+        {
+            await _progressChannel.DisposeAsync();
         }
 
         if (_publishingChannel is not null)

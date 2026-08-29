@@ -19,6 +19,7 @@ public sealed partial class EventConsumerBackgroundService(
             await messageBroker.StartConsumingAsync(
                 onProcessed: HandleDocumentProcessedAsync,
                 onFailed: HandleDocumentFailedAsync,
+                onProgress: HandleDocumentProgressAsync,
                 onInvalidPayload: LogInvalidAsync,
                 cancellationToken: stoppingToken);
 
@@ -73,6 +74,18 @@ public sealed partial class EventConsumerBackgroundService(
         {
             LogFailedNotFound(evt.DocumentId);
         }
+    }
+
+    private async Task HandleDocumentProgressAsync(DocumentProgressEvent evt)
+    {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        await repo.UpdateProgressAsync(evt.DocumentId, evt.Stage, evt.Done, evt.Total);
     }
 
     private async Task LogInvalidAsync(string queue, Exception ex, byte[]? body)

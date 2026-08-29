@@ -19,6 +19,9 @@ import { normalizeDocumentStatus } from '@ragpolyglot-shared';
 interface StatusUpdatePayload {
   documentId: string;
   status: string;
+  progressStage?: string;
+  progressDone?: number;
+  progressTotal?: number;
 }
 
 interface DocumentsContextValue {
@@ -106,7 +109,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
   useWebSocketEvent<StatusUpdatePayload>(
     'document:status-update',
-    ({ documentId, status }) => {
+    ({ documentId, status, progressStage, progressDone, progressTotal }) => {
       const normalized = normalizeDocumentStatus(status);
       if (!normalized) return;
 
@@ -122,11 +125,36 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           missing = true;
           return prev;
         }
-        return prev.map((doc) =>
-          doc.id === documentId
-            ? { ...doc, status: normalized, errorReason: undefined }
-            : doc,
-        );
+        return prev.map((doc) => {
+          if (doc.id !== documentId) return doc;
+
+          // Ignore late progress after a terminal status update.
+          if (
+            normalized === 'processing' &&
+            (doc.status === 'ready' || doc.status === 'failed')
+          ) {
+            return doc;
+          }
+
+          if (normalized === 'ready') {
+            return {
+              ...doc,
+              status: 'ready',
+              errorReason: undefined,
+              progressStage: undefined,
+              progressDone: undefined,
+              progressTotal: undefined,
+            };
+          }
+
+          return {
+            ...doc,
+            status: normalized,
+            progressStage,
+            progressDone,
+            progressTotal,
+          };
+        });
       });
 
       if (missing) {

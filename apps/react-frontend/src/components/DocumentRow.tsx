@@ -2,6 +2,15 @@ import { useState } from 'react';
 import { StatusBadge } from './StatusBadge';
 import type { UiDocument } from '../lib/documents';
 
+function formatProgress(doc: UiDocument): string | null {
+  if (doc.status !== 'processing') return null;
+  if (doc.progressStage === 'extracting') return 'Extracting text…';
+  if (doc.progressStage === 'embedding' && (doc.progressTotal ?? 0) > 0) {
+    return `Embedding chunks ${doc.progressDone ?? 0}/${doc.progressTotal}`;
+  }
+  return null;
+}
+
 export function DocumentRow({
   doc,
   onRemove,
@@ -32,6 +41,13 @@ export function DocumentRow({
     }
   };
 
+  const progressLabel = formatProgress(doc);
+  const total = doc.progressTotal ?? 0;
+  const progressPct =
+    doc.progressStage === 'embedding' && total > 0
+      ? Math.min(100, Math.round(((doc.progressDone ?? 0) / total) * 100))
+      : null;
+
   return (
     <li className="flex flex-col bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-1">
       <div className="flex items-center justify-between gap-3">
@@ -46,6 +62,17 @@ export function DocumentRow({
             <p className="text-xs text-red-400/80 mt-0.5 truncate">
               {doc.errorReason.replace(/_/g, ' ')}
             </p>
+          )}
+          {progressLabel && (
+            <p className="text-xs text-gray-400 mt-0.5">{progressLabel}</p>
+          )}
+          {progressPct !== null && (
+            <div className="mt-1.5 h-1 w-full max-w-xs rounded-full bg-gray-800 overflow-hidden">
+              <div
+                className="h-full bg-yellow-500/70 transition-all duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">

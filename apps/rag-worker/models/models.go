@@ -30,6 +30,15 @@ type DocumentFailedEvent struct {
 	Timestamp   time.Time `json:"timestamp"`
 }
 
+type DocumentProgressEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Stage      string    `json:"stage"`
+	Done       int       `json:"done"`
+	Total      int       `json:"total"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
 type DocumentChunk struct {
 	DocumentID string
 	ChunkIndex int

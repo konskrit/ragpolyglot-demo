@@ -9,6 +9,9 @@ public record Document
     public Guid? UploadedBy { get; init; }
     public string? ErrorReason { get; init; }
     public int RetryCount { get; init; }
+    public string? ProgressStage { get; init; }
+    public int? ProgressDone { get; init; }
+    public int? ProgressTotal { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
@@ -52,6 +55,16 @@ public record DocumentFailedEvent
     public string Type => "document.failed";
     public Guid DocumentId { get; init; }
     public string ErrorReason { get; init; } = string.Empty;
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentProgressEvent
+{
+    public string Type => "document.progress";
+    public Guid DocumentId { get; init; }
+    public string Stage { get; init; } = string.Empty;
+    public int Done { get; init; }
+    public int Total { get; init; }
     public DateTime Timestamp { get; init; }
 }
 

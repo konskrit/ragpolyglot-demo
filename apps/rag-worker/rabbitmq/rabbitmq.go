@@ -14,11 +14,13 @@ const (
 	DeletedQueue   = "document.deleted.queue"
 	ProcessedQueue = "document.processed.queue"
 	FailedQueue    = "document.failed.queue"
+	ProgressQueue  = "document.progress.queue"
 
 	RoutingUploaded  = "document.uploaded"
 	RoutingDeleted   = "document.deleted"
 	RoutingProcessed = "document.processed"
 	RoutingFailed    = "document.failed"
+	RoutingProgress  = "document.progress"
 )
 
 func Connect(url string) *amqp.Connection {
@@ -54,6 +56,7 @@ func SetupTopology(ch *amqp.Channel) error {
 		DeletedQueue:   RoutingDeleted,
 		ProcessedQueue: RoutingProcessed,
 		FailedQueue:    RoutingFailed,
+		ProgressQueue:  RoutingProgress,
 	} {
 		if _, err := ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
 			return fmt.Errorf("declare queue %s: %w", queue, err)

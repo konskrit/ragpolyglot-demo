@@ -40,6 +40,9 @@ export class ChatGateway implements OnModuleInit {
         const event = JSON.parse(msg.content.toString()) as {
           type?: string;
           documentId?: string;
+          stage?: string;
+          done?: number;
+          total?: number;
         };
 
         if (!event.documentId) return;
@@ -48,6 +51,12 @@ export class ChatGateway implements OnModuleInit {
           this.emitDocumentStatusUpdate(event.documentId, 'ready');
         } else if (event.type === 'document.failed') {
           this.emitDocumentStatusUpdate(event.documentId, 'failed');
+        } else if (event.type === 'document.progress') {
+          this.emitDocumentStatusUpdate(event.documentId, 'processing', {
+            progressStage: event.stage,
+            progressDone: event.done,
+            progressTotal: event.total,
+          });
         }
       } catch (err) {
         this.logger.error(`Failed to parse RabbitMQ message: ${err}`);
@@ -149,14 +158,25 @@ export class ChatGateway implements OnModuleInit {
     this.logger.log(`Client subscribed to doc:${documentId}`);
   }
 
-  emitDocumentStatusUpdate(documentId: string, status: string): void {
+  emitDocumentStatusUpdate(
+    documentId: string,
+    status: string,
+    progress?: {
+      progressStage?: string;
+      progressDone?: number;
+      progressTotal?: number;
+    },
+  ): void {
     const payload = {
       documentId,
       status,
       timestamp: new Date().toISOString(),
+      ...progress,
     };
 
     this.server.to(`doc:${documentId}`).emit('document:status-update', payload);
-    this.logger.log(`Emitted status "${status}" for doc:${documentId}`);
+    if (status !== 'processing') {
+      this.logger.log(`Emitted status "${status}" for doc:${documentId}`);
+    }
   }
 }

@@ -7,6 +7,9 @@ export interface Document {
   filePath?: string;
   status: DocumentStatus;
   errorReason?: string;
+  progressStage?: string;
+  progressDone?: number;
+  progressTotal?: number;
   uploadedBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -39,6 +42,15 @@ export interface DocumentFailedEvent {
   type: 'document.failed';
   documentId: string;
   errorReason: string;
+  timestamp: string;
+}
+
+export interface DocumentProgressEvent {
+  type: 'document.progress';
+  documentId: string;
+  stage: string;
+  done: number;
+  total: number;
   timestamp: string;
 }
 

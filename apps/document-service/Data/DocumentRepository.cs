@@ -133,6 +133,23 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return rows > 0;
     }
 
+    public async Task UpdateProgressAsync(
+        Guid id,
+        string stage,
+        int done,
+        int total,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/update_progress.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("stage", stage);
+        cmd.Parameters.AddWithValue("done", done);
+        cmd.Parameters.AddWithValue("total", total);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<Document?> ClaimRetryAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);
@@ -197,7 +214,10 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         UploadedBy = reader.IsDBNull(4) ? null : reader.GetGuid(4),
         ErrorReason = reader.IsDBNull(5) ? null : reader.GetString(5),
         RetryCount = reader.GetInt32(6),
-        CreatedAt = reader.GetDateTime(7),
-        UpdatedAt = reader.GetDateTime(8)
+        ProgressStage = reader.IsDBNull(7) ? null : reader.GetString(7),
+        ProgressDone = reader.IsDBNull(8) ? null : reader.GetInt32(8),
+        ProgressTotal = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+        CreatedAt = reader.GetDateTime(10),
+        UpdatedAt = reader.GetDateTime(11)
     };
 }

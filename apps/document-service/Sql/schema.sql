@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS documents (
     uploaded_by UUID,
     error_reason TEXT,
     retry_count INT NOT NULL DEFAULT 0,
+    progress_stage TEXT,
+    progress_done INT,
+    progress_total INT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

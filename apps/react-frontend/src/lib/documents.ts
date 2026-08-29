@@ -4,7 +4,13 @@ import { normalizeDocumentStatus } from '@ragpolyglot-shared';
 /** Client document row — subset of shared Document (no filePath). */
 export type UiDocument = Pick<
   Document,
-  'id' | 'title' | 'status' | 'errorReason'
+  | 'id'
+  | 'title'
+  | 'status'
+  | 'errorReason'
+  | 'progressStage'
+  | 'progressDone'
+  | 'progressTotal'
 > & {
   createdAt?: string;
 };
@@ -21,6 +27,9 @@ export function mapApiDocuments(data: unknown): UiDocument[] {
         title: string;
         status?: unknown;
         errorReason?: string;
+        progressStage?: string;
+        progressDone?: number;
+        progressTotal?: number;
         createdAt?: string;
       } =>
         !!item &&
@@ -35,6 +44,12 @@ export function mapApiDocuments(data: unknown): UiDocument[] {
         'uploading') as DocumentStatus,
       errorReason:
         typeof d.errorReason === 'string' ? d.errorReason : undefined,
+      progressStage:
+        typeof d.progressStage === 'string' ? d.progressStage : undefined,
+      progressDone:
+        typeof d.progressDone === 'number' ? d.progressDone : undefined,
+      progressTotal:
+        typeof d.progressTotal === 'number' ? d.progressTotal : undefined,
       createdAt: d.createdAt,
     }));
 }

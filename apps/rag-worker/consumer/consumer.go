@@ -112,6 +112,8 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		_ = msg.Ack(false)
 	}
 
+	p.publishProgress(event.DocumentID, "extracting", 0, 0)
+
 	chunkingStart := time.Now()
 	text, err := extractor.ExtractFromPath(event.FilePath)
 	if err != nil {
@@ -138,6 +140,8 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 
 	embedStart := time.Now()
 	totalChunks := 0
+	p.publishProgress(event.DocumentID, "embedding", 0, len(textChunks))
+
 	for i := 0; i < len(textChunks); i += embedding.BatchSize {
 		end := min(i+embedding.BatchSize, len(textChunks))
 		batch := textChunks[i:end]
@@ -163,6 +167,7 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 			return
 		}
 		totalChunks += len(chunks)
+		p.publishProgress(event.DocumentID, "embedding", totalChunks, len(textChunks))
 	}
 	embeddingDuration := time.Since(embedStart)
 
@@ -185,6 +190,12 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 
 	_ = msg.Ack(false)
 	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, totalChunks, total)
+}
+
+func (p *Processor) publishProgress(documentID, stage string, done, total int) {
+	if err := p.publisher.PublishProgress(documentID, stage, done, total); err != nil {
+		log.Printf("[Consumer] progress publish failed documentId=%s: %v", documentID, err)
+	}
 }
 
 func (p *Processor) handleDeleted(msg amqp.Delivery) {

@@ -91,6 +91,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         Config.documentEventsExchange,
         'document.failed',
       );
+      await channel.bindQueue(
+        Config.gatewayStatusQueue,
+        Config.documentEventsExchange,
+        'document.progress',
+      );
 
       this.channelModel = model;
       this.channel = channel;

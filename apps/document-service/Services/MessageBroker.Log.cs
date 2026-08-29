@@ -8,8 +8,8 @@ public sealed partial class MessageBroker
     [LoggerMessage(Level = LogLevel.Warning, Message = "Waiting for RabbitMQ")]
     private partial void LogWaiting(Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Started consuming {ProcessedQueue} and {FailedQueue}")]
-    private partial void LogConsuming(string processedQueue, string failedQueue);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Started consuming {ProcessedQueue}, {FailedQueue}, and {ProgressQueue}")]
+    private partial void LogConsuming(string processedQueue, string failedQueue, string progressQueue);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Dropping poison message from {Queue}")]
     private partial void LogPoison(Exception ex, string queue);
