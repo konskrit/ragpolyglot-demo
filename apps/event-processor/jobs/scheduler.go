@@ -14,7 +14,7 @@ import (
 )
 
 func schedulerLoop(rabbitURL string) {
-	var lastSnapshot, lastLocks, lastArchive, lastPurge time.Time
+	var lastSnapshot, lastLocks, lastArchive, lastPurge, lastStale, lastAutoRetry time.Time
 
 	for {
 		conn, err := amqp.Dial(rabbitURL)
@@ -49,6 +49,8 @@ func schedulerLoop(rabbitURL string) {
 			case <-ticker.C:
 				lastSnapshot = publishDue(ch, models.JobSnapshotRedisStats, lastSnapshot, time.Minute)
 				lastLocks = publishDue(ch, models.JobCleanupStaleJobLocks, lastLocks, 5*time.Minute)
+				lastStale = publishDue(ch, models.JobFailStaleProcessing, lastStale, 5*time.Minute)
+				lastAutoRetry = publishDue(ch, models.JobAutoRetryFailed, lastAutoRetry, 5*time.Minute)
 				lastArchive = publishDue(ch, models.JobArchiveOldLogs, lastArchive, 24*time.Hour)
 				lastPurge = publishDue(ch, models.JobPurgeArchivedLogs, lastPurge, 7*24*time.Hour)
 			}

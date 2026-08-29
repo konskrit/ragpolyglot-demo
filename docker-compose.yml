@@ -170,6 +170,7 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       EVENT_PROCESSOR_HTTP_ADDR: ${EVENT_PROCESSOR_HTTP_ADDR:-:8082}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+      DOCUMENT_SERVICE_URL: ${DOCUMENT_SERVICE_URL:-http://document-service:5000}
     ports:
       - '${EVENT_PROCESSOR_PORT:-8082}:8082'
     depends_on:
@@ -178,6 +179,8 @@ services:
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      document-service:
         condition: service_healthy
     healthcheck:
       test:

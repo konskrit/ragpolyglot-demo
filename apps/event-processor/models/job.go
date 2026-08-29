@@ -15,4 +15,6 @@ const (
 	JobArchiveOldLogs         = "archive_old_logs"
 	JobPurgeArchivedLogs      = "purge_archived_logs"
 	JobSnapshotRedisStats     = "snapshot_redis_stats"
+	JobFailStaleProcessing    = "fail_stale_processing"
+	JobAutoRetryFailed        = "auto_retry_failed"
 )

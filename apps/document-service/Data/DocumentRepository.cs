@@ -150,6 +150,39 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<int> FailStaleProcessingAsync(
+        int minutes,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/fail_stale.sql"), db);
+        cmd.Parameters.AddWithValue("minutes", minutes);
+        return await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListAutoRetryCandidatesAsync(
+        int maxRetries,
+        int minAgeMinutes,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/list_auto_retry.sql"), db);
+        cmd.Parameters.AddWithValue("maxRetries", maxRetries);
+        cmd.Parameters.AddWithValue("minAgeMinutes", minAgeMinutes);
+        cmd.Parameters.AddWithValue("limit", limit);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        var ids = new List<Guid>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            ids.Add(reader.GetGuid(0));
+        }
+        return ids;
+    }
+
     public async Task<Document?> ClaimRetryAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);

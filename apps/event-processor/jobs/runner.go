@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 
+	"apps/event-processor/config"
 	"apps/event-processor/models"
 	rmq "apps/event-processor/rabbitmq"
 	"apps/event-processor/storage"
@@ -21,16 +24,20 @@ import (
 var errUnknownJob = errors.New("unknown job type")
 
 type Runner struct {
-	store         *storage.Store
-	redis         *redis.Client
-	logRetentionD int
+	store              *storage.Store
+	redis              *redis.Client
+	logRetentionD      int
+	documentServiceURL string
+	httpClient         *http.Client
 }
 
-func NewRunner(store *storage.Store, redisClient *redis.Client, logRetentionDays int) *Runner {
+func NewRunner(store *storage.Store, redisClient *redis.Client, cfg *config.Config) *Runner {
 	return &Runner{
-		store:         store,
-		redis:         redisClient,
-		logRetentionD: logRetentionDays,
+		store:              store,
+		redis:              redisClient,
+		logRetentionD:      cfg.LogRetentionD,
+		documentServiceURL: cfg.DocumentServiceURL,
+		httpClient:         &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -186,6 +193,10 @@ func (r *Runner) dispatch(ctx context.Context, job models.BackgroundJob) (map[st
 		return r.purgeArchivedLogs(ctx, job.Payload)
 	case models.JobSnapshotRedisStats:
 		return r.snapshotRedisStats(ctx)
+	case models.JobFailStaleProcessing:
+		return r.postDocumentMaintenance(ctx, "/api/documents/maintenance/fail-stale")
+	case models.JobAutoRetryFailed:
+		return r.postDocumentMaintenance(ctx, "/api/documents/maintenance/auto-retry")
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnknownJob, job.Type)
 	}
@@ -297,6 +308,36 @@ func (r *Runner) snapshotRedisStats(ctx context.Context) (map[string]any, error)
 
 	r.store.LogSystem(ctx, "redis.stats", 0, stats)
 	return stats, nil
+}
+
+func (r *Runner) postDocumentMaintenance(ctx context.Context, path string) (map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.documentServiceURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := r.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("document-service %s: %s", res.Status, strings.TrimSpace(string(body)))
+	}
+
+	var payload map[string]any
+	if len(body) == 0 {
+		return map[string]any{}, nil
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return payload, nil
 }
 
 func (r *Runner) acquireLock(ctx context.Context, jobID string) (bool, error) {

@@ -46,7 +46,7 @@ func main() {
 		defer redisClient.Close()
 	}
 
-	runner := jobs.NewRunner(store, redisClient, cfg.LogRetentionD)
+	runner := jobs.NewRunner(store, redisClient, cfg)
 	runner.Start(cfg.RabbitMQURL)
 
 	httpServer := &http.Server{

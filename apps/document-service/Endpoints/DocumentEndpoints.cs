@@ -13,6 +13,8 @@ public static class DocumentEndpoints
         app.MapGet("/api/documents/{id:guid}/chunks", GetDocumentChunks);
         app.MapPost("/api/documents", CreateDocument);
         app.MapPost("/api/documents/{id:guid}/retry", RetryDocument);
+        app.MapPost("/api/documents/maintenance/fail-stale", FailStaleProcessing);
+        app.MapPost("/api/documents/maintenance/auto-retry", AutoRetryFailed);
         app.MapDelete("/api/documents/{id:guid}", DeleteDocument);
     }
 
@@ -87,6 +89,69 @@ public static class DocumentEndpoints
 
         doc = await repo.CompleteRetryAsync(doc.Id, cancellationToken) ?? doc;
         return Results.Ok(doc);
+    }
+
+    private static async Task<IResult> FailStaleProcessing(
+        DocumentRepository repo,
+        int minutes = 60,
+        CancellationToken cancellationToken = default)
+    {
+        if (minutes < 1)
+        {
+            return Results.BadRequest(new { error = "minutes must be >= 1" });
+        }
+
+        var failed = await repo.FailStaleProcessingAsync(minutes, cancellationToken);
+        return Results.Ok(new { failed });
+    }
+
+    private static async Task<IResult> AutoRetryFailed(
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        ILoggerFactory loggerFactory,
+        int maxRetries = 3,
+        int minAgeMinutes = 5,
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxRetries < 1 || minAgeMinutes < 0 || limit < 1)
+        {
+            return Results.BadRequest(new { error = "Invalid auto-retry parameters." });
+        }
+
+        var candidates = await repo.ListAutoRetryCandidatesAsync(
+            maxRetries,
+            minAgeMinutes,
+            limit,
+            cancellationToken);
+
+        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
+        var retried = 0;
+
+        foreach (var id in candidates)
+        {
+            var doc = await repo.ClaimRetryAsync(id, cancellationToken);
+            if (doc is null)
+            {
+                continue;
+            }
+
+            if (!await PublishUploadedOrMarkFailedAsync(
+                    doc.Id,
+                    doc.FilePath,
+                    repo,
+                    messageBroker,
+                    logger,
+                    cancellationToken))
+            {
+                continue;
+            }
+
+            await repo.CompleteRetryAsync(doc.Id, cancellationToken);
+            retried++;
+        }
+
+        return Results.Ok(new { retried });
     }
 
     private static async Task<IResult> DeleteDocument(
