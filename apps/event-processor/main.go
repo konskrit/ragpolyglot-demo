@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -23,15 +24,11 @@ func main() {
 	cfg := config.Load()
 	ctx := context.Background()
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := openPostgres(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("postgres: %v", err)
 	}
 	defer pool.Close()
-
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatalf("postgres ping: %v", err)
-	}
 	log.Println("Connected to PostgreSQL")
 
 	store := storage.New(pool)
@@ -73,4 +70,34 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+}
+
+func openPostgres(parent context.Context, url string) (*pgxpool.Pool, error) {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		pool, err := pgxpool.New(ctx, url)
+		if err != nil {
+			lastErr = err
+		} else if err = pool.Ping(ctx); err != nil {
+			lastErr = err
+			pool.Close()
+		} else {
+			return pool, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			if lastErr == nil {
+				lastErr = ctx.Err()
+			}
+			return nil, fmt.Errorf("postgres unavailable: %w", lastErr)
+		case <-ticker.C:
+		}
+	}
 }

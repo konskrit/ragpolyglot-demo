@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux \
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates poppler-utils \
+RUN apk add --no-cache ca-certificates poppler-utils wget \
     && addgroup -S app && adduser -S -G app app \
     && mkdir -p /uploads && chown app:app /uploads
 
