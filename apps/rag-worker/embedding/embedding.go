@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	maxBatchSize      = 64
+	BatchSize         = 64
 	maxRetries        = 3
 	defaultModel      = "text-embedding-ada-002"
 	defaultDimension  = 1536
@@ -87,8 +87,8 @@ func GenerateAndAttach(textChunks []string, allowFallback bool) ([]models.TextCh
 func generateViaAPI(textChunks []string, apiKey, endpoint string) ([]models.TextChunk, error) {
 	result := make([]models.TextChunk, 0, len(textChunks))
 
-	for i := 0; i < len(textChunks); i += maxBatchSize {
-		end := min(i+maxBatchSize, len(textChunks))
+	for i := 0; i < len(textChunks); i += BatchSize {
+		end := min(i+BatchSize, len(textChunks))
 		batch := textChunks[i:end]
 
 		embeddings, err := callAPI(batch, apiKey, endpoint)

@@ -113,15 +113,9 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 	}
 
 	chunkingStart := time.Now()
-	content, err := extractor.ReadFile(event.FilePath)
+	text, err := extractor.ExtractFromPath(event.FilePath)
 	if err != nil {
 		fail("chunking_error", err)
-		return
-	}
-
-	text := extractor.ExtractText(content, event.FilePath)
-	if text == "" {
-		fail("chunking_error", fmt.Errorf("no text extracted"))
 		return
 	}
 
@@ -130,38 +124,53 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		fail("chunking_error", fmt.Errorf("chunker produced zero chunks"))
 		return
 	}
-	chunkingDuration := time.Since(chunkingStart)
-
-	embedStart := time.Now()
-	embedded, err := embedding.GenerateAndAttach(textChunks, p.allowFallback)
-	if err != nil {
-		fail("embedding_error", err)
+	maxChunks := extractor.MaxChunks()
+	if len(textChunks) > maxChunks {
+		fail("chunking_error", fmt.Errorf("document exceeds %d chunk limit", maxChunks))
 		return
 	}
-	embeddingDuration := time.Since(embedStart)
+	chunkingDuration := time.Since(chunkingStart)
 
-	chunks := make([]models.DocumentChunk, 0, len(embedded))
-	for i, tc := range embedded {
-		chunks = append(chunks, models.DocumentChunk{
-			DocumentID: event.DocumentID,
-			ChunkIndex: i,
-			Content:    tc.Text,
-			Embedding:  tc.Embedding,
-		})
-	}
-
-	storeStart := time.Now()
-	if err := p.store.StoreChunks(ctx, event.DocumentID, chunks); err != nil {
+	if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
 		fail("storage_error", err)
 		return
 	}
-	storageDuration := time.Since(storeStart)
+
+	embedStart := time.Now()
+	totalChunks := 0
+	for i := 0; i < len(textChunks); i += embedding.BatchSize {
+		end := min(i+embedding.BatchSize, len(textChunks))
+		batch := textChunks[i:end]
+
+		embedded, err := embedding.GenerateAndAttach(batch, p.allowFallback)
+		if err != nil {
+			fail("embedding_error", err)
+			return
+		}
+
+		chunks := make([]models.DocumentChunk, len(embedded))
+		for j, tc := range embedded {
+			chunks[j] = models.DocumentChunk{
+				DocumentID: event.DocumentID,
+				ChunkIndex: i + j,
+				Content:    tc.Text,
+				Embedding:  tc.Embedding,
+			}
+		}
+
+		if err := p.store.InsertChunks(ctx, chunks); err != nil {
+			fail("storage_error", err)
+			return
+		}
+		totalChunks += len(chunks)
+	}
+	embeddingDuration := time.Since(embedStart)
 
 	if p.redis != nil {
-		_ = p.redis.Set(ctx, "doc:"+event.DocumentID+":chunks", len(chunks), 24*time.Hour).Err()
+		_ = p.redis.Set(ctx, "doc:"+event.DocumentID+":chunks", totalChunks, 24*time.Hour).Err()
 	}
 
-	if err := p.publisher.PublishProcessed(event.DocumentID, len(chunks)); err != nil {
+	if err := p.publisher.PublishProcessed(event.DocumentID, totalChunks); err != nil {
 		log.Printf("[Consumer] publish document.processed failed: %v", err)
 		_ = msg.Nack(false, true)
 		return
@@ -169,14 +178,13 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 
 	total := time.Since(start)
 	p.store.LogSystem(ctx, "document.processed", event.DocumentID, total, map[string]any{
-		"chunkCount":          len(chunks),
+		"chunkCount":          totalChunks,
 		"chunkingDurationMs":  chunkingDuration.Milliseconds(),
 		"embeddingDurationMs": embeddingDuration.Milliseconds(),
-		"storageDurationMs":   storageDuration.Milliseconds(),
 	})
 
 	_ = msg.Ack(false)
-	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, len(chunks), total)
+	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, totalChunks, total)
 }
 
 func (p *Processor) handleDeleted(msg amqp.Delivery) {

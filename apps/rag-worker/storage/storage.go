@@ -49,16 +49,16 @@ CREATE TABLE IF NOT EXISTS query_logs (
 	return err
 }
 
-func (s *Store) StoreChunks(ctx context.Context, documentID string, chunks []models.DocumentChunk) error {
+func (s *Store) InsertChunks(ctx context.Context, chunks []models.DocumentChunk) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
-
-	if _, err := tx.Exec(ctx, `DELETE FROM document_chunks WHERE document_id = $1`, documentID); err != nil {
-		return fmt.Errorf("clear existing chunks: %w", err)
-	}
 
 	for _, chunk := range chunks {
 		_, err := tx.Exec(ctx, `

@@ -8,39 +8,88 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 )
 
-type TextExtractor func(content []byte, filePath string) string
+const (
+	defaultMaxExtractedChars = 10_000_000
+	defaultMaxChunks         = 5000
+)
 
-var extractors = map[string]TextExtractor{
+type textExtractor func([]byte) string
+
+var extractors = map[string]textExtractor{
 	"txt":      extractPlainText,
 	"md":       extractPlainText,
 	"markdown": extractPlainText,
 	"json":     extractJSON,
-	"pdf":      extractPDF,
 }
 
-func ReadFile(filePath string) ([]byte, error) {
+func MaxChunks() int {
+	return envInt("MAX_CHUNKS", defaultMaxChunks)
+}
+
+func ExtractFromPath(filePath string) (string, error) {
+	fullPath, err := resolveUploadPath(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filePath), "."))
+	if ext == "pdf" {
+		return extractPDF(fullPath)
+	}
+
+	extract := extractors[ext]
+	if extract == nil {
+		log.Printf("[Extractor] Unsupported file type: %s, treating as plain text", ext)
+		extract = extractPlainText
+	}
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("could not read upload %q: %w", filepath.Base(fullPath), err)
+	}
+
+	text := trimToLimit(ensureValidUTF8(extract(content)))
+	if text == "" {
+		return "", fmt.Errorf("no text extracted")
+	}
+	return text, nil
+}
+
+func envInt(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
+func maxExtractedChars() int {
+	return envInt("MAX_EXTRACTED_CHARS", defaultMaxExtractedChars)
+}
+
+func resolveUploadPath(filePath string) (string, error) {
 	name := filepath.Base(filepath.Clean(filePath))
 	if name == "." || name == ".." || name == "" || name == string(filepath.Separator) {
-		return nil, fmt.Errorf("invalid file name")
+		return "", fmt.Errorf("invalid file name")
 	}
 
 	root := uploadRoot()
 	full := filepath.Join(root, name)
 	if !isInsideRoot(root, full) {
-		return nil, fmt.Errorf("could not read upload %q", name)
+		return "", fmt.Errorf("could not read upload %q", name)
 	}
-
-	content, err := os.ReadFile(full)
-	if err != nil {
-		return nil, fmt.Errorf("could not read upload %q: %w", name, err)
-	}
-	return content, nil
+	return full, nil
 }
 
 func uploadRoot() string {
@@ -66,16 +115,13 @@ func isInsideRoot(root, candidate string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func ExtractText(content []byte, filePath string) string {
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filePath), "."))
-
-	extract, ok := extractors[ext]
-	if !ok {
-		log.Printf("[Extractor] Unsupported file type: %s, treating as plain text", ext)
-		extract = extractPlainText
+func trimToLimit(text string) string {
+	limit := maxExtractedChars()
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
 	}
-
-	return ensureValidUTF8(extract(content, filePath))
+	return string(runes[:limit])
 }
 
 func detectAndConvertEncoding(content []byte) string {
@@ -96,11 +142,11 @@ func ensureValidUTF8(s string) string {
 	return strings.ToValidUTF8(s, "")
 }
 
-func extractPlainText(content []byte, _ string) string {
+func extractPlainText(content []byte) string {
 	return detectAndConvertEncoding(content)
 }
 
-func extractJSON(content []byte, _ string) string {
+func extractJSON(content []byte) string {
 	var data map[string]interface{}
 	if err := json.Unmarshal(content, &data); err == nil {
 		return formatJSONAsText(data)
@@ -109,37 +155,22 @@ func extractJSON(content []byte, _ string) string {
 	return detectAndConvertEncoding(content)
 }
 
-func extractPDF(content []byte, _ string) string {
-	tmpFile, err := os.CreateTemp("", "pdf-*.pdf")
-	if err != nil {
-		log.Printf("[Extractor] Failed to create temp file: %v", err)
-		return ""
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.Write(content); err != nil {
-		log.Printf("[Extractor] Failed to write temp file: %v", err)
-		tmpFile.Close()
-		return ""
-	}
-	tmpFile.Close()
-
-	cmd := exec.Command("pdftotext", "-layout", tmpFile.Name(), "-")
+func extractPDF(path string) (string, error) {
+	cmd := exec.Command("pdftotext", "-layout", path, "-")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("[Extractor] pdftotext failed: %v (stderr: %s)", err, stderr.String())
-		return ""
+		return "", fmt.Errorf("pdftotext failed: %w (stderr: %s)", err, stderr.String())
 	}
 
-	text := strings.TrimSpace(stdout.String())
+	text := trimToLimit(strings.TrimSpace(stdout.String()))
 	if text == "" {
 		log.Println("[Extractor] No text extracted from PDF")
+		return "", fmt.Errorf("no text extracted")
 	}
-
-	return text
+	return text, nil
 }
 
 func formatJSONAsText(data map[string]interface{}) string {

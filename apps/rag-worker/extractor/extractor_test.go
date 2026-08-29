@@ -37,29 +37,43 @@ func TestEnsureValidUTF8(t *testing.T) {
 	}
 }
 
-func TestReadFile_RejectsTraversal(t *testing.T) {
+func TestExtractFromPath_RejectsOutsideUploads(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("UPLOADS_DIR", dir)
 
-	secret := filepath.Join(t.TempDir(), "secret.txt")
-	if err := os.WriteFile(secret, []byte("nope"), 0o600); err != nil {
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(outside, []byte("nope"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := ReadFile(secret)
+	_, err := ExtractFromPath(outside)
 	if err == nil {
-		t.Fatal("expected error for path outside uploads root")
+		t.Fatal("expected error when file is not in uploads root")
 	}
+}
 
-	safeName := "doc.txt"
-	if err := os.WriteFile(filepath.Join(dir, safeName), []byte("ok"), 0o600); err != nil {
+func TestExtractFromPath_PlainText(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("UPLOADS_DIR", dir)
+
+	name := "notes.txt"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("hello ingest"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ReadFile("/uploads/../etc/" + safeName)
+
+	got, err := ExtractFromPath("/uploads/" + name)
 	if err != nil {
-		t.Fatalf("expected basename-safe read: %v", err)
+		t.Fatal(err)
 	}
-	if string(got) != "ok" {
+	if got != "hello ingest" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestTrimToLimit(t *testing.T) {
+	t.Setenv("MAX_EXTRACTED_CHARS", "3")
+	got := trimToLimit("hello")
+	if got != "hel" {
 		t.Fatalf("got %q", got)
 	}
 }
