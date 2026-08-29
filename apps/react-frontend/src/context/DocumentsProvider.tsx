@@ -1,31 +1,23 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { deleteJson, getJson, postJson } from '../api/client';
 import {
-  mapApiDocument,
-  mapApiDocuments,
-  type UiDocument,
-} from '../lib/documents';
+  isDocumentProgressStage,
+  isActiveDocumentStatus,
+  normalizeDocumentStatus,
+  type DocumentStatusUpdate,
+  type DocumentSummary,
+} from '@ragpolyglot-shared';
+import { mapApiDocument, mapApiDocuments } from '../lib/documents';
 import { subscribeDocument, useWebSocketEvent } from '../hooks/useWebSocket';
-import { normalizeDocumentStatus } from '@ragpolyglot-shared';
-
-interface StatusUpdatePayload {
-  documentId: string;
-  status: string;
-  progressStage?: string;
-  progressDone?: number;
-  progressTotal?: number;
-}
 
 interface DocumentsContextValue {
-  documents: UiDocument[];
+  documents: DocumentSummary[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -35,14 +27,12 @@ interface DocumentsContextValue {
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
 
-const IN_FLIGHT_STATUSES = new Set(['uploading', 'processing']);
-
 export function DocumentsProvider({ children }: { children: ReactNode }) {
-  const [documents, setDocuments] = useState<UiDocument[]>([]);
+  const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  async function refresh() {
     try {
       setError(null);
       const data = await getJson<unknown>('/api/documents');
@@ -50,7 +40,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       setDocuments(mapped);
 
       for (const doc of mapped) {
-        if (IN_FLIGHT_STATUSES.has(doc.status)) {
+        if (isActiveDocumentStatus(doc.status)) {
           subscribeDocument(doc.id);
         }
       }
@@ -62,52 +52,47 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  const remove = useCallback(async (id: string) => {
+  async function remove(id: string) {
     await deleteJson(`/api/documents/${encodeURIComponent(id)}`);
     setDocuments((prev) => prev.filter((d) => d.id !== id));
-  }, []);
+  }
 
-  const retry = useCallback(
-    async (id: string) => {
-      try {
-        const updated = await postJson<unknown>(
-          `/api/documents/${encodeURIComponent(id)}/retry`,
-        );
-        const mapped = mapApiDocument(updated);
-        if (!mapped) {
-          throw new Error('Invalid retry response');
-        }
-
-        setDocuments((prev) =>
-          prev.map((doc) => (doc.id === id ? mapped : doc)),
-        );
-        subscribeDocument(id);
-      } catch (e) {
-        void refresh();
-        throw e;
+  async function retry(id: string) {
+    try {
+      const updated = await postJson<unknown>(
+        `/api/documents/${encodeURIComponent(id)}/retry`,
+      );
+      const mapped = mapApiDocument(updated);
+      if (!mapped) {
+        throw new Error('Invalid retry response');
       }
-    },
-    [refresh],
-  );
+
+      setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
+      subscribeDocument(id);
+    } catch (e) {
+      await refresh();
+      throw e;
+    }
+  }
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, []);
 
   useEffect(() => {
-    const inFlight = documents.some((d) => IN_FLIGHT_STATUSES.has(d.status));
-    if (!inFlight) return;
+    const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
+    if (!hasActive) return;
 
     const timer = window.setInterval(() => {
       void refresh();
     }, 3000);
 
     return () => window.clearInterval(timer);
-  }, [documents, refresh]);
+  }, [documents]);
 
-  useWebSocketEvent<StatusUpdatePayload>(
+  useWebSocketEvent<DocumentStatusUpdate>(
     'document:status-update',
     ({ documentId, status, progressStage, progressDone, progressTotal }) => {
       const normalized = normalizeDocumentStatus(status);
@@ -128,7 +113,6 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         return prev.map((doc) => {
           if (doc.id !== documentId) return doc;
 
-          // Ignore late progress after a terminal status update.
           if (
             normalized === 'processing' &&
             (doc.status === 'ready' || doc.status === 'failed')
@@ -150,7 +134,9 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           return {
             ...doc,
             status: normalized,
-            progressStage,
+            progressStage: isDocumentProgressStage(progressStage)
+              ? progressStage
+              : undefined,
             progressDone,
             progressTotal,
           };
@@ -163,20 +149,10 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     },
   );
 
-  const value = useMemo<DocumentsContextValue>(
-    () => ({
-      documents,
-      loading,
-      error,
-      refresh,
-      remove,
-      retry,
-    }),
-    [documents, loading, error, refresh, remove, retry],
-  );
-
   return (
-    <DocumentsContext.Provider value={value}>
+    <DocumentsContext.Provider
+      value={{ documents, loading, error, refresh, remove, retry }}
+    >
       {children}
     </DocumentsContext.Provider>
   );

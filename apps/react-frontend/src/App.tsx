@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { DocumentsProvider } from './context/DocumentsProvider';
 import { UploadPage } from './pages/UploadPage';
 import { AgentPage } from './pages/AgentPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 import { DashboardPage } from './pages/DashboardPage';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
         <ErrorBoundary>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/agent" element={<AgentPage />} />
           </Routes>

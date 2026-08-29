@@ -32,6 +32,44 @@ describe('mapApiDocuments', () => {
       { id: '2', title: 'ok', status: 'ready', createdAt: undefined },
     ]);
   });
+
+  it('maps progress fields and ignores invalid stages', () => {
+    expect(
+      mapApiDocuments([
+        {
+          id: '1',
+          title: 'A',
+          status: 'processing',
+          progressStage: 'embedding',
+          progressDone: 2,
+          progressTotal: 5,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: '2',
+          title: 'B',
+          status: 'processing',
+          progressStage: 'chunking',
+        },
+      ]),
+    ).toEqual([
+      {
+        id: '1',
+        title: 'A',
+        status: 'processing',
+        progressStage: 'embedding',
+        progressDone: 2,
+        progressTotal: 5,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: '2',
+        title: 'B',
+        status: 'processing',
+        createdAt: undefined,
+      },
+    ]);
+  });
 });
 
 describe('formatSimilarityPercent', () => {

@@ -3,7 +3,8 @@ import { useDocuments } from '../context/DocumentsProvider';
 import { usePolledJson } from '../hooks/usePolledJson';
 import { HealthSection } from '../components/dashboard/HealthSection';
 import { MetricsSection } from '../components/dashboard/MetricsSection';
-import { DocumentsList } from '../components/dashboard/DocumentsList';
+import { DocumentsList } from '../components/DocumentsList';
+import { PageSpinner } from '../components/PageSpinner';
 import type { MetricsSnapshot, SystemHealth } from '@ragpolyglot-shared';
 
 export function DashboardPage() {
@@ -11,14 +12,10 @@ export function DashboardPage() {
     usePolledJson<SystemHealth>('/api/health');
   const { data: metrics, error: metricsError } =
     usePolledJson<MetricsSnapshot>('/api/metrics');
-  const { documents, loading, error, remove, retry } = useDocuments();
+  const { documents, loading } = useDocuments();
 
   if (loading && documents.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" />
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   return (
@@ -73,12 +70,7 @@ export function DashboardPage() {
         </Link>
       </section>
 
-      <DocumentsList
-        documents={documents}
-        listError={error}
-        onRemove={remove}
-        onRetry={retry}
-      />
+      <DocumentsList limit={5} title="Recent documents" showViewAll />
     </div>
   );
 }

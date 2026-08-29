@@ -1,59 +1,39 @@
-import type { Document, DocumentStatus } from '@ragpolyglot-shared';
-import { normalizeDocumentStatus } from '@ragpolyglot-shared';
+import type { DocumentSummary } from '@ragpolyglot-shared';
+import {
+  isDocumentProgressStage,
+  normalizeDocumentStatus,
+} from '@ragpolyglot-shared';
 
-/** Client document row — subset of shared Document (no filePath). */
-export type UiDocument = Pick<
-  Document,
-  | 'id'
-  | 'title'
-  | 'status'
-  | 'errorReason'
-  | 'progressStage'
-  | 'progressDone'
-  | 'progressTotal'
-> & {
-  createdAt?: string;
-};
+function mapDocumentSummary(item: unknown): DocumentSummary | null {
+  if (!item || typeof item !== 'object') return null;
 
-export function mapApiDocuments(data: unknown): UiDocument[] {
-  if (!Array.isArray(data)) return [];
+  const row = item as Record<string, unknown>;
+  if (typeof row.id !== 'string' || typeof row.title !== 'string') return null;
 
-  return data
-    .filter(
-      (
-        item,
-      ): item is {
-        id: string;
-        title: string;
-        status?: unknown;
-        errorReason?: string;
-        progressStage?: string;
-        progressDone?: number;
-        progressTotal?: number;
-        createdAt?: string;
-      } =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof (item as { id?: unknown }).id === 'string' &&
-        typeof (item as { title?: unknown }).title === 'string',
-    )
-    .map((d) => ({
-      id: d.id,
-      title: d.title,
-      status: (normalizeDocumentStatus(d.status) ??
-        'uploading') as DocumentStatus,
-      errorReason:
-        typeof d.errorReason === 'string' ? d.errorReason : undefined,
-      progressStage:
-        typeof d.progressStage === 'string' ? d.progressStage : undefined,
-      progressDone:
-        typeof d.progressDone === 'number' ? d.progressDone : undefined,
-      progressTotal:
-        typeof d.progressTotal === 'number' ? d.progressTotal : undefined,
-      createdAt: d.createdAt,
-    }));
+  return {
+    id: row.id,
+    title: row.title,
+    status: normalizeDocumentStatus(row.status) ?? 'uploading',
+    errorReason:
+      typeof row.errorReason === 'string' ? row.errorReason : undefined,
+    progressStage: isDocumentProgressStage(row.progressStage)
+      ? row.progressStage
+      : undefined,
+    progressDone:
+      typeof row.progressDone === 'number' ? row.progressDone : undefined,
+    progressTotal:
+      typeof row.progressTotal === 'number' ? row.progressTotal : undefined,
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+  };
 }
 
-export function mapApiDocument(data: unknown): UiDocument | null {
-  return mapApiDocuments([data])[0] ?? null;
+export function mapApiDocuments(data: unknown): DocumentSummary[] {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map(mapDocumentSummary)
+    .filter((doc): doc is DocumentSummary => doc !== null);
+}
+
+export function mapApiDocument(data: unknown): DocumentSummary | null {
+  return mapDocumentSummary(data);
 }

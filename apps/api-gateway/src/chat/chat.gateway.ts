@@ -15,6 +15,12 @@ import {
 import { Config } from '../core/config';
 import { RabbitMQService } from '../core/rabbitmq.service';
 import { RagService } from '../rag/rag.service';
+import {
+  isDocumentProgressStage,
+  type DocumentProgressEvent,
+  type DocumentStatus,
+  type DocumentStatusUpdate,
+} from '@ragpolyglot-shared';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -40,10 +46,7 @@ export class ChatGateway implements OnModuleInit {
         const event = JSON.parse(msg.content.toString()) as {
           type?: string;
           documentId?: string;
-          stage?: string;
-          done?: number;
-          total?: number;
-        };
+        } & Partial<Pick<DocumentProgressEvent, 'stage' | 'done' | 'total'>>;
 
         if (!event.documentId) return;
 
@@ -52,10 +55,11 @@ export class ChatGateway implements OnModuleInit {
         } else if (event.type === 'document.failed') {
           this.emitDocumentStatusUpdate(event.documentId, 'failed');
         } else if (event.type === 'document.progress') {
+          if (!isDocumentProgressStage(event.stage)) return;
           this.emitDocumentStatusUpdate(event.documentId, 'processing', {
             progressStage: event.stage,
-            progressDone: event.done,
-            progressTotal: event.total,
+            progressDone: event.done ?? 0,
+            progressTotal: event.total ?? 0,
           });
         }
       } catch (err) {
@@ -160,14 +164,13 @@ export class ChatGateway implements OnModuleInit {
 
   emitDocumentStatusUpdate(
     documentId: string,
-    status: string,
-    progress?: {
-      progressStage?: string;
-      progressDone?: number;
-      progressTotal?: number;
-    },
+    status: DocumentStatus,
+    progress?: Pick<
+      DocumentStatusUpdate,
+      'progressStage' | 'progressDone' | 'progressTotal'
+    >,
   ): void {
-    const payload = {
+    const payload: DocumentStatusUpdate = {
       documentId,
       status,
       timestamp: new Date().toISOString(),

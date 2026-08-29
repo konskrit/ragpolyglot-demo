@@ -1,39 +1,34 @@
 import { useState } from 'react';
+import {
+  documentEmbeddingProgressPercent,
+  formatDocumentProgressLabel,
+  formatErrorReason,
+  type DocumentSummary,
+} from '@ragpolyglot-shared';
 import { StatusBadge } from './StatusBadge';
-import type { UiDocument } from '../lib/documents';
-
-function formatProgress(doc: UiDocument): string | null {
-  if (doc.status !== 'processing') return null;
-  if (doc.progressStage === 'extracting') return 'Extracting text…';
-  if (doc.progressStage === 'embedding' && (doc.progressTotal ?? 0) > 0) {
-    return `Embedding chunks ${doc.progressDone ?? 0}/${doc.progressTotal}`;
-  }
-  return null;
-}
+import { Button } from './Button';
+import { useDocuments } from '../context/DocumentsProvider';
 
 export function DocumentRow({
   doc,
-  onRemove,
-  onRetry,
   showDate = false,
 }: {
-  doc: UiDocument;
-  onRemove: (id: string) => Promise<void>;
-  onRetry: (id: string) => Promise<void>;
+  doc: DocumentSummary;
   showDate?: boolean;
 }) {
+  const { remove, retry } = useDocuments();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const runAction = async (
-    action: (id: string) => Promise<void>,
+    action: () => Promise<void>,
     fallbackMessage: string,
   ) => {
     if (pending) return;
     setPending(true);
     setActionError(null);
     try {
-      await action(doc.id);
+      await action();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : fallbackMessage);
     } finally {
@@ -41,12 +36,8 @@ export function DocumentRow({
     }
   };
 
-  const progressLabel = formatProgress(doc);
-  const total = doc.progressTotal ?? 0;
-  const progressPct =
-    doc.progressStage === 'embedding' && total > 0
-      ? Math.min(100, Math.round(((doc.progressDone ?? 0) / total) * 100))
-      : null;
+  const progressLabel = formatDocumentProgressLabel(doc);
+  const progressPct = documentEmbeddingProgressPercent(doc);
 
   return (
     <li className="flex flex-col bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-1">
@@ -60,7 +51,7 @@ export function DocumentRow({
           )}
           {doc.status === 'failed' && doc.errorReason && (
             <p className="text-xs text-red-400/80 mt-0.5 truncate">
-              {doc.errorReason.replace(/_/g, ' ')}
+              {formatErrorReason(doc.errorReason)}
             </p>
           )}
           {progressLabel && (
@@ -75,28 +66,34 @@ export function DocumentRow({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <StatusBadge status={doc.status} />
           {doc.status === 'failed' && (
-            <button
-              type="button"
-              onClick={() => void runAction(onRetry, 'Retry failed')}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                void runAction(() => retry(doc.id), 'Retry failed')
+              }
               disabled={pending}
-              className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-40"
               aria-label={`Retry ${doc.title}`}
             >
               {pending ? '…' : 'Retry'}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={() => void runAction(onRemove, 'Delete failed')}
-            disabled={pending}
-            className="text-xs text-gray-500 hover:text-red-400 disabled:opacity-40"
-            aria-label={`Delete ${doc.title}`}
-          >
-            {pending ? '…' : 'Delete'}
-          </button>
+          {(doc.status === 'ready' || doc.status === 'failed') && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() =>
+                void runAction(() => remove(doc.id), 'Delete failed')
+              }
+              disabled={pending}
+              aria-label={`Delete ${doc.title}`}
+            >
+              {pending ? '…' : 'Delete'}
+            </Button>
+          )}
         </div>
       </div>
       {actionError && <p className="text-xs text-red-400">{actionError}</p>}

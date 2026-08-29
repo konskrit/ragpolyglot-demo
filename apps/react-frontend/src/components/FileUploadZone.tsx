@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ApiError, postFormData } from '../api/client';
 import { subscribeDocument } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
-import { DocumentRow } from './DocumentRow';
+import { Button } from './Button';
 import type { UploadState } from '@ragpolyglot-shared';
 
 export function FileUploadZone() {
@@ -24,7 +24,7 @@ export function FileUploadZone() {
     [],
   );
 
-  const { documents, refresh, remove, retry } = useDocuments();
+  const { refresh } = useDocuments();
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -120,13 +120,12 @@ export function FileUploadZone() {
         }`}
       >
         <p className="text-gray-300 mb-4">Drag & drop files here</p>
-        <button
+        <Button
           onClick={() => inputRef.current?.click()}
           disabled={isUploading}
-          className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition text-white font-medium disabled:opacity-40"
         >
           Browse Files
-        </button>
+        </Button>
         <input
           ref={inputRef}
           type="file"
@@ -150,13 +149,16 @@ export function FileUploadZone() {
                   {(f.size / 1024).toFixed(1)} KB
                 </span>
                 {!isUploading && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removeFile(i)}
-                    className="text-gray-500 hover:text-red-400 transition"
                     title="Remove file"
+                    aria-label={`Remove ${f.name}`}
+                    className="min-w-7 px-2"
                   >
                     ✕
-                  </button>
+                  </Button>
                 )}
               </div>
             </li>
@@ -166,13 +168,9 @@ export function FileUploadZone() {
 
       {files.length > 0 && (
         <div className="mt-6 flex justify-end">
-          <button
-            onClick={() => void upload()}
-            disabled={isUploading}
-            className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium"
-          >
+          <Button onClick={() => void upload()} disabled={isUploading}>
             {isUploading ? 'Uploading...' : `Upload (${files.length})`}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -185,30 +183,15 @@ export function FileUploadZone() {
       {errorMessage && (
         <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start justify-between gap-2">
           <span>{errorMessage}</span>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setErrorMessage(null)}
-            className="text-red-400 hover:text-red-300 shrink-0"
+            aria-label="Dismiss error"
+            className="min-w-7 px-2 shrink-0"
           >
             ✕
-          </button>
-        </div>
-      )}
-
-      {documents.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-lg font-medium mb-4 text-gray-300">
-            Your Documents
-          </h2>
-          <ul className="space-y-2">
-            {documents.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
-                onRemove={remove}
-                onRetry={retry}
-              />
-            ))}
-          </ul>
+          </Button>
         </div>
       )}
     </div>

@@ -1,15 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { emitWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
+import { Button, ButtonLink } from './Button';
 import { formatSimilarityPercent } from '../lib/formatSimilarity';
-import type { Message, Source } from '@ragpolyglot-shared';
-
-interface ChatCompletePayload {
-  conversationId: string;
-  sources?: Source[];
-  error?: boolean;
-  interrupted?: boolean;
-}
+import type { ChatCompletePayload, Message, Source } from '@ragpolyglot-shared';
 
 function sourceLabel(source: Source): string {
   if (source.documentTitle?.trim()) return source.documentTitle;
@@ -143,9 +137,10 @@ export function AgentChat() {
         role="status"
       >
         <p className="text-gray-300 mb-2">No documents available yet.</p>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 mb-4">
           Upload at least one document and wait until it is Ready.
         </p>
+        <ButtonLink to="/upload">Upload documents</ButtonLink>
       </div>
     );
   }
@@ -232,22 +227,13 @@ export function AgentChat() {
           className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm outline-none focus:border-indigo-500 disabled:opacity-50"
         />
         {loading ? (
-          <button
-            type="button"
-            onClick={interrupt}
-            className="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 text-white font-medium text-sm"
-          >
+          <Button variant="danger" onClick={interrupt}>
             Stop
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={send}
-            disabled={!input.trim()}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm"
-          >
+          <Button onClick={send} disabled={!input.trim()}>
             Send
-          </button>
+          </Button>
         )}
       </div>
     </div>

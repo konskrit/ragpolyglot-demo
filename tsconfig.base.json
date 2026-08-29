@@ -13,7 +13,7 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "strict": false,
+    "strict": true,
     "paths": {
       "@ragpolyglot-shared": ["./libs/shared/src/index.ts"]
     }

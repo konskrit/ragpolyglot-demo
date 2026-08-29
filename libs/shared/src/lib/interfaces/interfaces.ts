@@ -1,4 +1,8 @@
-import { DocumentStatus, ChatRole } from '../types/types';
+import {
+  ChatRole,
+  DocumentProgressStage,
+  DocumentStatus,
+} from '../types/types';
 
 export interface Document {
   id: string;
@@ -7,12 +11,35 @@ export interface Document {
   filePath?: string;
   status: DocumentStatus;
   errorReason?: string;
-  progressStage?: string;
+  progressStage?: DocumentProgressStage;
   progressDone?: number;
   progressTotal?: number;
   uploadedBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Client-safe document row (no filePath / timestamps required). */
+export type DocumentSummary = Pick<
+  Document,
+  | 'id'
+  | 'title'
+  | 'status'
+  | 'errorReason'
+  | 'progressStage'
+  | 'progressDone'
+  | 'progressTotal'
+> & {
+  createdAt?: string;
+};
+
+export interface DocumentStatusUpdate {
+  documentId: string;
+  status: DocumentStatus;
+  timestamp?: string;
+  progressStage?: DocumentProgressStage;
+  progressDone?: number;
+  progressTotal?: number;
 }
 
 export interface DocumentChunk {
@@ -48,7 +75,7 @@ export interface DocumentFailedEvent {
 export interface DocumentProgressEvent {
   type: 'document.progress';
   documentId: string;
-  stage: string;
+  stage: DocumentProgressStage;
   done: number;
   total: number;
   timestamp: string;
@@ -95,6 +122,14 @@ export interface Message {
   role: ChatRole;
   text: string;
   sources?: Source[];
+}
+
+export interface ChatCompletePayload {
+  conversationId: string;
+  sources?: Source[];
+  error?: boolean;
+  interrupted?: boolean;
+  cacheHit?: boolean;
 }
 
 export interface SystemHealth {

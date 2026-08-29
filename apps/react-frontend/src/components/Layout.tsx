@@ -3,6 +3,7 @@ import { useWebSocketStatus } from '../hooks/useWebSocket';
 
 const nav = [
   { to: '/', label: 'Dashboard' },
+  { to: '/documents', label: 'Documents' },
   { to: '/upload', label: 'Upload' },
   { to: '/agent', label: 'Agent Mode' },
 ] as const;

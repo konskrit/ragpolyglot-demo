@@ -1,5 +1,7 @@
-import { normalizeDocumentStatus } from '@ragpolyglot-shared';
-import type { DocumentStatus } from '@ragpolyglot-shared';
+import {
+  normalizeDocumentStatus,
+  type DocumentStatus,
+} from '@ragpolyglot-shared';
 
 const labels: Record<DocumentStatus, string> = {
   ready: 'Ready',
