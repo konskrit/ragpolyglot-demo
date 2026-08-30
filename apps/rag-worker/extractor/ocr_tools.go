@@ -2,12 +2,15 @@ package extractor
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func tesseractLangs(hint string) string {
@@ -52,20 +55,61 @@ func langsForDetectedScript(script string) (string, error) {
 	}
 }
 
-func runCapture(name string, args ...string) (stdout string, err error) {
-	cmd := exec.Command(name, args...)
+func checkPaused(stop func() bool) error {
+	if stop != nil && stop() {
+		return ErrPaused
+	}
+	return nil
+}
+
+func runCapture(stop func() bool, name string, args ...string) (stdout string, err error) {
+	if err := checkPaused(stop); err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
+
+	if stop != nil {
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			ticker := time.NewTicker(50 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					if stop() {
+						cancel()
+						return
+					}
+				}
+			}
+		}()
+	}
+
 	if err := cmd.Run(); err != nil {
+		if stop != nil && stop() {
+			return "", ErrPaused
+		}
 		return "", fmt.Errorf("%s failed: %w (stderr: %s)", name, err, stderr.String())
 	}
 	return out.String(), nil
 }
 
-func detectScript(imagePath string) (string, error) {
-	out, err := runCapture("tesseract", imagePath, "stdout", "--psm", "0", "-l", "osd")
+func detectScript(imagePath string, stop func() bool) (string, error) {
+	out, err := runCapture(stop, "tesseract", imagePath, "stdout", "--psm", "0", "-l", "osd")
 	if err != nil {
+		if errors.Is(err, ErrPaused) {
+			return "", err
+		}
 		return "", fmt.Errorf("tesseract osd failed: %w", err)
 	}
 	script := parseOsdScript(out)
@@ -75,16 +119,16 @@ func detectScript(imagePath string) (string, error) {
 	return script, nil
 }
 
-func tesseractPage(imagePath, langs string) (string, error) {
-	out, err := runCapture("tesseract", imagePath, "stdout", "-l", langs, "--psm", "6")
+func tesseractPage(imagePath, langs string, stop func() bool) (string, error) {
+	out, err := runCapture(stop, "tesseract", imagePath, "stdout", "-l", langs, "--psm", "6")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
 }
 
-func pdfPageCount(pdfPath string) (int, error) {
-	out, err := runCapture("pdfinfo", pdfPath)
+func pdfPageCount(pdfPath string, stop func() bool) (int, error) {
+	out, err := runCapture(stop, "pdfinfo", pdfPath)
 	if err != nil {
 		return 0, err
 	}
@@ -106,8 +150,9 @@ func pdfPageCount(pdfPath string) (int, error) {
 	return 0, fmt.Errorf("pdfinfo: pages field missing")
 }
 
-func renderPDFPage(pdfPath string, page int, outPrefix string) (string, error) {
-	cmd := exec.Command(
+func renderPDFPage(pdfPath string, page int, outPrefix string, stop func() bool) (string, error) {
+	_, err := runCapture(
+		stop,
 		"pdftoppm",
 		"-png",
 		"-r", "200",
@@ -117,10 +162,11 @@ func renderPDFPage(pdfPath string, page int, outPrefix string) (string, error) {
 		pdfPath,
 		outPrefix,
 	)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("pdftoppm page %d: %w (stderr: %s)", page, err, stderr.String())
+	if err != nil {
+		if errors.Is(err, ErrPaused) {
+			return "", err
+		}
+		return "", fmt.Errorf("pdftoppm page %d: %w", page, err)
 	}
 	path := outPrefix + ".png"
 	if _, err := os.Stat(path); err != nil {
@@ -129,7 +175,7 @@ func renderPDFPage(pdfPath string, page int, outPrefix string) (string, error) {
 	return path, nil
 }
 
-func resolveLangsFromPages(hint string, imagePaths []string) (string, error) {
+func resolveLangsFromPages(hint string, imagePaths []string, stop func() bool) (string, error) {
 	if langs := tesseractLangs(hint); langs != "" {
 		return langs, nil
 	}
@@ -138,8 +184,14 @@ func resolveLangsFromPages(hint string, imagePaths []string) (string, error) {
 	}
 	var lastErr error
 	for _, page := range imagePaths {
-		script, err := detectScript(page)
+		if err := checkPaused(stop); err != nil {
+			return "", err
+		}
+		script, err := detectScript(page, stop)
 		if err != nil {
+			if errors.Is(err, ErrPaused) {
+				return "", err
+			}
 			lastErr = err
 			continue
 		}

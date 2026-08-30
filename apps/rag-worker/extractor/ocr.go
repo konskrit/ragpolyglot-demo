@@ -12,7 +12,7 @@ import (
 
 const (
 	minNativeLetters = 100
-	maxOsdPages      = 3
+	maxOsdPages      = 1
 )
 
 var (
@@ -44,7 +44,8 @@ func hasEnoughText(s string) bool {
 }
 
 func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, resolved string, err error) {
-	total, err := pdfPageCount(pdfPath)
+	stop := state.ShouldPause
+	total, err := pdfPageCount(pdfPath, stop)
 	if err != nil {
 		return "", "", err
 	}
@@ -80,14 +81,20 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 		}
 		osdPaths := make([]string, 0, limit)
 		for page := 1; page <= limit; page++ {
-			img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("osd-%d", page)))
+			img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("osd-%d", page)), stop)
 			if err != nil {
+				if errors.Is(err, ErrPaused) {
+					return b.String(), langs, err
+				}
 				return "", "", err
 			}
 			osdPaths = append(osdPaths, img)
 		}
-		langs, err = resolveLangsFromPages(ocrLang, osdPaths)
+		langs, err = resolveLangsFromPages(ocrLang, osdPaths, stop)
 		if err != nil {
+			if errors.Is(err, ErrPaused) {
+				return b.String(), langs, err
+			}
 			return "", "", err
 		}
 	}
@@ -95,17 +102,24 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 	log.Printf("[Extractor] OCR starting page=%d/%d langs=%s", start, total, langs)
 
 	for page := start; page <= total; page++ {
-		if state.ShouldPause != nil && state.ShouldPause() {
+		if stop != nil && stop() {
 			return b.String(), langs, ErrPaused
 		}
 
-		img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)))
+		log.Printf("[Extractor] OCR page %d/%d", page, total)
+		img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
 		if err != nil {
+			if errors.Is(err, ErrPaused) {
+				return b.String(), langs, err
+			}
 			return "", langs, err
 		}
-		pageText, err := tesseractPage(img, langs)
+		pageText, err := tesseractPage(img, langs, stop)
 		_ = os.Remove(img)
 		if err != nil {
+			if errors.Is(err, ErrPaused) {
+				return b.String(), langs, err
+			}
 			return "", langs, err
 		}
 		if pageText != "" {
@@ -115,9 +129,7 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 			b.WriteString(pageText)
 		}
 
-		if page == 1 || page == total || page%10 == 0 {
-			log.Printf("[Extractor] OCR progress %d/%d", page, total)
-		}
+		log.Printf("[Extractor] OCR progress %d/%d", page, total)
 		if state.OnProgress != nil {
 			if err := state.OnProgress(page, total, b.String(), langs); err != nil {
 				return b.String(), langs, err

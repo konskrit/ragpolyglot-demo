@@ -1,12 +1,11 @@
 package extractor
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -167,8 +166,11 @@ func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 		return extractPDFWithOCR(path, ocrLang, state)
 	}
 
-	native, err := pdftotext(path)
+	native, err := pdftotext(path, state.ShouldPause)
 	if err != nil {
+		if errors.Is(err, ErrPaused) {
+			return "", "", err
+		}
 		log.Printf("[Extractor] pdftotext failed, trying OCR: %v", err)
 		return extractPDFWithOCR(path, ocrLang, state)
 	}
@@ -179,15 +181,12 @@ func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 	return extractPDFWithOCR(path, ocrLang, state)
 }
 
-func pdftotext(path string) (string, error) {
-	cmd := exec.Command("pdftotext", "-layout", path, "-")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("pdftotext failed: %w (stderr: %s)", err, stderr.String())
+func pdftotext(path string, stop func() bool) (string, error) {
+	out, err := runCapture(stop, "pdftotext", "-layout", path, "-")
+	if err != nil {
+		return "", err
 	}
-	return stdout.String(), nil
+	return out, nil
 }
 
 func formatJSONAsText(data map[string]interface{}) string {

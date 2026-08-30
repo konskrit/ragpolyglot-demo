@@ -21,14 +21,16 @@ export function DocumentRow({
   doc: DocumentSummary;
   showDate?: boolean;
 }) {
-  const { remove, retry } = useDocuments();
+  const { remove, retry, pause, resume } = useDocuments();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [ocrLang, setOcrLang] = useState(doc.ocrLang ?? '');
   const [ocrLanguages, setOcrLanguages] = useState<OcrLanguageOption[]>([]);
 
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
-  const canDelete = canRetry || doc.status === 'paused';
+  const canPause = doc.status === 'processing';
+  const canResume = doc.status === 'paused';
+  const canDelete = canRetry || canResume;
   const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
   const showOcrLanguage = canRetry && showOcrLanguageMenu(doc);
 
@@ -132,6 +134,32 @@ export function DocumentRow({
                 </option>
               ))}
             </select>
+          )}
+          {canPause && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                void runAction(() => pause(doc.id), 'Pause failed')
+              }
+              disabled={pending}
+              aria-label={`Pause ${doc.title}`}
+            >
+              {pending ? '…' : 'Pause'}
+            </Button>
+          )}
+          {canResume && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                void runAction(() => resume(doc.id), 'Resume failed')
+              }
+              disabled={pending}
+              aria-label={`Resume ${doc.title}`}
+            >
+              {pending ? '…' : 'Resume'}
+            </Button>
           )}
           {canRetry && (
             <Button

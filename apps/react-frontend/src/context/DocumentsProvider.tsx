@@ -23,6 +23,8 @@ interface DocumentsContextValue {
   refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
   retry: (id: string, ocrLang?: string) => Promise<void>;
+  pause: (id: string) => Promise<void>;
+  resume: (id: string) => Promise<void>;
 }
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
@@ -70,6 +72,33 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         throw new Error('Invalid retry response');
       }
 
+      setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
+      subscribeDocument(id);
+    } catch (e) {
+      await refresh();
+      throw e;
+    }
+  }
+
+  async function pause(id: string) {
+    try {
+      await postJson(`/api/documents/${encodeURIComponent(id)}/pause`);
+      subscribeDocument(id);
+    } catch (e) {
+      await refresh();
+      throw e;
+    }
+  }
+
+  async function resume(id: string) {
+    try {
+      const updated = await postJson<unknown>(
+        `/api/documents/${encodeURIComponent(id)}/resume`,
+      );
+      const mapped = mapApiDocument(updated);
+      if (!mapped) {
+        throw new Error('Invalid resume response');
+      }
       setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
       subscribeDocument(id);
     } catch (e) {
@@ -149,7 +178,16 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
   return (
     <DocumentsContext.Provider
-      value={{ documents, loading, error, refresh, remove, retry }}
+      value={{
+        documents,
+        loading,
+        error,
+        refresh,
+        remove,
+        retry,
+        pause,
+        resume,
+      }}
     >
       {children}
     </DocumentsContext.Provider>
