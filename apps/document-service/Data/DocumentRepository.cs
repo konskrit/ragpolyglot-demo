@@ -226,6 +226,26 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return ids;
     }
 
+    public async Task<Document?> ClaimOcrLangAsync(
+        Guid id,
+        string? ocrLang,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/claim_ocr_lang.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("ocrLang", (object?)ocrLang ?? DBNull.Value);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return ReadDocument(reader);
+    }
+
     public async Task<Document?> ClaimRetryAsync(
         Guid id,
         string? ocrLang,

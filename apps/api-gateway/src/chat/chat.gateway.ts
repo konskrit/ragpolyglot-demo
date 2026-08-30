@@ -192,7 +192,6 @@ export class ChatGateway implements OnModuleInit {
     if (!documentId) return;
 
     client.join(`doc:${documentId}`);
-    this.logger.log(`Client subscribed to doc:${documentId}`);
   }
 
   emitDocumentStatusUpdate(

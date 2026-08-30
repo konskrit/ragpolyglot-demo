@@ -15,6 +15,7 @@ public static class DocumentEndpoints
         app.MapGet("/api/documents/{id:guid}/chunks", GetDocumentChunks);
         app.MapPost("/api/documents", CreateDocument);
         app.MapPost("/api/documents/{id:guid}/retry", RetryDocument);
+        app.MapPost("/api/documents/{id:guid}/ocr-lang", SetOcrLang);
         app.MapPost("/api/documents/{id:guid}/pause", PauseDocument);
         app.MapPost("/api/documents/{id:guid}/resume", ResumeDocument);
         app.MapPost("/api/documents/maintenance/fail-stale", FailStaleProcessing);
@@ -109,6 +110,52 @@ public static class DocumentEndpoints
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        doc = await repo.CompleteRetryAsync(doc.Id, cancellationToken) ?? doc;
+        return Results.Ok(doc);
+    }
+
+    private static async Task<IResult> SetOcrLang(
+        Guid id,
+        DocumentRetryDto? dto,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        if (!TryNormalizeOcrLang(dto?.OcrLang, out var ocrLang))
+        {
+            return Results.BadRequest(new { error = "Invalid OCR language code." });
+        }
+
+        if (string.Equals(existing.ErrorReason, OcrLanguageNeeded, StringComparison.Ordinal)
+            && ocrLang is null)
+        {
+            return Results.BadRequest(new { error = "Choose an OCR language." });
+        }
+
+        var doc = await repo.ClaimOcrLangAsync(id, ocrLang, cancellationToken);
+        if (doc is null)
+        {
+            return Results.Conflict(new
+            {
+                error = "OCR language can only be changed while extracting, paused, or after language detection failed.",
+            });
+        }
+
+        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
+        {
+            return Results.Problem(
+                detail: "OCR language change could not be queued.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 

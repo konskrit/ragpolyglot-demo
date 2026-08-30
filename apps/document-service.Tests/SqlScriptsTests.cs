@@ -15,6 +15,7 @@ public class SqlScriptsTests
     [InlineData("documents/mark_ready.sql")]
     [InlineData("documents/mark_failed.sql")]
     [InlineData("documents/claim_retry.sql")]
+    [InlineData("documents/claim_ocr_lang.sql")]
     [InlineData("documents/complete_retry.sql")]
     [InlineData("migrations/001_document_retry_columns.sql")]
     [InlineData("chunks/list_by_document.sql")]

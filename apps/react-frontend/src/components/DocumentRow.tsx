@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   OCR_LANGUAGE_NEEDED,
+  canChangeOcrLangLive,
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
   formatErrorReason,
@@ -21,7 +22,7 @@ export function DocumentRow({
   doc: DocumentSummary;
   showDate?: boolean;
 }) {
-  const { remove, retry, pause, resume } = useDocuments();
+  const { remove, retry, changeOcrLang, pause, resume } = useDocuments();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [ocrLang, setOcrLang] = useState(doc.ocrLang ?? '');
@@ -30,9 +31,10 @@ export function DocumentRow({
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
   const canPause = doc.status === 'processing';
   const canResume = doc.status === 'paused';
-  const canDelete = canRetry || canResume;
+  const canDelete = canRetry || canResume || canPause;
   const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
-  const showOcrLanguage = canRetry && showOcrLanguageMenu(doc);
+  const showOcrLanguage = showOcrLanguageMenu(doc);
+  const liveOcrLangChange = canChangeOcrLangLive(doc);
 
   useEffect(() => {
     setOcrLang(doc.ocrLang ?? '');
@@ -82,8 +84,18 @@ export function DocumentRow({
   const progressLabel = formatDocumentProgressLabel(doc);
   const progressPct = documentEmbeddingProgressPercent(doc);
   const selectLang = ocrLangSelectValue(ocrLang, ocrLanguages);
+  const appliedLang = ocrLangSelectValue(doc.ocrLang, ocrLanguages);
   const selectedInList =
     !selectLang || ocrLanguages.some((lang) => lang.code === selectLang);
+
+  const onOcrLangChange = (value: string) => {
+    setOcrLang(value);
+    if (!liveOcrLangChange || value === appliedLang) return;
+    void runAction(
+      () => changeOcrLang(doc.id, value || undefined),
+      'OCR language change failed',
+    );
+  };
 
   return (
     <li className="flex flex-col bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-1">
@@ -117,15 +129,17 @@ export function DocumentRow({
           {showOcrLanguage && (
             <select
               value={selectLang}
-              onChange={(e) => setOcrLang(e.target.value)}
-              disabled={pending}
+              onChange={(e) => onOcrLangChange(e.target.value)}
+              disabled={
+                pending || (doc.status === 'processing' && !liveOcrLangChange)
+              }
               aria-label={`OCR language for ${doc.title}`}
               className="max-w-[11rem] rounded-lg border border-gray-700 bg-gray-950 px-2 py-1.5 text-xs text-gray-200"
             >
               <option value="">
                 {needsOcrLanguage ? 'Select language' : 'Automatic'}
               </option>
-              {!selectedInList && (
+              {!selectedInList && selectLang && (
                 <option value={selectLang}>{selectLang}</option>
               )}
               {ocrLanguages.map((lang) => (

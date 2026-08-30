@@ -39,12 +39,46 @@ export const CHAT_ROLES = [
 export const OCR_LANGUAGE_NEEDED = 'ocr_language_needed';
 
 export function showOcrLanguageMenu(
-  doc: Pick<DocumentSummary, 'fileExt' | 'errorReason' | 'ocrLang'>,
+  doc: Partial<
+    Pick<
+      DocumentSummary,
+      'fileExt' | 'errorReason' | 'ocrLang' | 'status' | 'progressStage'
+    >
+  >,
 ): boolean {
   if (doc.errorReason === OCR_LANGUAGE_NEEDED) {
     return true;
   }
-  return doc.fileExt === 'pdf' && Boolean(doc.ocrLang);
+  if (doc.fileExt !== 'pdf') {
+    return false;
+  }
+  if (doc.status === 'processing') {
+    return true;
+  }
+  if (doc.status === 'paused') {
+    return true;
+  }
+  return Boolean(doc.ocrLang);
+}
+
+export function canChangeOcrLangLive(
+  doc: Partial<
+    Pick<
+      DocumentSummary,
+      'status' | 'errorReason' | 'progressStage' | 'fileExt'
+    >
+  >,
+): boolean {
+  if (doc.fileExt !== 'pdf') {
+    return false;
+  }
+  if (doc.status === 'processing' && doc.progressStage === 'extracting') {
+    return true;
+  }
+  if (doc.status === 'paused') {
+    return true;
+  }
+  return doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED;
 }
 
 /** Menu value for stored ocrLang; auto script packs map to Automatic (''). */

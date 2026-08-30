@@ -89,6 +89,12 @@ export class DocumentController {
     return this.documentService.retryDocument(id, body?.ocrLang);
   }
 
+  @Post(':id/ocr-lang')
+  @HttpCode(200)
+  setOcrLang(@Param('id') id: string, @Body() body?: { ocrLang?: string }) {
+    return this.documentService.setOcrLang(id, body?.ocrLang);
+  }
+
   @Post(':id/pause')
   @HttpCode(202)
   pauseDocument(@Param('id') id: string) {

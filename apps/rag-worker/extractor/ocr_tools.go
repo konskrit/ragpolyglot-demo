@@ -79,7 +79,7 @@ func runCapture(stop func() bool, name string, args ...string) (stdout string, e
 		done := make(chan struct{})
 		defer close(done)
 		go func() {
-			ticker := time.NewTicker(50 * time.Millisecond)
+			ticker := time.NewTicker(25 * time.Millisecond)
 			defer ticker.Stop()
 			for {
 				select {

@@ -81,7 +81,7 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 		if total < limit {
 			limit = total
 		}
-		err := state.Pool.Run(workpool.OCRPageMemory(), func() error {
+		err := state.Pool.RunWhile(workpool.OCRPageMemory(), stop, func() error {
 			osdPaths := make([]string, 0, limit)
 			for page := 1; page <= limit; page++ {
 				img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("osd-%d", page)), stop)
@@ -101,8 +101,8 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 			return err
 		})
 		if err != nil {
-			if errors.Is(err, ErrPaused) {
-				return prior, langs, err
+			if errors.Is(err, ErrPaused) || errors.Is(err, workpool.ErrStopped) {
+				return prior, langs, ErrPaused
 			}
 			return "", "", err
 		}
@@ -140,7 +140,7 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 		if stop != nil && stop() {
 			return ErrPaused
 		}
-		return state.Pool.Run(mem, func() error {
+		err := state.Pool.RunWhile(mem, stop, func() error {
 			if stop != nil && stop() {
 				return ErrPaused
 			}
@@ -173,6 +173,10 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 			}
 			return nil
 		})
+		if errors.Is(err, workpool.ErrStopped) {
+			return ErrPaused
+		}
+		return err
 	}
 
 	pages := total - start + 1

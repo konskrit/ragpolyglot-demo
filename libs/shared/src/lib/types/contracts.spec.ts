@@ -11,6 +11,7 @@ import {
   conversationTitleFromQuery,
   isOcrLanguageCode,
   showOcrLanguageMenu,
+  canChangeOcrLangLive,
   ocrLangSelectValue,
   isChatRole,
   parseRagSources,
@@ -50,10 +51,53 @@ describe('shared contracts', () => {
     expect(showOcrLanguageMenu({ errorReason: OCR_LANGUAGE_NEEDED })).toBe(
       true,
     );
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
+        status: 'processing',
+      }),
+    ).toBe(true);
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'extracting',
+      }),
+    ).toBe(true);
+    expect(showOcrLanguageMenu({ fileExt: 'pdf', status: 'paused' })).toBe(
+      true,
+    );
     expect(showOcrLanguageMenu({ fileExt: 'pdf', ocrLang: 'ell' })).toBe(true);
     expect(showOcrLanguageMenu({ fileExt: 'pdf' })).toBe(false);
     expect(showOcrLanguageMenu({ fileExt: 'txt', ocrLang: 'eng' })).toBe(false);
     expect(showOcrLanguageMenu({})).toBe(false);
+  });
+
+  it('allows live OCR language changes only while extracting or paused', () => {
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'extracting',
+      }),
+    ).toBe(true);
+    expect(canChangeOcrLangLive({ fileExt: 'pdf', status: 'paused' })).toBe(
+      true,
+    );
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'failed',
+        errorReason: OCR_LANGUAGE_NEEDED,
+      }),
+    ).toBe(true);
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'embedding',
+      }),
+    ).toBe(false);
   });
 
   it('maps auto OCR packs to Automatic in the language select', () => {

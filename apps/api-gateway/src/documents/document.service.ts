@@ -120,6 +120,23 @@ export class DocumentService {
     return this.toPublicDocument(res.data);
   }
 
+  async setOcrLang(id: string, ocrLang?: string): Promise<Document> {
+    const hint = ocrLang?.trim();
+    if (hint && !isOcrLanguageCode(hint)) {
+      throw new BadRequestException('Invalid OCR language code');
+    }
+
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(
+        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}/ocr-lang`,
+        { ocrLang: hint || null },
+      ),
+    );
+
+    this.logger.log(`Document OCR language change queued: ${id}`);
+    return this.toPublicDocument(res.data);
+  }
+
   async pauseDocument(id: string): Promise<Document> {
     const res = await firstValueFrom(
       this.httpService.post<DocumentRecord>(

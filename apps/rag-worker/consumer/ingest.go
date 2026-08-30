@@ -30,16 +30,26 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		_ = msg.Nack(false, false)
 		return
 	}
-	go p.ingest(msg, event)
+	gen := p.nextIngestGen(event.DocumentID)
+	go p.ingest(msg, event, gen)
 }
 
-func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent) {
+func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent, gen uint64) {
 	ctx := context.Background()
 	start := time.Now()
 	p.setPause(event.DocumentID, false)
 	log.Printf("[Consumer] processing upload documentId=%s", event.DocumentID)
 
+	if p.ackIfStale(msg, event.DocumentID, gen) {
+		return
+	}
+
+	stopIngest := func() bool { return p.shouldStopIngest(event.DocumentID, gen) }
+
 	fail := func(reason string, cause error) {
+		if p.ackIfStale(msg, event.DocumentID, gen) {
+			return
+		}
 		p.failIngest(ctx, msg, event.DocumentID, start, reason, cause)
 	}
 	pause := func() {
@@ -68,6 +78,9 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 			return
 		}
 		if n > 0 {
+			if p.ackIfStale(msg, event.DocumentID, gen) {
+				return
+			}
 			p.completeWithoutIngest(ctx, msg, event.DocumentID, int(n), start)
 			return
 		}
@@ -89,7 +102,7 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		p.publishProgress(event.DocumentID, "embedding", embedDone, 0)
 	} else {
 		state := extractor.OCRState{
-			ShouldPause: func() bool { return p.pauseRequestedFor(event.DocumentID) },
+			ShouldPause: stopIngest,
 			Pool:        p.pool,
 		}
 		if cp != nil && cp.Stage == "ocr" {
@@ -109,6 +122,9 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 
 		p.publishProgress(event.DocumentID, "extracting", 0, 0)
 		state.OnProgress = func(done, total int, textSoFar, langs string) error {
+			if p.isIngestStale(event.DocumentID, gen) {
+				return extractor.ErrPaused
+			}
 			job.Stage = "ocr"
 			job.OcrPageDone = done
 			job.OcrTotal = total
@@ -125,6 +141,9 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		text, langs, extractErr := extractor.ExtractFromPathWithOCR(job.FilePath, job.OcrLangHint, state)
 		if extractErr != nil {
 			if errors.Is(extractErr, extractor.ErrPaused) {
+				if p.ackIfStale(msg, event.DocumentID, gen) {
+					return
+				}
 				job.PartialText = text
 				job.Paused = true
 				if langs != "" {
@@ -148,6 +167,10 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		if langs != "" {
 			job.OcrLangs = langs
 		}
+	}
+
+	if p.ackIfStale(msg, event.DocumentID, gen) {
+		return
 	}
 
 	textChunks := chunker.ChunkText(job.PartialText)
@@ -182,7 +205,10 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	p.publishProgress(event.DocumentID, "embedding", totalChunks, len(textChunks))
 
 	for i := embedDone; i < len(textChunks); i += embedding.BatchSize {
-		if p.pauseRequestedFor(event.DocumentID) {
+		if stopIngest() {
+			if p.ackIfStale(msg, event.DocumentID, gen) {
+				return
+			}
 			job.EmbedDone = totalChunks
 			job.Paused = true
 			if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
@@ -196,16 +222,22 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		end := min(i+embedding.BatchSize, len(textChunks))
 		batch := textChunks[i:end]
 		var embedded []models.TextChunk
-		err := p.pool.Run(workpool.EmbedBatchMemory(), func() error {
-			if p.pauseRequestedFor(event.DocumentID) {
+		err := p.pool.RunWhile(workpool.EmbedBatchMemory(), stopIngest, func() error {
+			if stopIngest() {
 				return extractor.ErrPaused
 			}
 			var err error
 			embedded, err = embedding.GenerateAndAttach(batch, p.allowFallback)
 			return err
 		})
+		if errors.Is(err, workpool.ErrStopped) {
+			err = extractor.ErrPaused
+		}
 		if err != nil {
 			if errors.Is(err, extractor.ErrPaused) {
+				if p.ackIfStale(msg, event.DocumentID, gen) {
+					return
+				}
 				job.EmbedDone = totalChunks
 				job.Paused = true
 				if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
@@ -229,6 +261,10 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 			}
 		}
 
+		if p.ackIfStale(msg, event.DocumentID, gen) {
+			return
+		}
+
 		if err := p.store.InsertChunks(ctx, chunks); err != nil {
 			fail("storage_error", err)
 			return
@@ -242,6 +278,10 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		p.publishProgress(event.DocumentID, "embedding", totalChunks, len(textChunks))
 	}
 	embeddingDuration := time.Since(embedStart)
+
+	if p.ackIfStale(msg, event.DocumentID, gen) {
+		return
+	}
 
 	if p.redis != nil {
 		_ = p.redis.Set(ctx, "doc:"+event.DocumentID+":chunks", totalChunks, 24*time.Hour).Err()
@@ -265,9 +305,21 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, totalChunks, total)
 }
 
+func (p *Processor) ackIfStale(msg amqp.Delivery, documentID string, gen uint64) bool {
+	if !p.isIngestStale(documentID, gen) {
+		return false
+	}
+	_ = msg.Ack(false)
+	return true
+}
+
 func fillCheckpointFromEvent(job *storage.IngestCheckpoint, event models.DocumentUploadedEvent) {
 	if job.FilePath == "" {
 		job.FilePath = event.FilePath
+	}
+	if event.Retry {
+		job.OcrLangHint = event.OcrLang
+		return
 	}
 	if job.OcrLangHint == "" {
 		job.OcrLangHint = event.OcrLang

@@ -1,8 +1,10 @@
 package workpool
 
 import (
+	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestPoolLimitsConcurrency(t *testing.T) {
@@ -44,6 +46,50 @@ func TestPoolLimitsConcurrency(t *testing.T) {
 	if peak.Load() > 2 {
 		t.Fatalf("peak concurrent=%d want <=2", peak.Load())
 	}
+}
+
+func TestRunWhileStopWhileWaiting(t *testing.T) {
+	t.Setenv("WORK_POOL_SLOTS", "1")
+	t.Setenv("WORK_MEMORY_BUDGET_MB", "256")
+	t.Setenv("OCR_PAGE_MEMORY_MB", "64")
+
+	p := New()
+	mem := OCRPageMemory()
+	block := make(chan struct{})
+
+	go func() {
+		_ = p.Run(mem, func() error {
+			<-block
+			return nil
+		})
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	stop := false
+	done := make(chan error, 1)
+	go func() {
+		done <- p.RunWhile(mem, func() bool { return stop }, func() error { return nil })
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("expected to block, got %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	stop = true
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrStopped) {
+			t.Fatalf("got %v want ErrStopped", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for stop")
+	}
+
+	close(block)
 }
 
 func TestOCRPageMemoryOverride(t *testing.T) {

@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -23,6 +24,7 @@ interface DocumentsContextValue {
   refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
   retry: (id: string, ocrLang?: string) => Promise<void>;
+  changeOcrLang: (id: string, ocrLang?: string) => Promise<void>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
 }
@@ -33,6 +35,16 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const subscribedRef = useRef(new Set<string>());
+
+  function subscribeActiveDocuments(docs: DocumentSummary[]) {
+    for (const doc of docs) {
+      if (!isActiveDocumentStatus(doc.status)) continue;
+      if (subscribedRef.current.has(doc.id)) continue;
+      subscribedRef.current.add(doc.id);
+      subscribeDocument(doc.id);
+    }
+  }
 
   async function refresh() {
     try {
@@ -40,12 +52,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       const data = await getJson<unknown>('/api/documents');
       const mapped = mapApiDocuments(data);
       setDocuments(mapped);
-
-      for (const doc of mapped) {
-        if (isActiveDocumentStatus(doc.status)) {
-          subscribeDocument(doc.id);
-        }
-      }
+      subscribeActiveDocuments(mapped);
     } catch (e) {
       const message =
         e instanceof Error ? e.message : 'Failed to load documents';
@@ -58,6 +65,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
   async function remove(id: string) {
     await deleteJson(`/api/documents/${encodeURIComponent(id)}`);
+    subscribedRef.current.delete(id);
     setDocuments((prev) => prev.filter((d) => d.id !== id));
   }
 
@@ -74,6 +82,24 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
       setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
       subscribeDocument(id);
+    } catch (e) {
+      await refresh();
+      throw e;
+    }
+  }
+
+  async function changeOcrLang(id: string, ocrLang?: string) {
+    try {
+      const updated = await postJson<unknown>(
+        `/api/documents/${encodeURIComponent(id)}/ocr-lang`,
+        { ocrLang: ocrLang ?? null },
+      );
+      const mapped = mapApiDocument(updated);
+      if (!mapped) {
+        throw new Error('Invalid OCR language response');
+      }
+      setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
+      subscribeActiveDocuments([mapped]);
     } catch (e) {
       await refresh();
       throw e;
@@ -185,6 +211,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         refresh,
         remove,
         retry,
+        changeOcrLang,
         pause,
         resume,
       }}

@@ -25,6 +25,8 @@ type Processor struct {
 	pool           *workpool.Pool
 	pauseMu        sync.Mutex
 	pauseRequested map[string]struct{}
+	ingestGenMu    sync.Mutex
+	ingestGen      map[string]uint64
 }
 
 func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool, pool *workpool.Pool) *Processor {
@@ -35,6 +37,7 @@ func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *r
 		allowFallback:  allowFallback,
 		pool:           pool,
 		pauseRequested: make(map[string]struct{}),
+		ingestGen:      make(map[string]uint64),
 	}
 }
 
@@ -123,6 +126,23 @@ func (p *Processor) pauseRequestedFor(documentID string) bool {
 	return ok
 }
 
+func (p *Processor) nextIngestGen(documentID string) uint64 {
+	p.ingestGenMu.Lock()
+	defer p.ingestGenMu.Unlock()
+	p.ingestGen[documentID]++
+	return p.ingestGen[documentID]
+}
+
+func (p *Processor) isIngestStale(documentID string, gen uint64) bool {
+	p.ingestGenMu.Lock()
+	defer p.ingestGenMu.Unlock()
+	return p.ingestGen[documentID] != gen
+}
+
+func (p *Processor) shouldStopIngest(documentID string, gen uint64) bool {
+	return p.pauseRequestedFor(documentID) || p.isIngestStale(documentID, gen)
+}
+
 func (p *Processor) handleDeleted(msg amqp.Delivery) {
 	var event models.DocumentDeletedEvent
 	if err := json.Unmarshal(msg.Body, &event); err != nil {
@@ -139,6 +159,7 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 	ctx := context.Background()
 	start := time.Now()
 	p.setPause(event.DocumentID, false)
+	p.nextIngestGen(event.DocumentID)
 
 	deleted, err := p.store.DeleteChunks(ctx, event.DocumentID)
 	if err != nil {
