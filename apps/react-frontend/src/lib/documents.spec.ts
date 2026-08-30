@@ -1,9 +1,9 @@
+import { mapApiDocuments } from './documents';
+import { formatSimilarityPercent } from './formatSimilarity';
+
 jest.mock('../config', () => ({
   API_BASE_URL: '',
 }));
-
-import { mapApiDocuments } from './documents';
-import { formatSimilarityPercent } from './formatSimilarity';
 
 describe('mapApiDocuments', () => {
   it('returns empty array for non-arrays', () => {
