@@ -124,6 +124,19 @@ export interface Message {
   sources?: Source[];
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessage extends Message {
+  id: number;
+  conversationId: string;
+  createdAt: string;
+}
+
 export interface ChatCompletePayload {
   conversationId: string;
   sources?: Source[];

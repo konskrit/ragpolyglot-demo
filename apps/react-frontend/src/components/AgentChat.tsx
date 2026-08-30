@@ -11,11 +11,19 @@ function sourceLabel(source: Source): string {
   return 'Source';
 }
 
-export function AgentChat() {
+export function AgentChat({
+  conversationId,
+  initialMessages,
+  onTurnComplete,
+}: {
+  conversationId: string;
+  initialMessages: Message[];
+  onTurnComplete: () => void;
+}) {
   const { documents } = useDocuments();
   const hasDocuments = documents.some((d) => d.status === 'ready');
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -40,10 +48,10 @@ export function AgentChat() {
 
   useWebSocketEvent<{ token: string; conversationId: string }>(
     'chat:token',
-    ({ token, conversationId }) => {
+    ({ token, conversationId: id }) => {
       if (
         !activeConversationIdRef.current ||
-        conversationId !== activeConversationIdRef.current
+        id !== activeConversationIdRef.current
       ) {
         return;
       }
@@ -57,12 +65,7 @@ export function AgentChat() {
   );
 
   useWebSocketEvent<ChatCompletePayload>('chat:complete', (payload) => {
-    if (
-      !activeConversationIdRef.current ||
-      payload.conversationId !== activeConversationIdRef.current
-    ) {
-      return;
-    }
+    if (payload.conversationId !== conversationId) return;
 
     setLoading(false);
     activeConversationIdRef.current = null;
@@ -87,6 +90,7 @@ export function AgentChat() {
         },
       ];
     });
+    onTurnComplete();
   });
 
   useEffect(() => {
@@ -106,9 +110,9 @@ export function AgentChat() {
   }, [loading]);
 
   const interrupt = () => {
-    const conversationId = activeConversationIdRef.current;
-    if (!conversationId) return;
-    emitWebSocket('chat:interrupt', { conversationId });
+    const id = activeConversationIdRef.current;
+    if (!id) return;
+    emitWebSocket('chat:interrupt', { conversationId: id });
     finishAssistant('(interrupted)');
   };
 
@@ -116,7 +120,6 @@ export function AgentChat() {
     if (!input.trim() || !hasDocuments || loading) return;
 
     const query = input.trim();
-    const conversationId = crypto.randomUUID();
 
     setInput('');
     setLoading(true);
@@ -130,7 +133,7 @@ export function AgentChat() {
     emitWebSocket('chat:query', { query, conversationId });
   };
 
-  if (!hasDocuments) {
+  if (!hasDocuments && messages.length === 0) {
     return (
       <div
         className="flex flex-col h-[600px] bg-gray-900 rounded-xl border border-gray-800 items-center justify-center text-center p-8"
@@ -222,7 +225,11 @@ export function AgentChat() {
               send();
             }
           }}
-          placeholder="Ask about your documents..."
+          placeholder={
+            hasDocuments
+              ? 'Ask about your documents...'
+              : 'Upload a ready document to continue this chat'
+          }
           disabled={!hasDocuments || loading}
           className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm outline-none focus:border-indigo-500 disabled:opacity-50"
         />
@@ -231,7 +238,7 @@ export function AgentChat() {
             Stop
           </Button>
         ) : (
-          <Button onClick={send} disabled={!input.trim()}>
+          <Button onClick={send} disabled={!hasDocuments || !input.trim()}>
             Send
           </Button>
         )}

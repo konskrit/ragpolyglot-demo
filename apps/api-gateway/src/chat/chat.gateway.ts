@@ -15,11 +15,13 @@ import {
 import { Config } from '../core/config';
 import { RabbitMQService } from '../core/rabbitmq.service';
 import { RagService } from '../rag/rag.service';
+import { ConversationService } from './conversation.service';
 import {
   isDocumentProgressStage,
   type DocumentProgressEvent,
   type DocumentStatus,
   type DocumentStatusUpdate,
+  type Source,
 } from '@ragpolyglot-shared';
 import { randomUUID } from 'crypto';
 
@@ -32,10 +34,15 @@ export class ChatGateway implements OnModuleInit {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(ChatGateway.name);
   private readonly abortControllers = new Map<string, AbortController>();
+  private readonly inflightQueries = new Map<
+    string,
+    { conversationId: string; query: string }
+  >();
 
   constructor(
     private readonly rabbitMQ: RabbitMQService,
     private readonly ragService: RagService,
+    private readonly conversations: ConversationService,
   ) {}
 
   onModuleInit(): void {
@@ -84,6 +91,7 @@ export class ChatGateway implements OnModuleInit {
 
     const abortController = new AbortController();
     this.abortControllers.set(interruptKey, abortController);
+    this.inflightQueries.set(interruptKey, { conversationId, query });
 
     try {
       const ragResult = await this.ragService.streamSearch(
@@ -98,6 +106,14 @@ export class ChatGateway implements OnModuleInit {
       if (abortController.signal.aborted) {
         return;
       }
+
+      this.inflightQueries.delete(interruptKey);
+      await this.persistTurn(
+        conversationId,
+        query,
+        ragResult.answer,
+        ragResult.sources,
+      );
 
       client.emit('chat:complete', {
         conversationId,
@@ -116,6 +132,9 @@ export class ChatGateway implements OnModuleInit {
           ? error.message
           : 'Sorry, I encountered an error processing your request.';
 
+      this.inflightQueries.delete(interruptKey);
+      await this.persistTurn(conversationId, query, errorMessage, []);
+
       client.emit('chat:token', { token: errorMessage, conversationId });
       client.emit('chat:complete', {
         conversationId,
@@ -125,19 +144,31 @@ export class ChatGateway implements OnModuleInit {
       });
     } finally {
       this.abortControllers.delete(interruptKey);
+      this.inflightQueries.delete(interruptKey);
     }
   }
 
   @SubscribeMessage('chat:interrupt')
-  handleInterrupt(
+  async handleInterrupt(
     @MessageBody() data: { conversationId?: string },
     @ConnectedSocket() client: Socket,
-  ): void {
+  ): Promise<void> {
     const conversationId = data.conversationId?.trim();
     if (!conversationId) return;
 
     const interruptKey = `${client.id}:${conversationId}`;
     this.abortControllers.get(interruptKey)?.abort();
+
+    const inflight = this.inflightQueries.get(interruptKey);
+    if (!inflight) return;
+    this.inflightQueries.delete(interruptKey);
+
+    await this.persistTurn(
+      inflight.conversationId,
+      inflight.query,
+      '(interrupted)',
+      [],
+    );
 
     client.emit('chat:complete', {
       conversationId,
@@ -180,6 +211,26 @@ export class ChatGateway implements OnModuleInit {
     this.server.to(`doc:${documentId}`).emit('document:status-update', payload);
     if (status !== 'processing') {
       this.logger.log(`Emitted status "${status}" for doc:${documentId}`);
+    }
+  }
+
+  private async persistTurn(
+    conversationId: string,
+    query: string,
+    answer: string,
+    sources: Source[],
+  ): Promise<void> {
+    try {
+      await this.conversations.persistTurn(
+        conversationId,
+        query,
+        answer,
+        sources,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to persist chat turn: ${(err as Error).message}`,
+      );
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Pool } from 'pg';
 import { Config } from './config';
+import { loadSql } from './load-sql';
 
 @Injectable()
 export class PostgresService implements OnModuleDestroy {
@@ -24,13 +25,12 @@ export class PostgresService implements OnModuleDestroy {
   async connect(): Promise<void> {
     try {
       await this.pool.query('SELECT 1');
+      await this.pool.query(loadSql('conversations-schema.sql'));
       this.ready = true;
       this.logger.log('Connected to PostgreSQL');
     } catch (err) {
       this.ready = false;
-      this.logger.warn(
-        `Postgres unavailable for metrics: ${(err as Error).message}`,
-      );
+      this.logger.warn(`Postgres unavailable: ${(err as Error).message}`);
     }
   }
 
@@ -49,6 +49,38 @@ export class PostgresService implements OnModuleDestroy {
     } catch (err) {
       this.logger.warn(`Postgres query failed: ${(err as Error).message}`);
       return [];
+    }
+  }
+
+  async exec<T extends Record<string, unknown>>(
+    text: string,
+    params?: unknown[],
+  ): Promise<T[]> {
+    if (!this.ready) {
+      throw new Error('Postgres is unavailable');
+    }
+    const res = await this.pool.query(text, params);
+    return res.rows as T[];
+  }
+
+  async runInTransaction(
+    statements: Array<{ text: string; params?: unknown[] }>,
+  ): Promise<void> {
+    if (!this.ready) {
+      throw new Error('Postgres is unavailable');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const statement of statements) {
+        await client.query(statement.text, statement.params);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
     }
   }
 

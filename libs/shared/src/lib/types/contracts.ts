@@ -1,4 +1,4 @@
-import type { DocumentSummary } from '../interfaces/interfaces';
+import type { DocumentSummary, Source } from '../interfaces/interfaces';
 import type {
   DocumentProgressStage,
   DocumentStatus,
@@ -34,6 +34,43 @@ export const CHAT_ROLES = [
   'user',
   'assistant',
 ] as const satisfies readonly ChatRole[];
+
+export function isChatRole(value: unknown): value is ChatRole {
+  return (
+    typeof value === 'string' &&
+    (CHAT_ROLES as readonly string[]).includes(value)
+  );
+}
+
+export function parseRagSources(value: unknown): Source[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const sources: Source[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    if (
+      typeof row.documentId !== 'string' ||
+      typeof row.documentTitle !== 'string' ||
+      typeof row.chunkContent !== 'string' ||
+      typeof row.similarity !== 'number'
+    ) {
+      continue;
+    }
+    sources.push({
+      documentId: row.documentId,
+      documentTitle: row.documentTitle,
+      chunkContent: row.chunkContent,
+      similarity: row.similarity,
+    });
+  }
+  return sources.length > 0 ? sources : undefined;
+}
+
+export function conversationTitleFromQuery(query: string): string {
+  const title = query.replace(/\s+/g, ' ').trim();
+  if (!title) return 'New chat';
+  return title.length <= 60 ? title : `${title.slice(0, 57)}…`;
+}
 
 export function isDocumentStatus(value: unknown): value is DocumentStatus {
   return (

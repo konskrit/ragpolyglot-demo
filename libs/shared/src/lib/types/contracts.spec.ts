@@ -7,6 +7,9 @@ import {
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
   formatErrorReason,
+  conversationTitleFromQuery,
+  isChatRole,
+  parseRagSources,
   isDocumentProgressStage,
   isDocumentStatus,
   isActiveDocumentStatus,
@@ -26,6 +29,38 @@ describe('shared contracts', () => {
   it('exposes upload and chat role unions', () => {
     expect(UPLOAD_STATES).toContain('success');
     expect(CHAT_ROLES).toEqual(['user', 'assistant']);
+    expect(isChatRole('user')).toBe(true);
+    expect(isChatRole('system')).toBe(false);
+  });
+
+  it('titles conversations from the first user query', () => {
+    expect(conversationTitleFromQuery('  What is RAG?  ')).toBe('What is RAG?');
+    expect(conversationTitleFromQuery('a'.repeat(61))).toBe(
+      `${'a'.repeat(57)}…`,
+    );
+    expect(conversationTitleFromQuery('   ')).toBe('New chat');
+  });
+
+  it('parses RAG sources and drops malformed hits', () => {
+    expect(parseRagSources(null)).toBeUndefined();
+    expect(
+      parseRagSources([
+        {
+          documentId: 'd1',
+          documentTitle: 'Doc',
+          chunkContent: 'hello',
+          similarity: 0.9,
+        },
+        { documentId: 'bad' },
+      ]),
+    ).toEqual([
+      {
+        documentId: 'd1',
+        documentTitle: 'Doc',
+        chunkContent: 'hello',
+        similarity: 0.9,
+      },
+    ]);
   });
 
   it('type-guards exact camelCase statuses', () => {
