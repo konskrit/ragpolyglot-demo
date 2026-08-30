@@ -46,7 +46,7 @@ func TestExtractFromPath_RejectsOutsideUploads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := ExtractFromPath(outside)
+	_, err := ExtractFromPath(outside, "")
 	if err == nil {
 		t.Fatal("expected error when file is not in uploads root")
 	}
@@ -61,7 +61,7 @@ func TestExtractFromPath_PlainText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := ExtractFromPath("/uploads/" + name)
+	got, err := ExtractFromPath("/uploads/"+name, "")
 	if err != nil {
 		t.Fatal(err)
 	}

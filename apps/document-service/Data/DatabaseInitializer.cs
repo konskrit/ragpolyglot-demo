@@ -21,6 +21,10 @@ public static class DatabaseInitializer
         var progressMigration = SqlScripts.Load("migrations/002_document_progress_columns.sql");
         await using var progressMigrationCmd = new NpgsqlCommand(progressMigration, connection);
         await progressMigrationCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        var ocrLangMigration = SqlScripts.Load("migrations/003_document_ocr_lang.sql");
+        await using var ocrLangMigrationCmd = new NpgsqlCommand(ocrLangMigration, connection);
+        await ocrLangMigrationCmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static int GetEmbeddingDimension()

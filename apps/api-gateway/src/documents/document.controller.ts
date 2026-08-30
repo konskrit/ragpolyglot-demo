@@ -41,6 +41,11 @@ export class DocumentController {
     return this.documentService.getAllDocuments();
   }
 
+  @Get('ocr-languages')
+  getOcrLanguages() {
+    return this.documentService.getOcrLanguages();
+  }
+
   @Get(':id')
   getDocument(@Param('id') id: string) {
     return this.documentService.getDocumentById(id);
@@ -80,8 +85,8 @@ export class DocumentController {
 
   @Post(':id/retry')
   @HttpCode(200)
-  retryDocument(@Param('id') id: string) {
-    return this.documentService.retryDocument(id);
+  retryDocument(@Param('id') id: string, @Body() body?: { ocrLang?: string }) {
+    return this.documentService.retryDocument(id, body?.ocrLang);
   }
 
   @Delete(':id')

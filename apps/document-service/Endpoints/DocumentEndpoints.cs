@@ -6,6 +6,8 @@ namespace DocumentService.Endpoints;
 
 public static class DocumentEndpoints
 {
+    private const string OcrLanguageNeeded = "ocr_language_needed";
+
     public static void MapDocumentEndpoints(this WebApplication app)
     {
         app.MapGet("/api/documents", ListDocuments);
@@ -51,7 +53,7 @@ public static class DocumentEndpoints
         var doc = await repo.CreateAsync(dto.Title.Trim(), dto.FilePath.Trim(), cancellationToken);
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
 
-        if (!await PublishUploadedOrMarkFailedAsync(doc.Id, doc.FilePath, repo, messageBroker, logger, cancellationToken))
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
                 detail: "Document was created but the upload event could not be published.",
@@ -66,21 +68,42 @@ public static class DocumentEndpoints
 
     private static async Task<IResult> RetryDocument(
         Guid id,
+        DocumentRetryDto? dto,
         DocumentRepository repo,
         MessageBroker messageBroker,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        var doc = await repo.ClaimRetryAsync(id, cancellationToken);
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        if (existing.Status is not DocumentStatus.Failed and not DocumentStatus.Ready)
+        {
+            return Results.Conflict(new { error = "Only failed or ready documents can be retried." });
+        }
+
+        if (!TryNormalizeOcrLang(dto?.OcrLang, out var ocrLang))
+        {
+            return Results.BadRequest(new { error = "Invalid OCR language code." });
+        }
+
+        if (string.Equals(existing.ErrorReason, OcrLanguageNeeded, StringComparison.Ordinal)
+            && ocrLang is null)
+        {
+            return Results.BadRequest(new { error = "Choose an OCR language to retry." });
+        }
+
+        var doc = await repo.ClaimRetryAsync(id, ocrLang, updateOcrLang: true, cancellationToken);
         if (doc is null)
         {
-            return await repo.GetByIdAsync(id, cancellationToken) is null
-                ? Results.NotFound(new { error = "Document not found" })
-                : Results.Conflict(new { error = "Only failed documents can be retried." });
+            return Results.Conflict(new { error = "Only failed or ready documents can be retried." });
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc.Id, doc.FilePath, repo, messageBroker, logger, cancellationToken))
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -130,15 +153,14 @@ public static class DocumentEndpoints
 
         foreach (var id in candidates)
         {
-            var doc = await repo.ClaimRetryAsync(id, cancellationToken);
+            var doc = await repo.ClaimRetryAsync(id, ocrLang: null, updateOcrLang: false, cancellationToken);
             if (doc is null)
             {
                 continue;
             }
 
             if (!await PublishUploadedOrMarkFailedAsync(
-                    doc.Id,
-                    doc.FilePath,
+                    doc,
                     repo,
                     messageBroker,
                     logger,
@@ -190,8 +212,7 @@ public static class DocumentEndpoints
     }
 
     private static async Task<bool> PublishUploadedOrMarkFailedAsync(
-        Guid documentId,
-        string filePath,
+        Document doc,
         DocumentRepository repo,
         MessageBroker messageBroker,
         ILogger logger,
@@ -199,16 +220,53 @@ public static class DocumentEndpoints
     {
         try
         {
-            await messageBroker.PublishDocumentUploadedAsync(documentId, filePath, cancellationToken);
+            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang, cancellationToken);
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to publish document.uploaded for {DocumentId}", documentId);
-            await repo.MarkFailedAsync(documentId, "publish_error", cancellationToken);
+            logger.LogError(ex, "Failed to publish document.uploaded for {DocumentId}", doc.Id);
+            await repo.MarkFailedAsync(doc.Id, "publish_error", cancellationToken);
             return false;
         }
+    }
+
+    private static bool TryNormalizeOcrLang(string? ocrLang, out string? normalized)
+    {
+        normalized = null;
+        if (string.IsNullOrWhiteSpace(ocrLang))
+        {
+            return true;
+        }
+
+        var value = ocrLang.Trim();
+        if (value is "ancient_greek" or "modern_greek" or "english")
+        {
+            normalized = value;
+            return true;
+        }
+
+        if (value.Length is < 2 or > 32)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            var ok = c is >= 'a' and <= 'z'
+                || (i > 0 && (c is >= '0' and <= '9' or '_' or '+'));
+            if (!ok)
+            {
+                return false;
+            }
+        }
+
+        normalized = value;
+        return true;
     }
 }
 
 public record DocumentCreateDto(string Title, string FilePath);
+
+public record DocumentRetryDto(string? OcrLang = null);

@@ -33,7 +33,7 @@ func MaxChunks() int {
 	return envInt("MAX_CHUNKS", defaultMaxChunks)
 }
 
-func ExtractFromPath(filePath string) (string, error) {
+func ExtractFromPath(filePath, ocrLang string) (string, error) {
 	fullPath, err := resolveUploadPath(filePath)
 	if err != nil {
 		return "", err
@@ -41,7 +41,7 @@ func ExtractFromPath(filePath string) (string, error) {
 
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filePath), "."))
 	if ext == "pdf" {
-		return extractPDF(fullPath)
+		return extractPDF(fullPath, ocrLang)
 	}
 
 	extract := extractors[ext]
@@ -155,22 +155,28 @@ func extractJSON(content []byte) string {
 	return detectAndConvertEncoding(content)
 }
 
-func extractPDF(path string) (string, error) {
+func extractPDF(path, ocrLang string) (string, error) {
+	native, err := pdftotext(path)
+	if err != nil {
+		log.Printf("[Extractor] pdftotext failed, trying OCR: %v", err)
+		return extractPDFWithOCR(path, ocrLang)
+	}
+	if hasEnoughText(native) {
+		return trimToLimit(strings.TrimSpace(native)), nil
+	}
+	log.Println("[Extractor] PDF has little native text, running OCR")
+	return extractPDFWithOCR(path, ocrLang)
+}
+
+func pdftotext(path string) (string, error) {
 	cmd := exec.Command("pdftotext", "-layout", path, "-")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("pdftotext failed: %w (stderr: %s)", err, stderr.String())
 	}
-
-	text := trimToLimit(strings.TrimSpace(stdout.String()))
-	if text == "" {
-		log.Println("[Extractor] No text extracted from PDF")
-		return "", fmt.Errorf("no text extracted")
-	}
-	return text, nil
+	return stdout.String(), nil
 }
 
 func formatJSONAsText(data map[string]interface{}) string {

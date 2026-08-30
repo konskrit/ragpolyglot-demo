@@ -2,19 +2,27 @@ import {
   ChatRole,
   DocumentProgressStage,
   DocumentStatus,
+  OcrLanguageCode,
 } from '../types/types';
+
+export interface OcrLanguageOption {
+  code: OcrLanguageCode;
+  label: string;
+}
 
 export interface Document {
   id: string;
   title: string;
   /** Internal only — never return to clients from the gateway. */
   filePath?: string;
+  fileExt?: string;
   status: DocumentStatus;
   errorReason?: string;
   progressStage?: DocumentProgressStage;
   progressDone?: number;
   progressTotal?: number;
   uploadedBy?: string;
+  ocrLang?: OcrLanguageCode;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,11 +32,13 @@ export type DocumentSummary = Pick<
   Document,
   | 'id'
   | 'title'
+  | 'fileExt'
   | 'status'
   | 'errorReason'
   | 'progressStage'
   | 'progressDone'
   | 'progressTotal'
+  | 'ocrLang'
 > & {
   createdAt?: string;
 };
@@ -55,6 +65,7 @@ export interface DocumentUploadedEvent {
   documentId: string;
   filePath: string;
   userId: string;
+  ocrLang?: OcrLanguageCode;
   timestamp: string;
 }
 

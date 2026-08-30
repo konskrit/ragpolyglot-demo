@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -115,8 +116,12 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 	p.publishProgress(event.DocumentID, "extracting", 0, 0)
 
 	chunkingStart := time.Now()
-	text, err := extractor.ExtractFromPath(event.FilePath)
+	text, err := extractor.ExtractFromPath(event.FilePath, event.OcrLang)
 	if err != nil {
+		if errors.Is(err, extractor.ErrOcrLanguageNeeded) {
+			fail(extractor.ErrOcrLanguageNeeded.Error(), err)
+			return
+		}
 		fail("chunking_error", err)
 		return
 	}

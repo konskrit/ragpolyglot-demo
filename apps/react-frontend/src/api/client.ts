@@ -83,9 +83,12 @@ export async function postFormData<T>(
   return handleResponse<T>(res);
 }
 
-export async function postJson<T>(path: string): Promise<T> {
+export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: 'POST',
+    headers:
+      body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   return handleResponse<T>(res);
 }

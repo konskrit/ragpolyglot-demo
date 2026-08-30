@@ -7,7 +7,9 @@ import {
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
   formatErrorReason,
+  OCR_LANGUAGE_NEEDED,
   conversationTitleFromQuery,
+  isOcrLanguageCode,
   isChatRole,
   parseRagSources,
   isDocumentProgressStage,
@@ -31,6 +33,14 @@ describe('shared contracts', () => {
     expect(CHAT_ROLES).toEqual(['user', 'assistant']);
     expect(isChatRole('user')).toBe(true);
     expect(isChatRole('system')).toBe(false);
+  });
+
+  it('accepts tessdata OCR language codes', () => {
+    expect(isOcrLanguageCode('eng')).toBe(true);
+    expect(isOcrLanguageCode('chi_sim')).toBe(true);
+    expect(isOcrLanguageCode('ancient_greek')).toBe(true);
+    expect(isOcrLanguageCode('')).toBe(false);
+    expect(isOcrLanguageCode('AUTO')).toBe(false);
   });
 
   it('titles conversations from the first user query', () => {
@@ -116,5 +126,8 @@ describe('shared contracts', () => {
 
   it('formats snake_case error reasons for display', () => {
     expect(formatErrorReason('embedding_error')).toBe('embedding error');
+    expect(formatErrorReason(OCR_LANGUAGE_NEEDED)).toBe(
+      'Could not detect the OCR language. Choose a language and retry.',
+    );
   });
 });

@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  OCR_LANGUAGE_NEEDED,
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
   formatErrorReason,
   type DocumentSummary,
+  type OcrLanguageOption,
 } from '@ragpolyglot-shared';
 import { StatusBadge } from './StatusBadge';
 import { Button } from './Button';
 import { useDocuments } from '../context/DocumentsProvider';
+import { loadOcrLanguages } from '../lib/documents';
 
 export function DocumentRow({
   doc,
@@ -19,6 +22,42 @@ export function DocumentRow({
   const { remove, retry } = useDocuments();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [ocrLang, setOcrLang] = useState(doc.ocrLang ?? '');
+  const [ocrLanguages, setOcrLanguages] = useState<OcrLanguageOption[]>([]);
+
+  const canRetry = doc.status === 'failed' || doc.status === 'ready';
+  const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
+  const showOcrLanguage =
+    canRetry && (doc.fileExt === 'pdf' || needsOcrLanguage);
+
+  useEffect(() => {
+    setOcrLang(doc.ocrLang ?? '');
+  }, [doc.id, doc.ocrLang]);
+
+  useEffect(() => {
+    if (!showOcrLanguage) return;
+    let cancelled = false;
+    let attempt = 0;
+    let timer: number | undefined;
+    const maxAttempts = 3;
+
+    const load = () => {
+      void loadOcrLanguages().then((langs) => {
+        if (cancelled) return;
+        setOcrLanguages(langs);
+        if (langs.length === 0 && attempt < maxAttempts) {
+          attempt += 1;
+          timer = window.setTimeout(load, 1000 * attempt);
+        }
+      });
+    };
+    load();
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [showOcrLanguage]);
 
   const runAction = async (
     action: () => Promise<void>,
@@ -38,6 +77,8 @@ export function DocumentRow({
 
   const progressLabel = formatDocumentProgressLabel(doc);
   const progressPct = documentEmbeddingProgressPercent(doc);
+  const selectedInList =
+    !ocrLang || ocrLanguages.some((lang) => lang.code === ocrLang);
 
   return (
     <li className="flex flex-col bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-1">
@@ -68,20 +109,46 @@ export function DocumentRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <StatusBadge status={doc.status} />
-          {doc.status === 'failed' && (
+          {showOcrLanguage && (
+            <select
+              value={ocrLang}
+              onChange={(e) => setOcrLang(e.target.value)}
+              disabled={pending}
+              aria-label={`OCR language for ${doc.title}`}
+              className="max-w-[11rem] rounded-lg border border-gray-700 bg-gray-950 px-2 py-1.5 text-xs text-gray-200"
+            >
+              <option value="">
+                {needsOcrLanguage ? 'Select language' : 'Automatic'}
+              </option>
+              {!selectedInList && <option value={ocrLang}>{ocrLang}</option>}
+              {ocrLanguages.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {canRetry && (
             <Button
               variant="secondary"
               size="sm"
               onClick={() =>
-                void runAction(() => retry(doc.id), 'Retry failed')
+                void runAction(
+                  () =>
+                    retry(
+                      doc.id,
+                      showOcrLanguage ? ocrLang || undefined : undefined,
+                    ),
+                  'Retry failed',
+                )
               }
-              disabled={pending}
+              disabled={pending || (needsOcrLanguage && !ocrLang)}
               aria-label={`Retry ${doc.title}`}
             >
               {pending ? '…' : 'Retry'}
             </Button>
           )}
-          {(doc.status === 'ready' || doc.status === 'failed') && (
+          {canRetry && (
             <Button
               variant="danger"
               size="sm"

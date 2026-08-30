@@ -183,12 +183,18 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return ids;
     }
 
-    public async Task<Document?> ClaimRetryAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Document?> ClaimRetryAsync(
+        Guid id,
+        string? ocrLang,
+        bool updateOcrLang,
+        CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);
 
         await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/claim_retry.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("updateOcrLang", updateOcrLang);
+        cmd.Parameters.AddWithValue("ocrLang", (object?)ocrLang ?? DBNull.Value);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -250,7 +256,8 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         ProgressStage = reader.IsDBNull(7) ? null : reader.GetString(7),
         ProgressDone = reader.IsDBNull(8) ? null : reader.GetInt32(8),
         ProgressTotal = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-        CreatedAt = reader.GetDateTime(10),
-        UpdatedAt = reader.GetDateTime(11)
+        OcrLang = reader.IsDBNull(10) ? null : reader.GetString(10),
+        CreatedAt = reader.GetDateTime(11),
+        UpdatedAt = reader.GetDateTime(12)
     };
 }

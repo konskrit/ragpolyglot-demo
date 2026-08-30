@@ -22,7 +22,7 @@ interface DocumentsContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
-  retry: (id: string) => Promise<void>;
+  retry: (id: string, ocrLang?: string) => Promise<void>;
 }
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
@@ -59,10 +59,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     setDocuments((prev) => prev.filter((d) => d.id !== id));
   }
 
-  async function retry(id: string) {
+  async function retry(id: string, ocrLang?: string) {
     try {
       const updated = await postJson<unknown>(
         `/api/documents/${encodeURIComponent(id)}/retry`,
+        { ocrLang: ocrLang ?? null },
       );
       const mapped = mapApiDocument(updated);
       if (!mapped) {
@@ -112,13 +113,6 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         }
         return prev.map((doc) => {
           if (doc.id !== documentId) return doc;
-
-          if (
-            normalized === 'processing' &&
-            (doc.status === 'ready' || doc.status === 'failed')
-          ) {
-            return doc;
-          }
 
           if (normalized === 'ready') {
             return {

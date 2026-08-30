@@ -35,6 +35,22 @@ export const CHAT_ROLES = [
   'assistant',
 ] as const satisfies readonly ChatRole[];
 
+export const OCR_LANGUAGE_NEEDED = 'ocr_language_needed';
+
+const OCR_LANG_RE = /^[a-z][a-z0-9_+]{1,31}$/;
+
+export function isOcrLanguageCode(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (
+    value === 'ancient_greek' ||
+    value === 'modern_greek' ||
+    value === 'english'
+  ) {
+    return true;
+  }
+  return OCR_LANG_RE.test(value);
+}
+
 export function isChatRole(value: unknown): value is ChatRole {
   return (
     typeof value === 'string' &&
@@ -100,6 +116,9 @@ export function isDocumentProgressStage(
 }
 
 export function formatErrorReason(reason: string): string {
+  if (reason === OCR_LANGUAGE_NEEDED) {
+    return 'Could not detect the OCR language. Choose a language and retry.';
+  }
   return reason.replace(/_/g, ' ');
 }
 

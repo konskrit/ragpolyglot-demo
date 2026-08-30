@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS documents (
     progress_stage TEXT,
     progress_done INT,
     progress_total INT,
+    ocr_lang TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

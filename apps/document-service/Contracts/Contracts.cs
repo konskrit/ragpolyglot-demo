@@ -12,6 +12,7 @@ public record Document
     public string? ProgressStage { get; init; }
     public int? ProgressDone { get; init; }
     public int? ProgressTotal { get; init; }
+    public string? OcrLang { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
@@ -39,6 +40,7 @@ public record DocumentUploadedEvent
     public Guid DocumentId { get; init; }
     public string FilePath { get; init; } = string.Empty;
     public string UserId { get; init; } = string.Empty;
+    public string? OcrLang { get; init; }
     public DateTime Timestamp { get; init; }
 }
 

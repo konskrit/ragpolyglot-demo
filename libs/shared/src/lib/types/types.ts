@@ -6,6 +6,8 @@ export type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
 export type ChatRole = 'user' | 'assistant';
 
+export type OcrLanguageCode = string;
+
 export type ConsumerHandler<TMessage = unknown> = (
   msg: TMessage | null,
 ) => void | Promise<void>;

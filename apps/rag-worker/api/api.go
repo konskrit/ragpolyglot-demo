@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"apps/rag-worker/embedding"
+	"apps/rag-worker/extractor"
 	"apps/rag-worker/llm"
 	"apps/rag-worker/models"
 	"apps/rag-worker/storage"
@@ -40,10 +41,22 @@ func NewServer(store *storage.Store, defaultTopK int, allowFallback bool, rabbit
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /api/ocr-languages", s.ocrLanguages)
 	mux.HandleFunc("POST /api/search", s.search)
 	mux.HandleFunc("POST /api/chat", s.chat)
 	mux.HandleFunc("POST /api/chat/stream", s.chatStream)
 	return mux
+}
+
+func (s *Server) ocrLanguages(w http.ResponseWriter, r *http.Request) {
+	langs, err := extractor.ListLanguages()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "could not list OCR languages",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, langs)
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

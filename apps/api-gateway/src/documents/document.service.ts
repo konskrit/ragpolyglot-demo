@@ -9,12 +9,14 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { access, unlink } from 'fs/promises';
 import { constants } from 'fs';
-import { basename, join } from 'path';
+import { basename, extname, join } from 'path';
 import { Config } from '../core/config';
 import {
   Document,
   DocumentChunk,
   DocumentCreateDto,
+  OcrLanguageOption,
+  isOcrLanguageCode,
 } from '@ragpolyglot-shared';
 
 type DocumentRecord = Document & { filePath?: string };
@@ -52,6 +54,15 @@ export class DocumentService {
     return res.data;
   }
 
+  async getOcrLanguages(): Promise<OcrLanguageOption[]> {
+    const res = await firstValueFrom(
+      this.httpService.get<OcrLanguageOption[]>(
+        `${Config.ragWorkerUrl}/api/ocr-languages`,
+      ),
+    );
+    return Array.isArray(res.data) ? res.data : [];
+  }
+
   async uploadDocument(
     file: Express.Multer.File,
     title?: string,
@@ -84,7 +95,7 @@ export class DocumentService {
     }
   }
 
-  async retryDocument(id: string): Promise<Document> {
+  async retryDocument(id: string, ocrLang?: string): Promise<Document> {
     const existing = await firstValueFrom(
       this.httpService.get<DocumentRecord>(
         `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
@@ -93,9 +104,15 @@ export class DocumentService {
 
     await this.assertUploadFileExists(existing.data.filePath);
 
+    const hint = ocrLang?.trim();
+    if (hint && !isOcrLanguageCode(hint)) {
+      throw new BadRequestException('Invalid OCR language code');
+    }
+
     const res = await firstValueFrom(
       this.httpService.post<DocumentRecord>(
         `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}/retry`,
+        { ocrLang: hint || null },
       ),
     );
 
@@ -153,14 +170,23 @@ export class DocumentService {
     return {
       id: doc.id,
       title: doc.title,
+      fileExt: this.fileExt(doc.filePath),
       status: doc.status,
       errorReason: doc.errorReason,
       progressStage: doc.progressStage,
       progressDone: doc.progressDone,
       progressTotal: doc.progressTotal,
       uploadedBy: doc.uploadedBy,
+      ocrLang: doc.ocrLang,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
+  }
+
+  private fileExt(filePath?: string): string | undefined {
+    const filename = this.uploadFilename(filePath);
+    if (!filename) return undefined;
+    const ext = extname(filename).toLowerCase().replace(/^\./, '');
+    return ext || undefined;
   }
 }

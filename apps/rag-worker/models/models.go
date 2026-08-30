@@ -7,6 +7,7 @@ type DocumentUploadedEvent struct {
 	DocumentID string    `json:"documentId"`
 	FilePath   string    `json:"filePath"`
 	UserID     string    `json:"userId"`
+	OcrLang    string    `json:"ocrLang,omitempty"`
 	Timestamp  time.Time `json:"timestamp"`
 }
 
