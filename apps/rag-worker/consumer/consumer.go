@@ -14,6 +14,7 @@ import (
 	"apps/rag-worker/publisher"
 	rmq "apps/rag-worker/rabbitmq"
 	"apps/rag-worker/storage"
+	"apps/rag-worker/workpool"
 )
 
 type Processor struct {
@@ -21,24 +22,28 @@ type Processor struct {
 	publisher      *publisher.Publisher
 	redis          *redis.Client
 	allowFallback  bool
+	pool           *workpool.Pool
 	pauseMu        sync.Mutex
 	pauseRequested map[string]struct{}
 }
 
-func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool) *Processor {
+func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool, pool *workpool.Pool) *Processor {
 	return &Processor{
 		store:          store,
 		publisher:      pub,
 		redis:          redisClient,
 		allowFallback:  allowFallback,
+		pool:           pool,
 		pauseRequested: make(map[string]struct{}),
 	}
 }
 
 func Start(rabbitURL string, proc *Processor) {
-	go reconnectLoop(rabbitURL, rmq.UploadedQueue, 1, proc.handleUploaded)
+	prefetch := proc.pool.Slots()
+	go reconnectLoop(rabbitURL, rmq.UploadedQueue, prefetch, proc.handleUploaded)
 	go reconnectLoop(rabbitURL, rmq.DeletedQueue, 0, proc.handleDeleted)
 	go reconnectLoop(rabbitURL, rmq.PauseQueue, 0, proc.handlePause)
+	log.Printf("[Consumer] prefetch=%d for %s", prefetch, rmq.UploadedQueue)
 	log.Printf("[Consumer] listening on %s, %s, and %s (with reconnect)", rmq.UploadedQueue, rmq.DeletedQueue, rmq.PauseQueue)
 }
 

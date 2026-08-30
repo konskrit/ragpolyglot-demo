@@ -104,6 +104,16 @@ func runCapture(stop func() bool, name string, args ...string) (stdout string, e
 	return out.String(), nil
 }
 
+func isOsdSoftError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "too few characters") ||
+		strings.Contains(msg, "no script") ||
+		strings.Contains(msg, "error during processing")
+}
+
 func detectScript(imagePath string, stop func() bool) (string, error) {
 	out, err := runCapture(stop, "tesseract", imagePath, "stdout", "--psm", "0", "-l", "osd")
 	if err != nil {
@@ -197,12 +207,19 @@ func resolveLangsFromPages(hint string, imagePaths []string, stop func() bool) (
 		}
 		langs, err := langsForDetectedScript(script)
 		if err != nil {
+			if errors.Is(err, ErrOcrLanguageNeeded) {
+				lastErr = err
+				continue
+			}
 			return "", err
 		}
 		log.Printf("[Extractor] OSD script=%s langs=%s", script, langs)
 		return langs, nil
 	}
 	if lastErr != nil {
+		if isOsdSoftError(lastErr) {
+			return "", ErrOcrLanguageNeeded
+		}
 		return "", lastErr
 	}
 	return "", ErrOcrLanguageNeeded

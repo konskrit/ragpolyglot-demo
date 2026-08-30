@@ -19,6 +19,7 @@ import (
 	"apps/rag-worker/publisher"
 	rmq "apps/rag-worker/rabbitmq"
 	"apps/rag-worker/storage"
+	"apps/rag-worker/workpool"
 )
 
 func main() {
@@ -66,7 +67,8 @@ func main() {
 
 	pub := publisher.New(pubCh)
 
-	proc := consumer.NewProcessor(store, pub, redisClient, cfg.EmbeddingFallback)
+	wp := workpool.New()
+	proc := consumer.NewProcessor(store, pub, redisClient, cfg.EmbeddingFallback, wp)
 	consumer.Start(cfg.RabbitMQURL, proc)
 
 	server := api.NewServer(store, cfg.DefaultTopK, cfg.EmbeddingFallback, pub.Connected)

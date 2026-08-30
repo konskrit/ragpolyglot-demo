@@ -15,6 +15,7 @@ import (
 	"apps/rag-worker/extractor"
 	"apps/rag-worker/models"
 	"apps/rag-worker/storage"
+	"apps/rag-worker/workpool"
 )
 
 func (p *Processor) handleUploaded(msg amqp.Delivery) {
@@ -29,7 +30,7 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		_ = msg.Nack(false, false)
 		return
 	}
-	p.ingest(msg, event)
+	go p.ingest(msg, event)
 }
 
 func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent) {
@@ -89,6 +90,7 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	} else {
 		state := extractor.OCRState{
 			ShouldPause: func() bool { return p.pauseRequestedFor(event.DocumentID) },
+			Pool:        p.pool,
 		}
 		if cp != nil && cp.Stage == "ocr" {
 			job = *cp
@@ -192,8 +194,27 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		}
 
 		end := min(i+embedding.BatchSize, len(textChunks))
-		embedded, err := embedding.GenerateAndAttach(textChunks[i:end], p.allowFallback)
+		batch := textChunks[i:end]
+		var embedded []models.TextChunk
+		err := p.pool.Run(workpool.EmbedBatchMemory(), func() error {
+			if p.pauseRequestedFor(event.DocumentID) {
+				return extractor.ErrPaused
+			}
+			var err error
+			embedded, err = embedding.GenerateAndAttach(batch, p.allowFallback)
+			return err
+		})
 		if err != nil {
+			if errors.Is(err, extractor.ErrPaused) {
+				job.EmbedDone = totalChunks
+				job.Paused = true
+				if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
+					fail("storage_error", err)
+					return
+				}
+				pause()
+				return
+			}
 			fail("embedding_error", err)
 			return
 		}

@@ -7,12 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unicode"
+
+	"apps/rag-worker/workpool"
 )
 
 const (
 	minNativeLetters = 100
-	maxOsdPages      = 1
+	maxOsdPages      = 5
 )
 
 var (
@@ -28,6 +32,7 @@ type OCRState struct {
 	Resolved    string
 	ShouldPause func() bool
 	OnProgress  OCRProgressFunc
+	Pool        *workpool.Pool
 }
 
 func hasEnoughText(s string) bool {
@@ -58,14 +63,11 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 		return "", "", fmt.Errorf("ocr start page %d past end %d", start, total)
 	}
 
-	var b strings.Builder
-	if prior := strings.TrimSpace(state.PriorText); prior != "" {
-		b.WriteString(prior)
-	}
+	prior := strings.TrimSpace(state.PriorText)
 
 	langs := strings.TrimSpace(state.Resolved)
 	if langs == "" && start > 1 {
-		return b.String(), "", fmt.Errorf("ocr resume missing resolved language")
+		return prior, "", fmt.Errorf("ocr resume missing resolved language")
 	}
 
 	dir, err := os.MkdirTemp("", "ocr-*")
@@ -79,67 +81,177 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 		if total < limit {
 			limit = total
 		}
-		osdPaths := make([]string, 0, limit)
-		for page := 1; page <= limit; page++ {
-			img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("osd-%d", page)), stop)
-			if err != nil {
-				if errors.Is(err, ErrPaused) {
-					return b.String(), langs, err
+		err := state.Pool.Run(workpool.OCRPageMemory(), func() error {
+			osdPaths := make([]string, 0, limit)
+			for page := 1; page <= limit; page++ {
+				img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("osd-%d", page)), stop)
+				if err != nil {
+					if errors.Is(err, ErrPaused) {
+						return err
+					}
+					continue
 				}
-				return "", "", err
+				osdPaths = append(osdPaths, img)
 			}
-			osdPaths = append(osdPaths, img)
-		}
-		langs, err = resolveLangsFromPages(ocrLang, osdPaths, stop)
+			if len(osdPaths) == 0 {
+				return ErrOcrLanguageNeeded
+			}
+			var err error
+			langs, err = resolveLangsFromPages(ocrLang, osdPaths, stop)
+			return err
+		})
 		if err != nil {
 			if errors.Is(err, ErrPaused) {
-				return b.String(), langs, err
+				return prior, langs, err
 			}
 			return "", "", err
 		}
 	}
 
 	log.Printf("[Extractor] OCR starting page=%d/%d langs=%s", start, total, langs)
+	return ocrPagesParallel(pdfPath, dir, start, total, langs, prior, ocrLang, stop, state)
+}
 
-	for page := start; page <= total; page++ {
-		if stop != nil && stop() {
-			return b.String(), langs, ErrPaused
-		}
+func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLang string, stop func() bool, state OCRState) (string, string, error) {
+	pageText := make([]string, total+1)
+	pageDone := make([]bool, total+1)
+	var (
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		firstErr error
+		aborted  atomic.Bool
+		lastDone = start - 1
+		mem      = workpool.OCRPageMemory()
+	)
 
-		log.Printf("[Extractor] OCR page %d/%d", page, total)
-		img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
-		if err != nil {
-			if errors.Is(err, ErrPaused) {
-				return b.String(), langs, err
-			}
-			return "", langs, err
+	recordErr := func(err error) {
+		if err == nil {
+			return
 		}
-		pageText, err := tesseractPage(img, langs, stop)
-		_ = os.Remove(img)
-		if err != nil {
-			if errors.Is(err, ErrPaused) {
-				return b.String(), langs, err
-			}
-			return "", langs, err
+		mu.Lock()
+		if firstErr == nil {
+			firstErr = err
 		}
-		if pageText != "" {
-			if b.Len() > 0 {
-				b.WriteByte('\n')
-			}
-			b.WriteString(pageText)
-		}
-
-		log.Printf("[Extractor] OCR progress %d/%d", page, total)
-		if state.OnProgress != nil {
-			if err := state.OnProgress(page, total, b.String(), langs); err != nil {
-				return b.String(), langs, err
-			}
-		}
+		mu.Unlock()
+		aborted.Store(true)
 	}
 
-	text = trimToLimit(strings.TrimSpace(b.String()))
+	processPage := func(page int) error {
+		if stop != nil && stop() {
+			return ErrPaused
+		}
+		return state.Pool.Run(mem, func() error {
+			if stop != nil && stop() {
+				return ErrPaused
+			}
+			text, err := ocrOnePage(pdfPath, dir, page, langs, stop)
+			if err != nil {
+				return err
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			pageText[page] = text
+			pageDone[page] = true
+
+			for p := lastDone + 1; p <= total; p++ {
+				if !pageDone[p] {
+					break
+				}
+				lastDone = p
+			}
+			done := lastDone
+			if done < start {
+				return nil
+			}
+			soFar := joinPageText(prior, pageText, start, done)
+			log.Printf("[Extractor] OCR progress %d/%d", done, total)
+			if state.OnProgress != nil {
+				if err := state.OnProgress(done, total, soFar, langs); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	pages := total - start + 1
+	workers := state.Pool.Slots()
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > pages {
+		workers = pages
+	}
+
+	pageCh := make(chan int, pages)
+	for page := start; page <= total; page++ {
+		pageCh <- page
+	}
+	close(pageCh)
+
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for page := range pageCh {
+				if aborted.Load() {
+					return
+				}
+				if err := processPage(page); err != nil {
+					recordErr(err)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if firstErr != nil {
+		if errors.Is(firstErr, ErrPaused) {
+			mu.Lock()
+			soFar := joinPageText(prior, pageText, start, lastDone)
+			mu.Unlock()
+			return soFar, langs, ErrPaused
+		}
+		return "", langs, firstErr
+	}
+
+	return finishOCRText(joinPageText(prior, pageText, start, total), langs, state.Resolved, ocrLang)
+}
+
+func ocrOnePage(pdfPath, dir string, page int, langs string, stop func() bool) (string, error) {
+	log.Printf("[Extractor] OCR page %d", page)
+	img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(img)
+	return tesseractPage(img, langs, stop)
+}
+
+func joinPageText(prior string, pages []string, start, end int) string {
+	var b strings.Builder
+	if prior != "" {
+		b.WriteString(prior)
+	}
+	for page := start; page <= end; page++ {
+		text := strings.TrimSpace(pages[page])
+		if text == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(text)
+	}
+	return b.String()
+}
+
+func finishOCRText(raw, langs, resolved, ocrLang string) (string, string, error) {
+	text := trimToLimit(strings.TrimSpace(raw))
 	if text == "" {
-		if tesseractLangs(ocrLang) == "" && state.Resolved == "" {
+		if tesseractLangs(ocrLang) == "" && langs == "" && resolved == "" {
 			return "", langs, ErrOcrLanguageNeeded
 		}
 		return "", langs, fmt.Errorf("no text extracted")
