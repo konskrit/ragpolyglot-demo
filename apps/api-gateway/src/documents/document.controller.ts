@@ -89,6 +89,18 @@ export class DocumentController {
     return this.documentService.retryDocument(id, body?.ocrLang);
   }
 
+  @Post(':id/pause')
+  @HttpCode(202)
+  pauseDocument(@Param('id') id: string) {
+    return this.documentService.pauseDocument(id);
+  }
+
+  @Post(':id/resume')
+  @HttpCode(200)
+  resumeDocument(@Param('id') id: string) {
+    return this.documentService.resumeDocument(id);
+  }
+
   @Delete(':id')
   @HttpCode(200)
   deleteDocument(@Param('id') id: string) {

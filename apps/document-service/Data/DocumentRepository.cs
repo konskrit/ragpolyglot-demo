@@ -32,6 +32,22 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return docs;
     }
 
+    public async Task<IReadOnlyList<Document>> ListProcessingAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/list_processing.sql"), db);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+
+        var docs = new List<Document>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            docs.Add(ReadDocument(reader));
+        }
+
+        return docs;
+    }
+
     public async Task<Document?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);
@@ -112,12 +128,13 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return rows > 0;
     }
 
-    public async Task<bool> MarkReadyAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<bool> MarkReadyAsync(Guid id, string? ocrLang = null, CancellationToken cancellationToken = default)
     {
         await EnsureOpenAsync(cancellationToken);
 
         await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_ready.sql"), db);
         cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("ocrLang", (object?)ocrLang ?? DBNull.Value);
         var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
     }
@@ -131,6 +148,32 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         cmd.Parameters.AddWithValue("errorReason", (object?)errorReason ?? DBNull.Value);
         var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return rows > 0;
+    }
+
+    public async Task<bool> MarkPausedAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/mark_paused.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+        var rows = await cmd.ExecuteNonQueryAsync(cancellationToken);
+        return rows > 0;
+    }
+
+    public async Task<Document?> ClaimResumeAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureOpenAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(SqlScripts.Load("documents/claim_resume.sql"), db);
+        cmd.Parameters.AddWithValue("id", id);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return ReadDocument(reader);
     }
 
     public async Task UpdateProgressAsync(

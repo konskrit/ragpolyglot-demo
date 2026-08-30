@@ -21,6 +21,7 @@ public enum DocumentStatus
 {
     Uploading,
     Processing,
+    Paused,
     Ready,
     Failed
 }
@@ -41,6 +42,7 @@ public record DocumentUploadedEvent
     public string FilePath { get; init; } = string.Empty;
     public string UserId { get; init; } = string.Empty;
     public string? OcrLang { get; init; }
+    public bool Retry { get; init; }
     public DateTime Timestamp { get; init; }
 }
 
@@ -49,6 +51,7 @@ public record DocumentProcessedEvent
     public string Type => "document.processed";
     public Guid DocumentId { get; init; }
     public int ChunkCount { get; init; }
+    public string? OcrLang { get; init; }
     public DateTime Timestamp { get; init; }
 }
 
@@ -57,6 +60,20 @@ public record DocumentFailedEvent
     public string Type => "document.failed";
     public Guid DocumentId { get; init; }
     public string ErrorReason { get; init; } = string.Empty;
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentPauseEvent
+{
+    public string Type => "document.pause";
+    public Guid DocumentId { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentPausedEvent
+{
+    public string Type => "document.paused";
+    public Guid DocumentId { get; init; }
     public DateTime Timestamp { get; init; }
 }
 

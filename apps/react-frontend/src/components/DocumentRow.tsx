@@ -4,6 +4,8 @@ import {
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
   formatErrorReason,
+  ocrLangSelectValue,
+  showOcrLanguageMenu,
   type DocumentSummary,
   type OcrLanguageOption,
 } from '@ragpolyglot-shared';
@@ -26,9 +28,9 @@ export function DocumentRow({
   const [ocrLanguages, setOcrLanguages] = useState<OcrLanguageOption[]>([]);
 
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
+  const canDelete = canRetry || doc.status === 'paused';
   const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
-  const showOcrLanguage =
-    canRetry && (doc.fileExt === 'pdf' || needsOcrLanguage);
+  const showOcrLanguage = canRetry && showOcrLanguageMenu(doc);
 
   useEffect(() => {
     setOcrLang(doc.ocrLang ?? '');
@@ -77,8 +79,9 @@ export function DocumentRow({
 
   const progressLabel = formatDocumentProgressLabel(doc);
   const progressPct = documentEmbeddingProgressPercent(doc);
+  const selectLang = ocrLangSelectValue(ocrLang, ocrLanguages);
   const selectedInList =
-    !ocrLang || ocrLanguages.some((lang) => lang.code === ocrLang);
+    !selectLang || ocrLanguages.some((lang) => lang.code === selectLang);
 
   return (
     <li className="flex flex-col bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-1">
@@ -111,7 +114,7 @@ export function DocumentRow({
           <StatusBadge status={doc.status} />
           {showOcrLanguage && (
             <select
-              value={ocrLang}
+              value={selectLang}
               onChange={(e) => setOcrLang(e.target.value)}
               disabled={pending}
               aria-label={`OCR language for ${doc.title}`}
@@ -120,7 +123,9 @@ export function DocumentRow({
               <option value="">
                 {needsOcrLanguage ? 'Select language' : 'Automatic'}
               </option>
-              {!selectedInList && <option value={ocrLang}>{ocrLang}</option>}
+              {!selectedInList && (
+                <option value={selectLang}>{selectLang}</option>
+              )}
               {ocrLanguages.map((lang) => (
                 <option key={lang.code} value={lang.code}>
                   {lang.label}
@@ -137,18 +142,18 @@ export function DocumentRow({
                   () =>
                     retry(
                       doc.id,
-                      showOcrLanguage ? ocrLang || undefined : undefined,
+                      showOcrLanguage ? selectLang || undefined : undefined,
                     ),
                   'Retry failed',
                 )
               }
-              disabled={pending || (needsOcrLanguage && !ocrLang)}
+              disabled={pending || (needsOcrLanguage && !selectLang)}
               aria-label={`Retry ${doc.title}`}
             >
               {pending ? '…' : 'Retry'}
             </Button>
           )}
-          {canRetry && (
+          {canDelete && (
             <Button
               variant="danger"
               size="sm"

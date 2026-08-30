@@ -1,4 +1,9 @@
-export type DocumentStatus = 'uploading' | 'processing' | 'ready' | 'failed';
+export type DocumentStatus =
+  | 'uploading'
+  | 'processing'
+  | 'paused'
+  | 'ready'
+  | 'failed';
 
 export type DocumentProgressStage = 'extracting' | 'embedding';
 

@@ -25,11 +25,12 @@ func (p *Publisher) Connected() bool {
 	return p.ch != nil && !p.ch.IsClosed()
 }
 
-func (p *Publisher) PublishProcessed(documentID string, chunkCount int) error {
+func (p *Publisher) PublishProcessed(documentID string, chunkCount int, ocrLang string) error {
 	event := models.DocumentProcessedEvent{
 		Type:       rmq.RoutingProcessed,
 		DocumentID: documentID,
 		ChunkCount: chunkCount,
+		OcrLang:    ocrLang,
 		Timestamp:  time.Now().UTC(),
 	}
 	return p.publish(rmq.RoutingProcessed, event)
@@ -55,6 +56,15 @@ func (p *Publisher) PublishFailed(documentID, errorReason string) error {
 		Timestamp:   time.Now().UTC(),
 	}
 	return p.publish(rmq.RoutingFailed, event)
+}
+
+func (p *Publisher) PublishPaused(documentID string) error {
+	event := models.DocumentPausedEvent{
+		Type:       rmq.RoutingPaused,
+		DocumentID: documentID,
+		Timestamp:  time.Now().UTC(),
+	}
+	return p.publish(rmq.RoutingPaused, event)
 }
 
 func (p *Publisher) publish(routingKey string, payload any) error {

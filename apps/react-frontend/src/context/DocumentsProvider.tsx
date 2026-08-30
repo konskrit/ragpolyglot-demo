@@ -99,7 +99,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       const normalized = normalizeDocumentStatus(status);
       if (!normalized) return;
 
-      if (normalized === 'failed') {
+      if (
+        normalized === 'failed' ||
+        normalized === 'paused' ||
+        normalized === 'ready'
+      ) {
         void refresh();
         return;
       }

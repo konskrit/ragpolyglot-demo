@@ -6,6 +6,7 @@ import {
 const labels: Record<DocumentStatus, string> = {
   ready: 'Ready',
   processing: 'Processing',
+  paused: 'Paused',
   uploading: 'Uploading',
   failed: 'Failed',
 };
@@ -13,6 +14,7 @@ const labels: Record<DocumentStatus, string> = {
 const styles: Record<DocumentStatus, string> = {
   ready: 'bg-green-500/20 text-green-400',
   processing: 'bg-yellow-500/20 text-yellow-400 animate-pulse',
+  paused: 'bg-orange-500/20 text-orange-400',
   uploading: 'bg-blue-500/20 text-blue-400 animate-pulse',
   failed: 'bg-red-500/20 text-red-400',
 };

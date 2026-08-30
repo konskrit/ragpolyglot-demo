@@ -13,8 +13,10 @@ public sealed partial class MessageBroker(
 
     public const string UploadedQueue = "document.uploaded.queue";
     public const string DeletedQueue = "document.deleted.queue";
+    public const string PauseQueue = "document.pause.queue";
     public const string ProcessedQueue = "document.processed.queue";
     public const string FailedQueue = "document.failed.queue";
+    public const string PausedQueue = "document.paused.queue";
     public const string ProgressQueue = "document.progress.queue";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,6 +32,7 @@ public sealed partial class MessageBroker(
     private IChannel? _publishingChannel;
     private IChannel? _processedChannel;
     private IChannel? _failedChannel;
+    private IChannel? _pausedChannel;
     private IChannel? _progressChannel;
     private bool _initialized;
 
@@ -67,8 +70,10 @@ public sealed partial class MessageBroker(
 
                     await DeclareAndBindQueueAsync(_publishingChannel, UploadedQueue, "document.uploaded", cancellationToken);
                     await DeclareAndBindQueueAsync(_publishingChannel, DeletedQueue, "document.deleted", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, PauseQueue, "document.pause", cancellationToken);
                     await DeclareAndBindQueueAsync(_publishingChannel, ProcessedQueue, "document.processed", cancellationToken);
                     await DeclareAndBindQueueAsync(_publishingChannel, FailedQueue, "document.failed", cancellationToken);
+                    await DeclareAndBindQueueAsync(_publishingChannel, PausedQueue, "document.paused", cancellationToken);
                     await DeclareAndBindQueueAsync(_publishingChannel, ProgressQueue, "document.progress", cancellationToken);
 
                     _initialized = true;
@@ -107,13 +112,14 @@ public sealed partial class MessageBroker(
         }
     }
 
-    public Task PublishDocumentUploadedAsync(Guid documentId, string filePath, string? ocrLang, CancellationToken cancellationToken = default)
+    public Task PublishDocumentUploadedAsync(Guid documentId, string filePath, string? ocrLang, bool retry = false, CancellationToken cancellationToken = default)
     {
         var message = new DocumentUploadedEvent
         {
             DocumentId = documentId,
             FilePath = filePath,
             OcrLang = ocrLang,
+            Retry = retry,
             Timestamp = DateTime.UtcNow
         };
 
@@ -131,9 +137,21 @@ public sealed partial class MessageBroker(
         return SendMessageAsync("document.deleted", message, cancellationToken);
     }
 
+    public Task PublishDocumentPauseAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var message = new DocumentPauseEvent
+        {
+            DocumentId = documentId,
+            Timestamp = DateTime.UtcNow
+        };
+
+        return SendMessageAsync("document.pause", message, cancellationToken);
+    }
+
     public async Task StartConsumingAsync(
         Func<DocumentProcessedEvent, Task> onProcessed,
         Func<DocumentFailedEvent, Task> onFailed,
+        Func<DocumentPausedEvent, Task> onPaused,
         Func<DocumentProgressEvent, Task> onProgress,
         Func<string, Exception, byte[]?, Task> onInvalidPayload,
         CancellationToken cancellationToken = default)
@@ -157,6 +175,12 @@ public sealed partial class MessageBroker(
             _failedChannel = null;
         }
 
+        if (_pausedChannel is not null)
+        {
+            await _pausedChannel.DisposeAsync();
+            _pausedChannel = null;
+        }
+
         if (_progressChannel is not null)
         {
             await _progressChannel.DisposeAsync();
@@ -165,6 +189,7 @@ public sealed partial class MessageBroker(
 
         _processedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _failedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
+        _pausedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _progressChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
         await BindConsumerAsync(
@@ -192,6 +217,18 @@ public sealed partial class MessageBroker(
             cancellationToken);
 
         await BindConsumerAsync(
+            _pausedChannel,
+            PausedQueue,
+            async body =>
+            {
+                var message = JsonSerializer.Deserialize<DocumentPausedEvent>(body, JsonOptions)
+                    ?? throw new JsonException("Failed to deserialize document.paused event");
+                await onPaused(message);
+            },
+            onInvalidPayload,
+            cancellationToken);
+
+        await BindConsumerAsync(
             _progressChannel,
             ProgressQueue,
             async body =>
@@ -203,7 +240,7 @@ public sealed partial class MessageBroker(
             onInvalidPayload,
             cancellationToken);
 
-        LogConsuming(ProcessedQueue, FailedQueue, ProgressQueue);
+        LogConsuming(ProcessedQueue, FailedQueue, PausedQueue, ProgressQueue);
     }
 
     private static async Task DeclareAndBindQueueAsync(
@@ -321,6 +358,11 @@ public sealed partial class MessageBroker(
         if (_failedChannel is not null)
         {
             await _failedChannel.DisposeAsync();
+        }
+
+        if (_pausedChannel is not null)
+        {
+            await _pausedChannel.DisposeAsync();
         }
 
         if (_progressChannel is not null)

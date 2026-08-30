@@ -1,7 +1,6 @@
 package extractor
 
 import (
-	"sort"
 	"strings"
 	"testing"
 )
@@ -52,34 +51,15 @@ func TestLangsForDetectedScript(t *testing.T) {
 		t.Fatalf("greek: got %q err %v", got, err)
 	}
 	got, err = langsForDetectedScript("Latin")
-	if err != nil || got != "eng" {
+	if err != nil || got != "eng+fra+deu+ita+lat" {
 		t.Fatalf("latin: got %q err %v", got, err)
+	}
+	got, err = langsForDetectedScript("Cyrillic")
+	if err != nil || got != "rus+srp+bul" {
+		t.Fatalf("cyrillic: got %q err %v", got, err)
 	}
 	_, err = langsForDetectedScript("Arabic")
 	if err != ErrOcrLanguageNeeded {
 		t.Fatalf("arabic: want ErrOcrLanguageNeeded, got %v", err)
-	}
-}
-
-func TestPageNumberSort(t *testing.T) {
-	pages := []string{
-		"/tmp/page-10.png",
-		"/tmp/page-2.png",
-		"/tmp/page-1.png",
-		"/tmp/page-11.png",
-	}
-	sort.Slice(pages, func(i, j int) bool {
-		return pageNumber(pages[i]) < pageNumber(pages[j])
-	})
-	want := []string{
-		"/tmp/page-1.png",
-		"/tmp/page-2.png",
-		"/tmp/page-10.png",
-		"/tmp/page-11.png",
-	}
-	for i := range want {
-		if pages[i] != want[i] {
-			t.Fatalf("got %#v", pages)
-		}
 	}
 }

@@ -19,6 +19,7 @@ public sealed partial class EventConsumerBackgroundService(
             await messageBroker.StartConsumingAsync(
                 onProcessed: HandleDocumentProcessedAsync,
                 onFailed: HandleDocumentFailedAsync,
+                onPaused: HandleDocumentPausedAsync,
                 onProgress: HandleDocumentProgressAsync,
                 onInvalidPayload: LogInvalidAsync,
                 cancellationToken: stoppingToken);
@@ -46,7 +47,8 @@ public sealed partial class EventConsumerBackgroundService(
         await using var scope = scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
-        if (await repo.MarkReadyAsync(evt.DocumentId))
+        var ocrLang = string.IsNullOrWhiteSpace(evt.OcrLang) ? null : evt.OcrLang.Trim();
+        if (await repo.MarkReadyAsync(evt.DocumentId, ocrLang))
         {
             LogMarkedReady(evt.DocumentId, evt.ChunkCount);
         }
@@ -73,6 +75,26 @@ public sealed partial class EventConsumerBackgroundService(
         else
         {
             LogFailedNotFound(evt.DocumentId);
+        }
+    }
+
+    private async Task HandleDocumentPausedAsync(DocumentPausedEvent evt)
+    {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+
+        if (await repo.MarkPausedAsync(evt.DocumentId))
+        {
+            LogMarkedPaused(evt.DocumentId);
+        }
+        else
+        {
+            LogPausedNotFound(evt.DocumentId);
         }
     }
 
@@ -131,6 +153,12 @@ public sealed partial class EventConsumerBackgroundService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not found for document.failed event")]
     private partial void LogFailedNotFound(Guid documentId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Document {DocumentId} marked as paused")]
+    private partial void LogMarkedPaused(Guid documentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not found or not processing for document.paused event")]
+    private partial void LogPausedNotFound(Guid documentId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Invalid event from {Queue}: {Error}")]
     private partial void LogInvalidEvent(string queue, string error);

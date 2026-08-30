@@ -61,6 +61,8 @@ export class ChatGateway implements OnModuleInit {
           this.emitDocumentStatusUpdate(event.documentId, 'ready');
         } else if (event.type === 'document.failed') {
           this.emitDocumentStatusUpdate(event.documentId, 'failed');
+        } else if (event.type === 'document.paused') {
+          this.emitDocumentStatusUpdate(event.documentId, 'paused');
         } else if (event.type === 'document.progress') {
           if (!isDocumentProgressStage(event.stage)) return;
           this.emitDocumentStatusUpdate(event.documentId, 'processing', {

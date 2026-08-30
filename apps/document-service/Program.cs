@@ -26,6 +26,24 @@ await using (var scope = app.Services.CreateAsyncScope())
 var messageBroker = app.Services.GetRequiredService<MessageBroker>();
 await messageBroker.InitializeAsync();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    foreach (var doc in await repo.ListProcessingAsync())
+    {
+        try
+        {
+            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang);
+            logger.LogInformation("Requeued processing document {DocumentId}", doc.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to requeue processing document {DocumentId}", doc.Id);
+        }
+    }
+}
+
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>

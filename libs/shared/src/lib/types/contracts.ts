@@ -9,6 +9,7 @@ import type {
 export const DOCUMENT_STATUSES = [
   'uploading',
   'processing',
+  'paused',
   'ready',
   'failed',
 ] as const satisfies readonly DocumentStatus[];
@@ -36,6 +37,27 @@ export const CHAT_ROLES = [
 ] as const satisfies readonly ChatRole[];
 
 export const OCR_LANGUAGE_NEEDED = 'ocr_language_needed';
+
+export function showOcrLanguageMenu(
+  doc: Pick<DocumentSummary, 'fileExt' | 'errorReason' | 'ocrLang'>,
+): boolean {
+  if (doc.errorReason === OCR_LANGUAGE_NEEDED) {
+    return true;
+  }
+  return doc.fileExt === 'pdf' && Boolean(doc.ocrLang);
+}
+
+/** Menu value for stored ocrLang; auto script packs map to Automatic (''). */
+export function ocrLangSelectValue(
+  code: string | null | undefined,
+  options: readonly { code: string }[],
+): string {
+  const value = (code ?? '').trim();
+  if (!value) return '';
+  if (options.some((o) => o.code === value)) return value;
+  if (value.includes('+')) return '';
+  return value;
+}
 
 const OCR_LANG_RE = /^[a-z][a-z0-9_+]{1,31}$/;
 
@@ -130,13 +152,22 @@ type DocumentProgressView = Pick<
 export function formatDocumentProgressLabel(
   doc: DocumentProgressView,
 ): string | null {
-  if (doc.status !== 'processing') return null;
-  if (doc.progressStage === 'extracting') return 'Extracting text…';
+  if (doc.status !== 'processing' && doc.status !== 'paused') return null;
+  const paused = doc.status === 'paused';
+  if (doc.progressStage === 'extracting') {
+    const total = doc.progressTotal ?? 0;
+    if (total > 0) {
+      const label = `OCR ${doc.progressDone ?? 0}/${total}`;
+      return paused ? `Paused · ${label}` : label;
+    }
+    return paused ? 'Paused · Extracting text…' : 'Extracting text…';
+  }
   const total = doc.progressTotal ?? 0;
   if (doc.progressStage === 'embedding' && total > 0) {
-    return `Embedding chunks ${doc.progressDone ?? 0}/${total}`;
+    const label = `Embedding chunks ${doc.progressDone ?? 0}/${total}`;
+    return paused ? `Paused · ${label}` : label;
   }
-  return null;
+  return paused ? 'Paused' : null;
 }
 
 export function documentEmbeddingProgressPercent(

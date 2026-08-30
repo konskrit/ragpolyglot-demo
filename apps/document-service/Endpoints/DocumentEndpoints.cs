@@ -15,6 +15,8 @@ public static class DocumentEndpoints
         app.MapGet("/api/documents/{id:guid}/chunks", GetDocumentChunks);
         app.MapPost("/api/documents", CreateDocument);
         app.MapPost("/api/documents/{id:guid}/retry", RetryDocument);
+        app.MapPost("/api/documents/{id:guid}/pause", PauseDocument);
+        app.MapPost("/api/documents/{id:guid}/resume", ResumeDocument);
         app.MapPost("/api/documents/maintenance/fail-stale", FailStaleProcessing);
         app.MapPost("/api/documents/maintenance/auto-retry", AutoRetryFailed);
         app.MapDelete("/api/documents/{id:guid}", DeleteDocument);
@@ -103,7 +105,7 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -111,6 +113,62 @@ public static class DocumentEndpoints
         }
 
         doc = await repo.CompleteRetryAsync(doc.Id, cancellationToken) ?? doc;
+        return Results.Ok(doc);
+    }
+
+    private static async Task<IResult> PauseDocument(
+        Guid id,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        CancellationToken cancellationToken)
+    {
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        if (existing.Status is not DocumentStatus.Processing)
+        {
+            return Results.Conflict(new { error = "Only processing documents can be paused." });
+        }
+
+        await messageBroker.PublishDocumentPauseAsync(id, cancellationToken);
+        return Results.Accepted($"/api/documents/{id}", existing);
+    }
+
+    private static async Task<IResult> ResumeDocument(
+        Guid id,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        if (existing.Status is not DocumentStatus.Paused)
+        {
+            return Results.Conflict(new { error = "Only paused documents can be resumed." });
+        }
+
+        var doc = await repo.ClaimResumeAsync(id, cancellationToken);
+        if (doc is null)
+        {
+            return Results.Conflict(new { error = "Only paused documents can be resumed." });
+        }
+
+        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        {
+            return Results.Problem(
+                detail: "Resume could not be queued.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         return Results.Ok(doc);
     }
 
@@ -216,11 +274,12 @@ public static class DocumentEndpoints
         DocumentRepository repo,
         MessageBroker messageBroker,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool retry = false)
     {
         try
         {
-            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang, cancellationToken);
+            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang, retry, cancellationToken);
             return true;
         }
         catch (Exception ex)

@@ -12,14 +12,18 @@ const (
 	ExchangeName   = "document.events"
 	UploadedQueue  = "document.uploaded.queue"
 	DeletedQueue   = "document.deleted.queue"
+	PauseQueue     = "document.pause.queue"
 	ProcessedQueue = "document.processed.queue"
 	FailedQueue    = "document.failed.queue"
+	PausedQueue    = "document.paused.queue"
 	ProgressQueue  = "document.progress.queue"
 
 	RoutingUploaded  = "document.uploaded"
 	RoutingDeleted   = "document.deleted"
+	RoutingPause     = "document.pause"
 	RoutingProcessed = "document.processed"
 	RoutingFailed    = "document.failed"
+	RoutingPaused    = "document.paused"
 	RoutingProgress  = "document.progress"
 )
 
@@ -54,8 +58,10 @@ func SetupTopology(ch *amqp.Channel) error {
 	for queue, routingKey := range map[string]string{
 		UploadedQueue:  RoutingUploaded,
 		DeletedQueue:   RoutingDeleted,
+		PauseQueue:     RoutingPause,
 		ProcessedQueue: RoutingProcessed,
 		FailedQueue:    RoutingFailed,
+		PausedQueue:    RoutingPaused,
 		ProgressQueue:  RoutingProgress,
 	} {
 		if _, err := ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
@@ -69,6 +75,11 @@ func SetupTopology(ch *amqp.Channel) error {
 	return nil
 }
 
-func Consume(ch *amqp.Channel, queueName string) (<-chan amqp.Delivery, error) {
+func Consume(ch *amqp.Channel, queueName string, prefetch int) (<-chan amqp.Delivery, error) {
+	if prefetch > 0 {
+		if err := ch.Qos(prefetch, 0, false); err != nil {
+			return nil, fmt.Errorf("qos: %w", err)
+		}
+	}
 	return ch.Consume(queueName, "", false, false, false, false, nil)
 }

@@ -1,15 +1,11 @@
 package extractor
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -19,7 +15,20 @@ const (
 	maxOsdPages      = 3
 )
 
-var ErrOcrLanguageNeeded = errors.New("ocr_language_needed")
+var (
+	ErrOcrLanguageNeeded = errors.New("ocr_language_needed")
+	ErrPaused            = errors.New("paused")
+)
+
+type OCRProgressFunc func(done, total int, textSoFar, langs string) error
+
+type OCRState struct {
+	StartPage   int
+	PriorText   string
+	Resolved    string
+	ShouldPause func() bool
+	OnProgress  OCRProgressFunc
+}
 
 func hasEnoughText(s string) bool {
 	n := 0
@@ -34,172 +43,94 @@ func hasEnoughText(s string) bool {
 	return false
 }
 
-func tesseractLangs(hint string) string {
-	switch strings.TrimSpace(hint) {
-	case "ancient_greek":
-		return "grc+ell"
-	case "modern_greek":
-		return "ell"
-	case "english":
-		return "eng"
-	case "":
-		return ""
-	default:
-		return strings.TrimSpace(hint)
-	}
-}
-
-func parseOsdScript(osd string) string {
-	const prefix = "script:"
-	for _, line := range strings.Split(osd, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if len(trimmed) < len(prefix) {
-			continue
-		}
-		if strings.EqualFold(trimmed[:len(prefix)], prefix) {
-			return strings.TrimSpace(trimmed[len(prefix):])
-		}
-	}
-	return ""
-}
-
-func langsForDetectedScript(script string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(script)) {
-	case "greek":
-		return "grc+ell", nil
-	case "latin":
-		return "eng", nil
-	default:
-		return "", ErrOcrLanguageNeeded
-	}
-}
-
-func resolveTesseractLangs(hint string, pages []string) (string, error) {
-	if langs := tesseractLangs(hint); langs != "" {
-		return langs, nil
-	}
-	if len(pages) == 0 {
-		return "", ErrOcrLanguageNeeded
-	}
-
-	limit := maxOsdPages
-	if len(pages) < limit {
-		limit = len(pages)
-	}
-
-	var lastErr error
-	for _, page := range pages[:limit] {
-		script, err := detectScript(page)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		return langsForDetectedScript(script)
-	}
-	if lastErr != nil {
-		return "", lastErr
-	}
-	return "", ErrOcrLanguageNeeded
-}
-
-func detectScript(imagePath string) (string, error) {
-	cmd := exec.Command("tesseract", imagePath, "stdout", "--psm", "0", "-l", "osd")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("tesseract osd failed: %w (stderr: %s)", err, stderr.String())
-	}
-	script := parseOsdScript(stdout.String())
-	if script == "" {
-		return "", fmt.Errorf("tesseract osd produced no script")
-	}
-	return script, nil
-}
-
-func tesseractPage(imagePath, langs string) (string, error) {
-	cmd := exec.Command("tesseract", imagePath, "stdout", "-l", langs, "--psm", "6")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("tesseract failed: %w (stderr: %s)", err, stderr.String())
-	}
-	return strings.TrimSpace(stdout.String()), nil
-}
-
-// pdftoppm writes page-1.png, page-10.png without zero-padding; lexicographic
-// sort would put page-10 before page-2.
-func pageNumber(path string) int {
-	base := filepath.Base(path)
-	base = strings.TrimSuffix(base, filepath.Ext(base))
-	_, num, ok := strings.Cut(base, "-")
-	if !ok {
-		return 0
-	}
-	n, err := strconv.Atoi(num)
+func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, resolved string, err error) {
+	total, err := pdfPageCount(pdfPath)
 	if err != nil {
-		return 0
+		return "", "", err
 	}
-	return n
-}
 
-func extractPDFWithOCR(pdfPath, ocrLang string) (string, error) {
+	start := state.StartPage
+	if start < 1 {
+		start = 1
+	}
+	if start > total+1 {
+		return "", "", fmt.Errorf("ocr start page %d past end %d", start, total)
+	}
+
+	var b strings.Builder
+	if prior := strings.TrimSpace(state.PriorText); prior != "" {
+		b.WriteString(prior)
+	}
+
+	langs := strings.TrimSpace(state.Resolved)
+	if langs == "" && start > 1 {
+		return b.String(), "", fmt.Errorf("ocr resume missing resolved language")
+	}
+
 	dir, err := os.MkdirTemp("", "ocr-*")
 	if err != nil {
-		return "", fmt.Errorf("ocr temp dir: %w", err)
+		return "", "", fmt.Errorf("ocr temp dir: %w", err)
 	}
 	defer os.RemoveAll(dir)
 
-	prefix := filepath.Join(dir, "page")
-	cmd := exec.Command("pdftoppm", "-png", "-r", "200", pdfPath, prefix)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("pdftoppm failed: %w (stderr: %s)", err, stderr.String())
-	}
-
-	pages, err := filepath.Glob(prefix + "-*.png")
-	if err != nil {
-		return "", err
-	}
-	sort.Slice(pages, func(i, j int) bool {
-		return pageNumber(pages[i]) < pageNumber(pages[j])
-	})
-	if len(pages) == 0 {
-		return "", fmt.Errorf("pdftoppm produced no pages")
-	}
-
-	langs, err := resolveTesseractLangs(ocrLang, pages)
-	if err != nil {
-		return "", err
-	}
-	log.Printf("[Extractor] OCR starting pages=%d langs=%s", len(pages), langs)
-	var b strings.Builder
-	for i, page := range pages {
-		text, err := tesseractPage(page, langs)
+	if langs == "" {
+		limit := maxOsdPages
+		if total < limit {
+			limit = total
+		}
+		osdPaths := make([]string, 0, limit)
+		for page := 1; page <= limit; page++ {
+			img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("osd-%d", page)))
+			if err != nil {
+				return "", "", err
+			}
+			osdPaths = append(osdPaths, img)
+		}
+		langs, err = resolveLangsFromPages(ocrLang, osdPaths)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
-		done := i + 1
-		if done == 1 || done == len(pages) || done%10 == 0 {
-			log.Printf("[Extractor] OCR progress %d/%d", done, len(pages))
-		}
-		if text == "" {
-			continue
-		}
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(text)
 	}
 
-	text := trimToLimit(strings.TrimSpace(b.String()))
-	if text == "" {
-		if tesseractLangs(ocrLang) == "" {
-			return "", ErrOcrLanguageNeeded
+	log.Printf("[Extractor] OCR starting page=%d/%d langs=%s", start, total, langs)
+
+	for page := start; page <= total; page++ {
+		if state.ShouldPause != nil && state.ShouldPause() {
+			return b.String(), langs, ErrPaused
 		}
-		return "", fmt.Errorf("no text extracted")
+
+		img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)))
+		if err != nil {
+			return "", langs, err
+		}
+		pageText, err := tesseractPage(img, langs)
+		_ = os.Remove(img)
+		if err != nil {
+			return "", langs, err
+		}
+		if pageText != "" {
+			if b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(pageText)
+		}
+
+		if page == 1 || page == total || page%10 == 0 {
+			log.Printf("[Extractor] OCR progress %d/%d", page, total)
+		}
+		if state.OnProgress != nil {
+			if err := state.OnProgress(page, total, b.String(), langs); err != nil {
+				return b.String(), langs, err
+			}
+		}
 	}
-	return text, nil
+
+	text = trimToLimit(strings.TrimSpace(b.String()))
+	if text == "" {
+		if tesseractLangs(ocrLang) == "" && state.Resolved == "" {
+			return "", langs, ErrOcrLanguageNeeded
+		}
+		return "", langs, fmt.Errorf("no text extracted")
+	}
+	return text, langs, nil
 }

@@ -10,6 +10,8 @@ import {
   OCR_LANGUAGE_NEEDED,
   conversationTitleFromQuery,
   isOcrLanguageCode,
+  showOcrLanguageMenu,
+  ocrLangSelectValue,
   isChatRole,
   parseRagSources,
   isDocumentProgressStage,
@@ -23,6 +25,7 @@ describe('shared contracts', () => {
     expect(DOCUMENT_STATUSES).toEqual([
       'uploading',
       'processing',
+      'paused',
       'ready',
       'failed',
     ]);
@@ -41,6 +44,25 @@ describe('shared contracts', () => {
     expect(isOcrLanguageCode('ancient_greek')).toBe(true);
     expect(isOcrLanguageCode('')).toBe(false);
     expect(isOcrLanguageCode('AUTO')).toBe(false);
+  });
+
+  it('shows the OCR language menu when language is needed or a PDF used OCR', () => {
+    expect(showOcrLanguageMenu({ errorReason: OCR_LANGUAGE_NEEDED })).toBe(
+      true,
+    );
+    expect(showOcrLanguageMenu({ fileExt: 'pdf', ocrLang: 'ell' })).toBe(true);
+    expect(showOcrLanguageMenu({ fileExt: 'pdf' })).toBe(false);
+    expect(showOcrLanguageMenu({ fileExt: 'txt', ocrLang: 'eng' })).toBe(false);
+    expect(showOcrLanguageMenu({})).toBe(false);
+  });
+
+  it('maps auto OCR packs to Automatic in the language select', () => {
+    const options = [{ code: 'eng' }, { code: 'ell' }, { code: 'grc+ell' }];
+    expect(ocrLangSelectValue('eng+fra+deu+ita+lat', options)).toBe('');
+    expect(ocrLangSelectValue('rus+srp+bul', options)).toBe('');
+    expect(ocrLangSelectValue('grc+ell', options)).toBe('grc+ell');
+    expect(ocrLangSelectValue('ell', options)).toBe('ell');
+    expect(ocrLangSelectValue('', options)).toBe('');
   });
 
   it('titles conversations from the first user query', () => {
@@ -106,6 +128,22 @@ describe('shared contracts', () => {
         progressStage: 'extracting',
       }),
     ).toBe('Extracting text…');
+    expect(
+      formatDocumentProgressLabel({
+        status: 'processing',
+        progressStage: 'extracting',
+        progressDone: 3,
+        progressTotal: 10,
+      }),
+    ).toBe('OCR 3/10');
+    expect(
+      formatDocumentProgressLabel({
+        status: 'paused',
+        progressStage: 'extracting',
+        progressDone: 3,
+        progressTotal: 10,
+      }),
+    ).toBe('Paused · OCR 3/10');
     expect(
       formatDocumentProgressLabel({
         status: 'processing',

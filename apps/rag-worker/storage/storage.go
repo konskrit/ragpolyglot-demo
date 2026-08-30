@@ -45,6 +45,22 @@ CREATE TABLE IF NOT EXISTS query_logs (
     duration_ms DOUBLE PRECISION NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS document_ingest_checkpoints (
+    document_id UUID PRIMARY KEY,
+    stage TEXT NOT NULL,
+    ocr_page_done INT NOT NULL DEFAULT 0,
+    ocr_total INT NOT NULL DEFAULT 0,
+    ocr_langs TEXT NOT NULL DEFAULT '',
+    ocr_lang_hint TEXT NOT NULL DEFAULT '',
+    partial_text TEXT NOT NULL DEFAULT '',
+    embed_done INT NOT NULL DEFAULT 0,
+    file_path TEXT NOT NULL DEFAULT '',
+    paused BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE document_ingest_checkpoints
+    ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE;
 `)
 	return err
 }
@@ -86,6 +102,12 @@ func (s *Store) DeleteChunks(ctx context.Context, documentID string) (int64, err
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+func (s *Store) CountChunks(ctx context.Context, documentID string) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM document_chunks WHERE document_id = $1`, documentID).Scan(&n)
+	return n, err
 }
 
 func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int) ([]models.SearchHit, error) {

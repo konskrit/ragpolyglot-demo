@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     file_path TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('uploading', 'processing', 'ready', 'failed')),
+    status TEXT NOT NULL CHECK (status IN ('uploading', 'processing', 'paused', 'ready', 'failed')),
     uploaded_by UUID,
     error_reason TEXT,
     retry_count INT NOT NULL DEFAULT 0,

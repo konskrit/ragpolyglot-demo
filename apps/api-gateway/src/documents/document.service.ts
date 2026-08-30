@@ -120,6 +120,35 @@ export class DocumentService {
     return this.toPublicDocument(res.data);
   }
 
+  async pauseDocument(id: string): Promise<Document> {
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(
+        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}/pause`,
+      ),
+    );
+    this.logger.log(`Document pause requested: ${id}`);
+    return this.toPublicDocument(res.data);
+  }
+
+  async resumeDocument(id: string): Promise<Document> {
+    const existing = await firstValueFrom(
+      this.httpService.get<DocumentRecord>(
+        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
+      ),
+    );
+
+    await this.assertUploadFileExists(existing.data.filePath);
+
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(
+        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}/resume`,
+      ),
+    );
+
+    this.logger.log(`Document resume queued: ${id}`);
+    return this.toPublicDocument(res.data);
+  }
+
   async deleteDocument(id: string): Promise<void> {
     const existing = await firstValueFrom(
       this.httpService.get<DocumentRecord>(

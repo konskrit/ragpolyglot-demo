@@ -3,17 +3,13 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 
-	"apps/rag-worker/chunker"
-	"apps/rag-worker/embedding"
-	"apps/rag-worker/extractor"
 	"apps/rag-worker/models"
 	"apps/rag-worker/publisher"
 	rmq "apps/rag-worker/rabbitmq"
@@ -21,28 +17,32 @@ import (
 )
 
 type Processor struct {
-	store         *storage.Store
-	publisher     *publisher.Publisher
-	redis         *redis.Client
-	allowFallback bool
+	store          *storage.Store
+	publisher      *publisher.Publisher
+	redis          *redis.Client
+	allowFallback  bool
+	pauseMu        sync.Mutex
+	pauseRequested map[string]struct{}
 }
 
 func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool) *Processor {
 	return &Processor{
-		store:         store,
-		publisher:     pub,
-		redis:         redisClient,
-		allowFallback: allowFallback,
+		store:          store,
+		publisher:      pub,
+		redis:          redisClient,
+		allowFallback:  allowFallback,
+		pauseRequested: make(map[string]struct{}),
 	}
 }
 
 func Start(rabbitURL string, proc *Processor) {
-	go reconnectLoop(rabbitURL, rmq.UploadedQueue, proc.handleUploaded)
-	go reconnectLoop(rabbitURL, rmq.DeletedQueue, proc.handleDeleted)
-	log.Printf("[Consumer] listening on %s and %s (with reconnect)", rmq.UploadedQueue, rmq.DeletedQueue)
+	go reconnectLoop(rabbitURL, rmq.UploadedQueue, 1, proc.handleUploaded)
+	go reconnectLoop(rabbitURL, rmq.DeletedQueue, 0, proc.handleDeleted)
+	go reconnectLoop(rabbitURL, rmq.PauseQueue, 0, proc.handlePause)
+	log.Printf("[Consumer] listening on %s, %s, and %s (with reconnect)", rmq.UploadedQueue, rmq.DeletedQueue, rmq.PauseQueue)
 }
 
-func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
+func reconnectLoop(rabbitURL, queueName string, prefetch int, handler func(amqp.Delivery)) {
 	for {
 		conn := rmq.Connect(rabbitURL)
 
@@ -62,7 +62,7 @@ func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
 			continue
 		}
 
-		msgs, err := rmq.Consume(ch, queueName)
+		msgs, err := rmq.Consume(ch, queueName, prefetch)
 		if err != nil {
 			_ = ch.Close()
 			_ = conn.Close()
@@ -83,124 +83,39 @@ func reconnectLoop(rabbitURL, queueName string, handler func(amqp.Delivery)) {
 	}
 }
 
-func (p *Processor) handleUploaded(msg amqp.Delivery) {
-	var event models.DocumentUploadedEvent
+func (p *Processor) handlePause(msg amqp.Delivery) {
+	var event models.DocumentPauseEvent
 	if err := json.Unmarshal(msg.Body, &event); err != nil {
-		log.Printf("[Consumer] bad document.uploaded payload: %v", err)
+		log.Printf("[Consumer] bad document.pause payload: %v", err)
 		_ = msg.Nack(false, false)
 		return
 	}
 	if event.DocumentID == "" {
-		log.Printf("[Consumer] poison document.uploaded (missing documentId)")
+		log.Printf("[Consumer] poison document.pause (missing documentId)")
 		_ = msg.Nack(false, false)
 		return
 	}
 
-	ctx := context.Background()
-	start := time.Now()
-	log.Printf("[Consumer] processing upload documentId=%s", event.DocumentID)
-
-	fail := func(reason string, cause error) {
-		log.Printf("[Consumer] document %s failed (%s): %v", event.DocumentID, reason, cause)
-		if pubErr := p.publisher.PublishFailed(event.DocumentID, reason); pubErr != nil {
-			log.Printf("[Consumer] publish document.failed failed: %v", pubErr)
-			_ = msg.Nack(false, true)
-			return
-		}
-		p.store.LogSystem(ctx, reason, event.DocumentID, time.Since(start), map[string]any{
-			"error": cause.Error(),
-		})
-		_ = msg.Ack(false)
-	}
-
-	p.publishProgress(event.DocumentID, "extracting", 0, 0)
-
-	chunkingStart := time.Now()
-	text, err := extractor.ExtractFromPath(event.FilePath, event.OcrLang)
-	if err != nil {
-		if errors.Is(err, extractor.ErrOcrLanguageNeeded) {
-			fail(extractor.ErrOcrLanguageNeeded.Error(), err)
-			return
-		}
-		fail("chunking_error", err)
-		return
-	}
-
-	textChunks := chunker.ChunkText(text)
-	if len(textChunks) == 0 {
-		fail("chunking_error", fmt.Errorf("chunker produced zero chunks"))
-		return
-	}
-	maxChunks := extractor.MaxChunks()
-	if len(textChunks) > maxChunks {
-		fail("chunking_error", fmt.Errorf("document exceeds %d chunk limit", maxChunks))
-		return
-	}
-	chunkingDuration := time.Since(chunkingStart)
-
-	if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
-		fail("storage_error", err)
-		return
-	}
-
-	embedStart := time.Now()
-	totalChunks := 0
-	p.publishProgress(event.DocumentID, "embedding", 0, len(textChunks))
-
-	for i := 0; i < len(textChunks); i += embedding.BatchSize {
-		end := min(i+embedding.BatchSize, len(textChunks))
-		batch := textChunks[i:end]
-
-		embedded, err := embedding.GenerateAndAttach(batch, p.allowFallback)
-		if err != nil {
-			fail("embedding_error", err)
-			return
-		}
-
-		chunks := make([]models.DocumentChunk, len(embedded))
-		for j, tc := range embedded {
-			chunks[j] = models.DocumentChunk{
-				DocumentID: event.DocumentID,
-				ChunkIndex: i + j,
-				Content:    tc.Text,
-				Embedding:  tc.Embedding,
-			}
-		}
-
-		if err := p.store.InsertChunks(ctx, chunks); err != nil {
-			fail("storage_error", err)
-			return
-		}
-		totalChunks += len(chunks)
-		p.publishProgress(event.DocumentID, "embedding", totalChunks, len(textChunks))
-	}
-	embeddingDuration := time.Since(embedStart)
-
-	if p.redis != nil {
-		_ = p.redis.Set(ctx, "doc:"+event.DocumentID+":chunks", totalChunks, 24*time.Hour).Err()
-	}
-
-	if err := p.publisher.PublishProcessed(event.DocumentID, totalChunks); err != nil {
-		log.Printf("[Consumer] publish document.processed failed: %v", err)
-		_ = msg.Nack(false, true)
-		return
-	}
-
-	total := time.Since(start)
-	p.store.LogSystem(ctx, "document.processed", event.DocumentID, total, map[string]any{
-		"chunkCount":          totalChunks,
-		"chunkingDurationMs":  chunkingDuration.Milliseconds(),
-		"embeddingDurationMs": embeddingDuration.Milliseconds(),
-	})
-
+	p.setPause(event.DocumentID, true)
+	log.Printf("[Consumer] pause requested documentId=%s", event.DocumentID)
 	_ = msg.Ack(false)
-	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, totalChunks, total)
 }
 
-func (p *Processor) publishProgress(documentID, stage string, done, total int) {
-	if err := p.publisher.PublishProgress(documentID, stage, done, total); err != nil {
-		log.Printf("[Consumer] progress publish failed documentId=%s: %v", documentID, err)
+func (p *Processor) setPause(documentID string, requested bool) {
+	p.pauseMu.Lock()
+	defer p.pauseMu.Unlock()
+	if requested {
+		p.pauseRequested[documentID] = struct{}{}
+		return
 	}
+	delete(p.pauseRequested, documentID)
+}
+
+func (p *Processor) pauseRequestedFor(documentID string) bool {
+	p.pauseMu.Lock()
+	defer p.pauseMu.Unlock()
+	_, ok := p.pauseRequested[documentID]
+	return ok
 }
 
 func (p *Processor) handleDeleted(msg amqp.Delivery) {
@@ -218,6 +133,7 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 
 	ctx := context.Background()
 	start := time.Now()
+	p.setPause(event.DocumentID, false)
 
 	deleted, err := p.store.DeleteChunks(ctx, event.DocumentID)
 	if err != nil {
@@ -225,6 +141,7 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 		_ = msg.Nack(false, true)
 		return
 	}
+	_ = p.store.DeleteCheckpoint(ctx, event.DocumentID)
 
 	if p.redis != nil {
 		_ = p.redis.Del(ctx, "doc:"+event.DocumentID+":chunks").Err()

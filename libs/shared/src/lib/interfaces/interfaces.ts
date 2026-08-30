@@ -66,6 +66,7 @@ export interface DocumentUploadedEvent {
   filePath: string;
   userId: string;
   ocrLang?: OcrLanguageCode;
+  retry?: boolean;
   timestamp: string;
 }
 
@@ -73,6 +74,7 @@ export interface DocumentProcessedEvent {
   type: 'document.processed';
   documentId: string;
   chunkCount: number;
+  ocrLang?: string;
   timestamp: string;
 }
 
@@ -80,6 +82,18 @@ export interface DocumentFailedEvent {
   type: 'document.failed';
   documentId: string;
   errorReason: string;
+  timestamp: string;
+}
+
+export interface DocumentPauseEvent {
+  type: 'document.pause';
+  documentId: string;
+  timestamp: string;
+}
+
+export interface DocumentPausedEvent {
+  type: 'document.paused';
+  documentId: string;
   timestamp: string;
 }
 

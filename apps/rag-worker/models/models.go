@@ -8,6 +8,7 @@ type DocumentUploadedEvent struct {
 	FilePath   string    `json:"filePath"`
 	UserID     string    `json:"userId"`
 	OcrLang    string    `json:"ocrLang,omitempty"`
+	Retry      bool      `json:"retry,omitempty"`
 	Timestamp  time.Time `json:"timestamp"`
 }
 
@@ -21,6 +22,7 @@ type DocumentProcessedEvent struct {
 	Type       string    `json:"type"`
 	DocumentID string    `json:"documentId"`
 	ChunkCount int       `json:"chunkCount"`
+	OcrLang    string    `json:"ocrLang,omitempty"`
 	Timestamp  time.Time `json:"timestamp"`
 }
 
@@ -29,6 +31,18 @@ type DocumentFailedEvent struct {
 	DocumentID  string    `json:"documentId"`
 	ErrorReason string    `json:"errorReason"`
 	Timestamp   time.Time `json:"timestamp"`
+}
+
+type DocumentPauseEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+type DocumentPausedEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 type DocumentProgressEvent struct {

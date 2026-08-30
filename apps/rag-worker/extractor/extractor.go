@@ -34,14 +34,19 @@ func MaxChunks() int {
 }
 
 func ExtractFromPath(filePath, ocrLang string) (string, error) {
+	text, _, err := ExtractFromPathWithOCR(filePath, ocrLang, OCRState{})
+	return text, err
+}
+
+func ExtractFromPathWithOCR(filePath, ocrLang string, state OCRState) (text string, resolved string, err error) {
 	fullPath, err := resolveUploadPath(filePath)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filePath), "."))
 	if ext == "pdf" {
-		return extractPDF(fullPath, ocrLang)
+		return extractPDF(fullPath, ocrLang, state)
 	}
 
 	extract := extractors[ext]
@@ -52,14 +57,14 @@ func ExtractFromPath(filePath, ocrLang string) (string, error) {
 
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		return "", fmt.Errorf("could not read upload %q: %w", filepath.Base(fullPath), err)
+		return "", "", fmt.Errorf("could not read upload %q: %w", filepath.Base(fullPath), err)
 	}
 
-	text := trimToLimit(ensureValidUTF8(extract(content)))
-	if text == "" {
-		return "", fmt.Errorf("no text extracted")
+	out := trimToLimit(ensureValidUTF8(extract(content)))
+	if out == "" {
+		return "", "", fmt.Errorf("no text extracted")
 	}
-	return text, nil
+	return out, "", nil
 }
 
 func envInt(name string, fallback int) int {
@@ -155,17 +160,23 @@ func extractJSON(content []byte) string {
 	return detectAndConvertEncoding(content)
 }
 
-func extractPDF(path, ocrLang string) (string, error) {
+func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
+	resume := state.StartPage > 1 || strings.TrimSpace(state.PriorText) != "" || strings.TrimSpace(state.Resolved) != ""
+	if resume || strings.TrimSpace(ocrLang) != "" {
+		log.Println("[Extractor] Running OCR")
+		return extractPDFWithOCR(path, ocrLang, state)
+	}
+
 	native, err := pdftotext(path)
 	if err != nil {
 		log.Printf("[Extractor] pdftotext failed, trying OCR: %v", err)
-		return extractPDFWithOCR(path, ocrLang)
+		return extractPDFWithOCR(path, ocrLang, state)
 	}
 	if hasEnoughText(native) {
-		return trimToLimit(strings.TrimSpace(native)), nil
+		return trimToLimit(strings.TrimSpace(native)), "", nil
 	}
 	log.Println("[Extractor] PDF has little native text, running OCR")
-	return extractPDFWithOCR(path, ocrLang)
+	return extractPDFWithOCR(path, ocrLang, state)
 }
 
 func pdftotext(path string) (string, error) {

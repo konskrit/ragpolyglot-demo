@@ -115,6 +115,8 @@ services:
     build:
       context: ./apps/rag-worker
       dockerfile: Dockerfile
+      args:
+        INSTALL_OCR_LANGS: ${INSTALL_OCR_LANGS:-1}
     restart: unless-stopped
     env_file: [.env]
     environment:
