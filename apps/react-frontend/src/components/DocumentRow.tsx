@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
   OCR_LANGUAGE_NEEDED,
@@ -101,7 +102,12 @@ export function DocumentRow({
     <li className="flex flex-col bg-gray-900 rounded-lg px-4 py-3 border border-gray-800 gap-1">
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 truncate mr-4 min-w-0">
-          <span className="text-white">{doc.title}</span>
+          <Link
+            to={`/documents/${doc.id}`}
+            className="text-white hover:text-indigo-300 hover:underline"
+          >
+            {doc.title}
+          </Link>
           {showDate && doc.createdAt && (
             <span className="ml-2 text-xs text-gray-500">
               {new Date(doc.createdAt).toLocaleDateString()}

@@ -1,4 +1,4 @@
-import { mapApiDocuments } from './documents';
+import { mapApiDocuments, mapApiChunks } from './documents';
 import { formatSimilarityPercent } from './formatSimilarity';
 
 jest.mock('../config', () => ({
@@ -71,6 +71,42 @@ describe('mapApiDocuments', () => {
         title: 'B',
         status: 'processing',
         createdAt: undefined,
+      },
+    ]);
+  });
+});
+
+describe('mapApiChunks', () => {
+  it('returns empty array for non-arrays', () => {
+    expect(mapApiChunks(null)).toEqual([]);
+    expect(mapApiChunks({})).toEqual([]);
+  });
+
+  it('maps valid chunk rows', () => {
+    expect(
+      mapApiChunks([
+        {
+          id: 1,
+          documentId: 'doc-1',
+          chunkIndex: 0,
+          content: 'hello',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+        { documentId: 'doc-1', chunkIndex: 1, content: 'world' },
+        { documentId: 'bad' },
+      ]),
+    ).toEqual([
+      {
+        id: 1,
+        documentId: 'doc-1',
+        chunkIndex: 0,
+        content: 'hello',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        documentId: 'doc-1',
+        chunkIndex: 1,
+        content: 'world',
       },
     ]);
   });

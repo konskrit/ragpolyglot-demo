@@ -1,4 +1,8 @@
-import type { DocumentSummary, OcrLanguageOption } from '@ragpolyglot-shared';
+import type {
+  DocumentChunk,
+  DocumentSummary,
+  OcrLanguageOption,
+} from '@ragpolyglot-shared';
 import {
   isDocumentProgressStage,
   normalizeDocumentStatus,
@@ -39,6 +43,41 @@ export function mapApiDocuments(data: unknown): DocumentSummary[] {
 
 export function mapApiDocument(data: unknown): DocumentSummary | null {
   return mapDocumentSummary(data);
+}
+
+function mapApiChunk(item: unknown): DocumentChunk | null {
+  if (!item || typeof item !== 'object') return null;
+  const row = item as Record<string, unknown>;
+  if (typeof row.documentId !== 'string') return null;
+  if (typeof row.chunkIndex !== 'number') return null;
+  if (typeof row.content !== 'string') return null;
+
+  return {
+    id: typeof row.id === 'number' ? row.id : undefined,
+    documentId: row.documentId,
+    chunkIndex: row.chunkIndex,
+    content: row.content,
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+  };
+}
+
+export function mapApiChunks(data: unknown): DocumentChunk[] {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map(mapApiChunk)
+    .filter((chunk): chunk is DocumentChunk => chunk !== null);
+}
+
+export function loadDocument(id: string): Promise<DocumentSummary | null> {
+  return getJson<unknown>(`/api/documents/${encodeURIComponent(id)}`).then(
+    mapApiDocument,
+  );
+}
+
+export function loadDocumentChunks(id: string): Promise<DocumentChunk[]> {
+  return getJson<unknown>(
+    `/api/documents/${encodeURIComponent(id)}/chunks`,
+  ).then(mapApiChunks);
 }
 
 let ocrLanguagesPromise: Promise<OcrLanguageOption[]> | null = null;

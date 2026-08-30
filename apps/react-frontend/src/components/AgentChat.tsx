@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { emitWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
@@ -191,9 +192,18 @@ export function AgentChat({
                       className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs space-y-1"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-indigo-400 truncate">
-                          {sourceLabel(s)}
-                        </span>
+                        {s.documentId ? (
+                          <Link
+                            to={`/documents/${s.documentId}`}
+                            className="font-medium text-indigo-400 truncate hover:text-indigo-300 hover:underline"
+                          >
+                            {sourceLabel(s)}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-indigo-400 truncate">
+                            {sourceLabel(s)}
+                          </span>
+                        )}
                         <span className="text-green-400 font-mono shrink-0">
                           {formatSimilarityPercent(s.similarity)}
                         </span>

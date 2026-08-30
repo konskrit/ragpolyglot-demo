@@ -21,7 +21,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="flex items-center gap-6" aria-label="Primary">
             {nav.map(({ to, label }) => {
-              const active = location.pathname === to;
+              const active =
+                to === '/'
+                  ? location.pathname === '/'
+                  : location.pathname === to ||
+                    location.pathname.startsWith(`${to}/`);
               return (
                 <Link
                   key={to}
@@ -50,7 +54,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
+      <main className="flex-1 max-w-6xl mx-auto w-full min-w-0 px-4 py-8">
         {children}
       </main>
     </div>
