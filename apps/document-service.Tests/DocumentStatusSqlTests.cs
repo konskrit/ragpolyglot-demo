@@ -18,4 +18,11 @@ public class DocumentStatusSqlTests
         var sql = SqlScripts.Load("documents/mark_failed.sql");
         Assert.Contains("status IN ('uploading', 'processing', 'failed')", sql);
     }
+
+    [Fact]
+    public void Mark_processing_only_from_uploading()
+    {
+        var sql = SqlScripts.Load("documents/mark_processing.sql");
+        Assert.Contains("status = 'uploading'", sql);
+    }
 }

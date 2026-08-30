@@ -56,15 +56,21 @@ public static class DocumentEndpoints
         var doc = await repo.CreateAsync(dto.Title.Trim(), dto.FilePath.Trim(), cancellationToken);
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
 
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        if (!await repo.MarkProcessingAsync(doc.Id, cancellationToken))
         {
             return Results.Problem(
-                detail: "Document was created but the upload event could not be published.",
+                detail: "Document was created but could not enter processing state.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        await repo.MarkProcessingAsync(doc.Id, cancellationToken);
         doc = await repo.GetByIdAsync(doc.Id, cancellationToken) ?? doc;
+
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        {
+            return Results.Problem(
+                detail: "Document entered processing but the upload event could not be published.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
 
         return Results.Created($"/api/documents/{doc.Id}", doc);
     }
