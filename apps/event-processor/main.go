@@ -47,7 +47,12 @@ func main() {
 	}
 
 	runner := jobs.NewRunner(store, redisClient, cfg)
-	runner.Start(cfg.RabbitMQURL)
+	autoRetryEvery := time.Duration(cfg.AutoRetryIntervalMinutes) * time.Minute
+	if autoRetryEvery < time.Minute {
+		autoRetryEvery = time.Minute
+	}
+	log.Printf("[Scheduler] autoRetryInterval=%s", autoRetryEvery)
+	runner.Start(cfg.RabbitMQURL, autoRetryEvery)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,

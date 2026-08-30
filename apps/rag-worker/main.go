@@ -67,7 +67,7 @@ func main() {
 
 	pub := publisher.New(pubCh)
 
-	wp := workpool.New()
+	wp := workpool.NewPools()
 	proc := consumer.NewProcessor(store, pub, redisClient, cfg.EmbeddingFallback, wp)
 	consumer.Start(cfg.RabbitMQURL, proc)
 

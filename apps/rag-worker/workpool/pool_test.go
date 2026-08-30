@@ -92,6 +92,34 @@ func TestRunWhileStopWhileWaiting(t *testing.T) {
 	close(block)
 }
 
+func TestRabbitPrefetch(t *testing.T) {
+	t.Setenv("FAST_INGEST_PREFETCH", "3")
+	t.Setenv("OCR_INGEST_PREFETCH", "2")
+	if got := RabbitPrefetch(); got != 5 {
+		t.Fatalf("got %d want 5", got)
+	}
+	t.Setenv("FAST_INGEST_PREFETCH", "")
+	t.Setenv("OCR_INGEST_PREFETCH", "")
+	t.Setenv("INGEST_PREFETCH", "3")
+	if got := OCRIngestPrefetch(); got != 3 {
+		t.Fatalf("ocr ingest got %d want 3", got)
+	}
+	if got := RabbitPrefetch(); got != defaultFastIngestPrefetch+3 {
+		t.Fatalf("rabbit got %d want %d", got, defaultFastIngestPrefetch+3)
+	}
+}
+
+func TestPoolCPUratio(t *testing.T) {
+	t.Setenv("WORK_POOL_CPU_RATIO", "0.5")
+	if got := poolCPUratio(); got != 0.5 {
+		t.Fatalf("got %v want 0.5", got)
+	}
+	t.Setenv("WORK_POOL_CPU_RATIO", "")
+	if got := poolCPUratio(); got != defaultRatio {
+		t.Fatalf("got %v want %v", got, defaultRatio)
+	}
+}
+
 func TestOCRPageMemoryOverride(t *testing.T) {
 	t.Setenv("OCR_PAGE_MEMORY_MB", "10")
 	if got := OCRPageMemory(); got != 10*1024*1024 {

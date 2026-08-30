@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -18,31 +19,36 @@ import (
 )
 
 type Processor struct {
-	store          *storage.Store
-	publisher      *publisher.Publisher
-	redis          *redis.Client
-	allowFallback  bool
-	pool           *workpool.Pool
-	pauseMu        sync.Mutex
-	pauseRequested map[string]struct{}
-	ingestGenMu    sync.Mutex
-	ingestGen      map[string]uint64
+	store           *storage.Store
+	publisher       *publisher.Publisher
+	redis           *redis.Client
+	allowFallback   bool
+	pools           *workpool.Pools
+	pauseMu         sync.Mutex
+	pauseRequested  map[string]struct{}
+	ingestGenMu     sync.Mutex
+	ingestGen       map[string]uint64
+	ocrIngestActive atomic.Int32
+	fastIngestSem   chan struct{}
+	ocrIngestSem    chan struct{}
 }
 
-func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool, pool *workpool.Pool) *Processor {
+func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool, pools *workpool.Pools) *Processor {
 	return &Processor{
 		store:          store,
 		publisher:      pub,
 		redis:          redisClient,
 		allowFallback:  allowFallback,
-		pool:           pool,
+		pools:          pools,
 		pauseRequested: make(map[string]struct{}),
 		ingestGen:      make(map[string]uint64),
+		fastIngestSem:  make(chan struct{}, workpool.FastIngestPrefetch()),
+		ocrIngestSem:   make(chan struct{}, workpool.OCRIngestPrefetch()),
 	}
 }
 
 func Start(rabbitURL string, proc *Processor) {
-	prefetch := proc.pool.Slots()
+	prefetch := workpool.RabbitPrefetch()
 	go reconnectLoop(rabbitURL, rmq.UploadedQueue, prefetch, proc.handleUploaded)
 	go reconnectLoop(rabbitURL, rmq.DeletedQueue, 0, proc.handleDeleted)
 	go reconnectLoop(rabbitURL, rmq.PauseQueue, 0, proc.handlePause)
@@ -141,6 +147,31 @@ func (p *Processor) isIngestStale(documentID string, gen uint64) bool {
 
 func (p *Processor) shouldStopIngest(documentID string, gen uint64) bool {
 	return p.pauseRequestedFor(documentID) || p.isIngestStale(documentID, gen)
+}
+
+func (p *Processor) ocrWorkerCount(pages int) int {
+	slots := p.pools.OCR.Slots()
+	active := int(p.ocrIngestActive.Load())
+	if active < 1 {
+		active = 1
+	}
+	workers := slots / active
+	if workers < 1 {
+		workers = 1
+	}
+	if pages > 0 && workers > pages {
+		workers = pages
+	}
+	return workers
+}
+
+func (p *Processor) acquireOCRIngestSlot() func() {
+	p.ocrIngestSem <- struct{}{}
+	p.ocrIngestActive.Add(1)
+	return func() {
+		p.ocrIngestActive.Add(-1)
+		<-p.ocrIngestSem
+	}
 }
 
 func (p *Processor) handleDeleted(msg amqp.Delivery) {

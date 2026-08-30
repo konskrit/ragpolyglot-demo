@@ -33,6 +33,8 @@ type OCRState struct {
 	ShouldPause func() bool
 	OnProgress  OCRProgressFunc
 	Pool        *workpool.Pool
+	PageWorkers func(pageCount int) int
+	OnOCRStart  func() func()
 }
 
 func hasEnoughText(s string) bool {
@@ -181,12 +183,16 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 
 	pages := total - start + 1
 	workers := state.Pool.Slots()
+	if state.PageWorkers != nil {
+		workers = state.PageWorkers(total)
+	}
 	if workers < 1 {
 		workers = 1
 	}
 	if workers > pages {
 		workers = pages
 	}
+	log.Printf("[Extractor] OCR workers=%d slots=%d pages=%d", workers, state.Pool.Slots(), pages)
 
 	pageCh := make(chan int, pages)
 	for page := start; page <= total; page++ {

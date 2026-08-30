@@ -106,7 +106,8 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
+        var fullRetry = IngestRetryPolicy.ShouldResetIngest(existing.ErrorReason);
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: fullRetry))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -237,20 +238,25 @@ public static class DocumentEndpoints
         DocumentRepository repo,
         MessageBroker messageBroker,
         ILoggerFactory loggerFactory,
-        int maxRetries = 3,
-        int minAgeMinutes = 5,
-        int limit = 10,
-        CancellationToken cancellationToken = default)
+        IConfiguration config,
+        int? maxRetries,
+        int? minAgeMinutes,
+        int? limit,
+        CancellationToken cancellationToken)
     {
-        if (maxRetries < 1 || minAgeMinutes < 0 || limit < 1)
+        var retries = maxRetries ?? MaintenanceSettings.AutoRetryMaxRetries(config);
+        var age = minAgeMinutes ?? MaintenanceSettings.AutoRetryMinAgeMinutes(config);
+        var batch = limit ?? MaintenanceSettings.AutoRetryLimit(config);
+
+        if (retries < 1 || age < 0 || batch < 1)
         {
             return Results.BadRequest(new { error = "Invalid auto-retry parameters." });
         }
 
         var candidates = await repo.ListAutoRetryCandidatesAsync(
-            maxRetries,
-            minAgeMinutes,
-            limit,
+            retries,
+            age,
+            batch,
             cancellationToken);
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");

@@ -13,6 +13,15 @@ import (
 	"time"
 )
 
+func ocrRenderDPI() int {
+	if v := os.Getenv("OCR_RENDER_DPI"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 72 && n <= 400 {
+			return n
+		}
+	}
+	return 150
+}
+
 func tesseractLangs(hint string) string {
 	switch strings.TrimSpace(hint) {
 	case "ancient_greek":
@@ -165,7 +174,7 @@ func renderPDFPage(pdfPath string, page int, outPrefix string, stop func() bool)
 		stop,
 		"pdftoppm",
 		"-png",
-		"-r", "200",
+		"-r", strconv.Itoa(ocrRenderDPI()),
 		"-f", strconv.Itoa(page),
 		"-l", strconv.Itoa(page),
 		"-singlefile",

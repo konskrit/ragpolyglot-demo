@@ -11,12 +11,13 @@ import (
 )
 
 type Config struct {
-	DatabaseURL        string
-	RedisOpts          *redis.Options
-	RabbitMQURL        string
-	HTTPAddr           string
-	LogRetentionD      int
-	DocumentServiceURL string
+	DatabaseURL              string
+	RedisOpts                *redis.Options
+	RabbitMQURL              string
+	HTTPAddr                 string
+	LogRetentionD            int
+	DocumentServiceURL       string
+	AutoRetryIntervalMinutes int
 }
 
 func Load() *Config {
@@ -28,12 +29,13 @@ func Load() *Config {
 	}
 
 	return &Config{
-		DatabaseURL:        getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/app_db?sslmode=disable"),
-		RedisOpts:          redisOpts,
-		RabbitMQURL:        getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
-		HTTPAddr:           getEnv("EVENT_PROCESSOR_HTTP_ADDR", ":8082"),
-		LogRetentionD:      getEnvInt("LOG_RETENTION_DAYS", 30),
-		DocumentServiceURL: strings.TrimRight(getEnv("DOCUMENT_SERVICE_URL", "http://localhost:5000"), "/"),
+		DatabaseURL:              getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/app_db?sslmode=disable"),
+		RedisOpts:                redisOpts,
+		RabbitMQURL:              getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		HTTPAddr:                 getEnv("EVENT_PROCESSOR_HTTP_ADDR", ":8082"),
+		LogRetentionD:            getEnvInt("LOG_RETENTION_DAYS", 30),
+		DocumentServiceURL:       strings.TrimRight(getEnv("DOCUMENT_SERVICE_URL", "http://localhost:5000"), "/"),
+		AutoRetryIntervalMinutes: getEnvInt("AUTO_RETRY_INTERVAL_MINUTES", 1),
 	}
 }
 

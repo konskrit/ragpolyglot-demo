@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -31,29 +32,38 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		return
 	}
 	gen := p.nextIngestGen(event.DocumentID)
-	go p.ingest(msg, event, gen)
+	go func() {
+		p.ingest(msg, event, gen)
+	}()
+}
+
+func (p *Processor) withFastIngestSlot(fn func()) {
+	p.fastIngestSem <- struct{}{}
+	defer func() { <-p.fastIngestSem }()
+	fn()
 }
 
 func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent, gen uint64) {
 	ctx := context.Background()
 	start := time.Now()
+	acker := newIngestAck(msg)
 	p.setPause(event.DocumentID, false)
 	log.Printf("[Consumer] processing upload documentId=%s", event.DocumentID)
 
-	if p.ackIfStale(msg, event.DocumentID, gen) {
+	if p.ackIfStale(acker, event.DocumentID, gen) {
 		return
 	}
 
 	stopIngest := func() bool { return p.shouldStopIngest(event.DocumentID, gen) }
 
 	fail := func(reason string, cause error) {
-		if p.ackIfStale(msg, event.DocumentID, gen) {
+		if p.ackIfStale(acker, event.DocumentID, gen) {
 			return
 		}
-		p.failIngest(ctx, msg, event.DocumentID, start, reason, cause)
+		p.failIngest(ctx, acker, event.DocumentID, start, reason, cause)
 	}
 	pause := func() {
-		p.ackPaused(msg, event.DocumentID)
+		p.ackPaused(acker, event.DocumentID)
 	}
 
 	cp, err := p.store.GetCheckpoint(ctx, event.DocumentID)
@@ -62,15 +72,20 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		return
 	}
 	if event.Retry {
-		if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
-			fail("storage_error", err)
-			return
+		resumeEmbed := cp != nil && cp.Stage == "embedding"
+		if !resumeEmbed {
+			if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
+				fail("storage_error", err)
+				return
+			}
+			if err := p.store.DeleteCheckpoint(ctx, event.DocumentID); err != nil {
+				fail("storage_error", err)
+				return
+			}
+			cp = nil
+		} else {
+			log.Printf("[Consumer] preserving embedding checkpoint documentId=%s embedDone=%d", event.DocumentID, cp.EmbedDone)
 		}
-		if err := p.store.DeleteCheckpoint(ctx, event.DocumentID); err != nil {
-			fail("storage_error", err)
-			return
-		}
-		cp = nil
 	} else if cp == nil {
 		n, err := p.store.CountChunks(ctx, event.DocumentID)
 		if err != nil {
@@ -78,10 +93,10 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 			return
 		}
 		if n > 0 {
-			if p.ackIfStale(msg, event.DocumentID, gen) {
+			if p.ackIfStale(acker, event.DocumentID, gen) {
 				return
 			}
-			p.completeWithoutIngest(ctx, msg, event.DocumentID, int(n), start)
+			p.completeWithoutIngest(ctx, acker, event.DocumentID, int(n), start)
 			return
 		}
 	}
@@ -99,77 +114,144 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		job.Paused = false
 		fillCheckpointFromEvent(&job, event)
 		embedDone = job.EmbedDone
+		embedDone = syncEmbedDoneFromChunks(ctx, p.store, event.DocumentID, embedDone)
+		job.EmbedDone = embedDone
 		p.publishProgress(event.DocumentID, "embedding", embedDone, 0)
+		acker.ack()
+		p.withFastIngestSlot(func() {
+			p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
+		})
+		return
+	}
+
+	if !p.runExtract(ctx, acker, event, gen, &job, cp, stopIngest, fail, pause) {
+		return
+	}
+
+	p.withFastIngestSlot(func() {
+		p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
+	})
+}
+
+func (p *Processor) runExtract(
+	ctx context.Context,
+	acker *ingestAck,
+	event models.DocumentUploadedEvent,
+	gen uint64,
+	job *storage.IngestCheckpoint,
+	cp *storage.IngestCheckpoint,
+	stopIngest func() bool,
+	fail func(string, error),
+	pause func(),
+) bool {
+	// Cap extract concurrency (incl. pdftotext). Hand off to OCR sem when OCR starts
+	// so heavy OCR does not keep holding a fast slot.
+	p.fastIngestSem <- struct{}{}
+	var releaseFastOnce sync.Once
+	releaseFast := func() {
+		releaseFastOnce.Do(func() { <-p.fastIngestSem })
+	}
+	defer releaseFast()
+
+	state := extractor.OCRState{
+		ShouldPause: stopIngest,
+		Pool:        p.pools.OCR,
+		PageWorkers: p.ocrWorkerCount,
+		OnOCRStart: func() func() {
+			releaseFast()
+			return p.acquireOCRIngestSlot()
+		},
+	}
+	if cp != nil && cp.Stage == "ocr" {
+		*job = *cp
+		job.Paused = false
+		fillCheckpointFromEvent(job, event)
+		state.StartPage = job.OcrPageDone + 1
+		state.PriorText = job.PartialText
+		state.Resolved = job.OcrLangs
 	} else {
-		state := extractor.OCRState{
-			ShouldPause: stopIngest,
-			Pool:        p.pool,
-		}
-		if cp != nil && cp.Stage == "ocr" {
-			job = *cp
-			job.Paused = false
-			fillCheckpointFromEvent(&job, event)
-			state.StartPage = job.OcrPageDone + 1
-			state.PriorText = job.PartialText
-			state.Resolved = job.OcrLangs
-		} else {
-			job.Stage = "ocr"
-			if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
-				fail("storage_error", err)
-				return
-			}
-		}
-
-		p.publishProgress(event.DocumentID, "extracting", 0, 0)
-		state.OnProgress = func(done, total int, textSoFar, langs string) error {
-			if p.isIngestStale(event.DocumentID, gen) {
-				return extractor.ErrPaused
-			}
-			job.Stage = "ocr"
-			job.OcrPageDone = done
-			job.OcrTotal = total
-			job.OcrLangs = langs
-			job.PartialText = textSoFar
-			job.Paused = false
-			if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
-				return err
-			}
-			p.publishProgress(event.DocumentID, "extracting", done, total)
-			return nil
-		}
-
-		text, langs, extractErr := extractor.ExtractFromPathWithOCR(job.FilePath, job.OcrLangHint, state)
-		if extractErr != nil {
-			if errors.Is(extractErr, extractor.ErrPaused) {
-				if p.ackIfStale(msg, event.DocumentID, gen) {
-					return
-				}
-				job.PartialText = text
-				job.Paused = true
-				if langs != "" {
-					job.OcrLangs = langs
-				}
-				if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
-					fail("storage_error", err)
-					return
-				}
-				pause()
-				return
-			}
-			if errors.Is(extractErr, extractor.ErrOcrLanguageNeeded) {
-				fail(extractor.ErrOcrLanguageNeeded.Error(), extractErr)
-				return
-			}
-			fail("chunking_error", extractErr)
-			return
-		}
-		job.PartialText = text
-		if langs != "" {
-			job.OcrLangs = langs
+		job.Stage = "ocr"
+		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+			fail("storage_error", err)
+			return false
 		}
 	}
 
-	if p.ackIfStale(msg, event.DocumentID, gen) {
+	p.publishProgress(event.DocumentID, "extracting", 0, 0)
+	state.OnProgress = func(done, total int, textSoFar, langs string) error {
+		if p.isIngestStale(event.DocumentID, gen) {
+			return extractor.ErrPaused
+		}
+		job.Stage = "ocr"
+		job.OcrPageDone = done
+		job.OcrTotal = total
+		job.OcrLangs = langs
+		job.PartialText = textSoFar
+		job.Paused = false
+		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+			return err
+		}
+		p.publishProgress(event.DocumentID, "extracting", done, total)
+		return nil
+	}
+
+	acker.ack()
+
+	text, langs, extractErr := extractor.ExtractFromPathWithOCR(job.FilePath, job.OcrLangHint, state)
+	if extractErr != nil {
+		if errors.Is(extractErr, extractor.ErrPaused) {
+			if p.ackIfStale(acker, event.DocumentID, gen) {
+				return false
+			}
+			job.PartialText = text
+			job.Paused = true
+			if langs != "" {
+				job.OcrLangs = langs
+			}
+			if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+				fail("storage_error", err)
+				return false
+			}
+			pause()
+			return false
+		}
+		if errors.Is(extractErr, extractor.ErrOcrLanguageNeeded) {
+			fail(extractor.ErrOcrLanguageNeeded.Error(), extractErr)
+			return false
+		}
+		fail("chunking_error", extractErr)
+		return false
+	}
+	job.PartialText = text
+	if langs != "" {
+		job.OcrLangs = langs
+	}
+	return true
+}
+
+func (p *Processor) runEmbedPhase(
+	ctx context.Context,
+	acker *ingestAck,
+	event models.DocumentUploadedEvent,
+	gen uint64,
+	job *storage.IngestCheckpoint,
+	embedDone int,
+	start time.Time,
+	chunkingStart time.Time,
+) {
+	stopIngest := func() bool { return p.shouldStopIngest(event.DocumentID, gen) }
+
+	fail := func(reason string, cause error) {
+		if p.ackIfStale(acker, event.DocumentID, gen) {
+			return
+		}
+		p.failIngest(ctx, acker, event.DocumentID, start, reason, cause)
+	}
+	pause := func() {
+		p.ackPaused(acker, event.DocumentID)
+	}
+
+	if p.ackIfStale(acker, event.DocumentID, gen) {
 		return
 	}
 
@@ -185,19 +267,19 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	}
 	chunkingDuration := time.Since(chunkingStart)
 
+	job.Stage = "embedding"
+	job.EmbedDone = embedDone
+	job.Paused = false
+	if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+		fail("storage_error", err)
+		return
+	}
+
 	if embedDone == 0 {
 		if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
 			fail("storage_error", err)
 			return
 		}
-	}
-
-	job.Stage = "embedding"
-	job.EmbedDone = embedDone
-	job.Paused = false
-	if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
-		fail("storage_error", err)
-		return
 	}
 
 	embedStart := time.Now()
@@ -206,12 +288,12 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 
 	for i := embedDone; i < len(textChunks); i += embedding.BatchSize {
 		if stopIngest() {
-			if p.ackIfStale(msg, event.DocumentID, gen) {
+			if p.ackIfStale(acker, event.DocumentID, gen) {
 				return
 			}
 			job.EmbedDone = totalChunks
 			job.Paused = true
-			if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
+			if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 				fail("storage_error", err)
 				return
 			}
@@ -222,7 +304,7 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		end := min(i+embedding.BatchSize, len(textChunks))
 		batch := textChunks[i:end]
 		var embedded []models.TextChunk
-		err := p.pool.RunWhile(workpool.EmbedBatchMemory(), stopIngest, func() error {
+		err := p.pools.Embed.RunWhile(workpool.EmbedBatchMemory(), stopIngest, func() error {
 			if stopIngest() {
 				return extractor.ErrPaused
 			}
@@ -235,18 +317,21 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		}
 		if err != nil {
 			if errors.Is(err, extractor.ErrPaused) {
-				if p.ackIfStale(msg, event.DocumentID, gen) {
+				if p.ackIfStale(acker, event.DocumentID, gen) {
 					return
 				}
 				job.EmbedDone = totalChunks
 				job.Paused = true
-				if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
+				if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 					fail("storage_error", err)
 					return
 				}
 				pause()
 				return
 			}
+			job.EmbedDone = totalChunks
+			job.Stage = "embedding"
+			_ = p.store.UpsertCheckpoint(ctx, *job)
 			fail("embedding_error", err)
 			return
 		}
@@ -261,17 +346,22 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 			}
 		}
 
-		if p.ackIfStale(msg, event.DocumentID, gen) {
+		if p.ackIfStale(acker, event.DocumentID, gen) {
 			return
 		}
 
 		if err := p.store.InsertChunks(ctx, chunks); err != nil {
+			job.EmbedDone = totalChunks
+			job.Stage = "embedding"
+			_ = p.store.UpsertCheckpoint(ctx, *job)
 			fail("storage_error", err)
 			return
 		}
 		totalChunks += len(chunks)
 		job.EmbedDone = totalChunks
-		if err := p.store.UpsertCheckpoint(ctx, job); err != nil {
+		job.Stage = "embedding"
+		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+			_ = p.store.UpsertCheckpoint(ctx, *job)
 			fail("storage_error", err)
 			return
 		}
@@ -279,7 +369,7 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	}
 	embeddingDuration := time.Since(embedStart)
 
-	if p.ackIfStale(msg, event.DocumentID, gen) {
+	if p.ackIfStale(acker, event.DocumentID, gen) {
 		return
 	}
 
@@ -289,7 +379,7 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 
 	if err := p.publisher.PublishProcessed(event.DocumentID, totalChunks, job.OcrLangs); err != nil {
 		log.Printf("[Consumer] publish document.processed failed: %v", err)
-		_ = msg.Nack(false, true)
+		acker.nack(true)
 		return
 	}
 
@@ -301,15 +391,15 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	})
 
 	_ = p.store.DeleteCheckpoint(ctx, event.DocumentID)
-	_ = msg.Ack(false)
+	acker.ack()
 	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, totalChunks, total)
 }
 
-func (p *Processor) ackIfStale(msg amqp.Delivery, documentID string, gen uint64) bool {
+func (p *Processor) ackIfStale(acker *ingestAck, documentID string, gen uint64) bool {
 	if !p.isIngestStale(documentID, gen) {
 		return false
 	}
-	_ = msg.Ack(false)
+	acker.ack()
 	return true
 }
 
@@ -326,44 +416,63 @@ func fillCheckpointFromEvent(job *storage.IngestCheckpoint, event models.Documen
 	}
 }
 
-func (p *Processor) completeWithoutIngest(ctx context.Context, msg amqp.Delivery, documentID string, chunkCount int, start time.Time) {
+func (p *Processor) completeWithoutIngest(ctx context.Context, acker *ingestAck, documentID string, chunkCount int, start time.Time) {
 	log.Printf("[Consumer] document %s already has chunks=%d, skipping ingest", documentID, chunkCount)
 	if err := p.publisher.PublishProcessed(documentID, chunkCount, ""); err != nil {
 		log.Printf("[Consumer] publish document.processed failed: %v", err)
-		_ = msg.Nack(false, true)
+		acker.nack(true)
 		return
 	}
 	p.store.LogSystem(ctx, "document.processed", documentID, time.Since(start), map[string]any{
 		"chunkCount": chunkCount,
 		"duplicate":  true,
 	})
-	_ = msg.Ack(false)
+	acker.ack()
 }
 
-func (p *Processor) failIngest(ctx context.Context, msg amqp.Delivery, documentID string, start time.Time, reason string, cause error) {
+func syncEmbedDoneFromChunks(ctx context.Context, store *storage.Store, documentID string, embedDone int) int {
+	if store == nil {
+		return embedDone
+	}
+	n, err := store.CountChunks(ctx, documentID)
+	if err != nil || int(n) <= embedDone {
+		return embedDone
+	}
+	return int(n)
+}
+
+func isResumableFailure(reason string) bool {
+	return reason == "embedding_error" || reason == "storage_error"
+}
+
+func (p *Processor) failIngest(ctx context.Context, acker *ingestAck, documentID string, start time.Time, reason string, cause error) {
 	log.Printf("[Consumer] document %s failed (%s): %v", documentID, reason, cause)
-	_, _ = p.store.DeleteChunks(ctx, documentID)
-	_ = p.store.DeleteCheckpoint(ctx, documentID)
+	if isResumableFailure(reason) {
+		log.Printf("[Consumer] preserving ingest progress documentId=%s reason=%s", documentID, reason)
+	} else {
+		_, _ = p.store.DeleteChunks(ctx, documentID)
+		_ = p.store.DeleteCheckpoint(ctx, documentID)
+	}
 	if pubErr := p.publisher.PublishFailed(documentID, reason); pubErr != nil {
 		log.Printf("[Consumer] publish document.failed failed: %v", pubErr)
-		_ = msg.Nack(false, true)
+		acker.nack(true)
 		return
 	}
 	p.store.LogSystem(ctx, reason, documentID, time.Since(start), map[string]any{
 		"error": cause.Error(),
 	})
-	_ = msg.Ack(false)
+	acker.ack()
 }
 
-func (p *Processor) ackPaused(msg amqp.Delivery, documentID string) {
+func (p *Processor) ackPaused(acker *ingestAck, documentID string) {
 	log.Printf("[Consumer] document %s paused", documentID)
 	if pubErr := p.publisher.PublishPaused(documentID); pubErr != nil {
 		log.Printf("[Consumer] publish document.paused failed: %v", pubErr)
-		_ = msg.Nack(false, true)
+		acker.nack(true)
 		return
 	}
 	p.setPause(documentID, false)
-	_ = msg.Ack(false)
+	acker.ack()
 }
 
 func (p *Processor) publishProgress(documentID, stage string, done, total int) {

@@ -41,9 +41,9 @@ func NewRunner(store *storage.Store, redisClient *redis.Client, cfg *config.Conf
 	}
 }
 
-func (r *Runner) Start(rabbitURL string) {
+func (r *Runner) Start(rabbitURL string, autoRetryEvery time.Duration) {
 	go r.reconnectLoop(rabbitURL)
-	go schedulerLoop(rabbitURL)
+	go schedulerLoop(rabbitURL, autoRetryEvery)
 	log.Printf("[Jobs] listening on %s (scheduler enabled)", rmq.JobsQueue)
 }
 

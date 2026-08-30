@@ -163,7 +163,7 @@ func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 	resume := state.StartPage > 1 || strings.TrimSpace(state.PriorText) != "" || strings.TrimSpace(state.Resolved) != ""
 	if resume || strings.TrimSpace(ocrLang) != "" {
 		log.Println("[Extractor] Running OCR")
-		return extractPDFWithOCR(path, ocrLang, state)
+		return runPDFWithOCR(path, ocrLang, state)
 	}
 
 	native, err := pdftotext(path, state.ShouldPause)
@@ -172,12 +172,22 @@ func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 			return "", "", err
 		}
 		log.Printf("[Extractor] pdftotext failed, trying OCR: %v", err)
-		return extractPDFWithOCR(path, ocrLang, state)
+		return runPDFWithOCR(path, ocrLang, state)
 	}
 	if hasEnoughText(native) {
 		return trimToLimit(strings.TrimSpace(native)), "", nil
 	}
 	log.Println("[Extractor] PDF has little native text, running OCR")
+	return runPDFWithOCR(path, ocrLang, state)
+}
+
+func runPDFWithOCR(path, ocrLang string, state OCRState) (string, string, error) {
+	if state.OnOCRStart != nil {
+		release := state.OnOCRStart()
+		if release != nil {
+			defer release()
+		}
+	}
 	return extractPDFWithOCR(path, ocrLang, state)
 }
 

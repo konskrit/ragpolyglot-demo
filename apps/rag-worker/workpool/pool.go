@@ -20,17 +20,22 @@ type Pool struct {
 }
 
 func New() *Pool {
+	return NewWithConfig(cpuSlots(), memoryBudgetBytes(), "work")
+}
+
+func NewWithConfig(slots int, memBudget int64, label string) *Pool {
+	if slots < 1 {
+		slots = 1
+	}
 	p := &Pool{
-		maxSlots:  cpuSlots(),
-		memBudget: memoryBudgetBytes(),
+		maxSlots:  slots,
+		memBudget: memBudget,
 	}
-	if p.memBudget < OCRPageMemory() {
-		log.Printf("[WorkPool] warning: memory budget %dMB is below one OCR page (%dMB); raise WORK_MEMORY_BUDGET_MB",
-			p.memBudget/(1024*1024), OCRPageMemory()/(1024*1024))
+	if label == "ocr" && p.memBudget < OCRPageMemory() {
+		log.Printf("[WorkPool:%s] warning: memory budget %dMB is below one OCR page (%dMB); raise WORK_MEMORY_BUDGET_MB",
+			label, p.memBudget/(1024*1024), OCRPageMemory()/(1024*1024))
 	}
-	log.Printf("[WorkPool] slots=%d memoryBudget=%dMB ocrPage=%dMB embedBatch=%dMB",
-		p.maxSlots, p.memBudget/(1024*1024),
-		OCRPageMemory()/(1024*1024), EmbedBatchMemory()/(1024*1024))
+	log.Printf("[WorkPool:%s] slots=%d memoryBudget=%dMB", label, p.maxSlots, p.memBudget/(1024*1024))
 	return p
 }
 
