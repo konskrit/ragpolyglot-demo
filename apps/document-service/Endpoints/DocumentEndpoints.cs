@@ -306,6 +306,11 @@ public static class DocumentEndpoints
             return Results.NotFound(new { error = "Document not found" });
         }
 
+        if (!await repo.DeleteAsync(id, cancellationToken))
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
         try
         {
             await messageBroker.PublishDocumentDeletedAsync(id, cancellationToken);
@@ -315,11 +320,9 @@ public static class DocumentEndpoints
             var logger = loggerFactory.CreateLogger("DocumentEndpoints");
             logger.LogError(ex, "Failed to publish document.deleted for {DocumentId}", id);
             return Results.Problem(
-                detail: "Delete event could not be published; document was not removed.",
+                detail: "Document metadata was removed but the delete event could not be published.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
-
-        await repo.DeleteAsync(id, cancellationToken);
 
         return Results.Ok(new
         {

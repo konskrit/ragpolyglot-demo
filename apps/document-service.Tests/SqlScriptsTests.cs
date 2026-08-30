@@ -14,6 +14,8 @@ public class SqlScriptsTests
     [InlineData("documents/delete.sql")]
     [InlineData("documents/mark_ready.sql")]
     [InlineData("documents/mark_failed.sql")]
+    [InlineData("documents/mark_processing.sql")]
+    [InlineData("documents/fail_stale.sql")]
     [InlineData("documents/claim_retry.sql")]
     [InlineData("documents/claim_ocr_lang.sql")]
     [InlineData("documents/complete_retry.sql")]

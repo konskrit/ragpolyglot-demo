@@ -25,4 +25,11 @@ public class DocumentStatusSqlTests
         var sql = SqlScripts.Load("documents/mark_processing.sql");
         Assert.Contains("status = 'uploading'", sql);
     }
+
+    [Fact]
+    public void Fail_stale_includes_paused()
+    {
+        var sql = SqlScripts.Load("documents/fail_stale.sql");
+        Assert.Contains("status IN ('processing', 'paused')", sql);
+    }
 }

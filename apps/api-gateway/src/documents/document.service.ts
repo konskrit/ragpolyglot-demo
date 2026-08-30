@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { isAxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { access, unlink } from 'fs/promises';
 import { constants } from 'fs';
@@ -174,15 +175,26 @@ export class DocumentService {
     );
     const filename = this.uploadFilename(existing.data.filePath);
 
-    await firstValueFrom(
-      this.httpService.delete(
-        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
-      ),
-    );
+    const removeUpload = async () => {
+      if (filename) {
+        await unlink(join(Config.uploadsDir, filename)).catch(() => undefined);
+      }
+    };
 
-    if (filename) {
-      await unlink(join(Config.uploadsDir, filename)).catch(() => undefined);
+    try {
+      await firstValueFrom(
+        this.httpService.delete(
+          `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
+        ),
+      );
+    } catch (err) {
+      if (isAxiosError(err) && err.response?.status === 503) {
+        await removeUpload();
+      }
+      throw err;
     }
+
+    await removeUpload();
   }
 
   private uploadFilename(filePath?: string): string | null {

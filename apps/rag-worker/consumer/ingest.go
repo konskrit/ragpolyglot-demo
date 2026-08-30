@@ -373,10 +373,6 @@ func (p *Processor) runEmbedPhase(
 		return
 	}
 
-	if p.redis != nil {
-		_ = p.redis.Set(ctx, "doc:"+event.DocumentID+":chunks", totalChunks, 24*time.Hour).Err()
-	}
-
 	if err := p.publisher.PublishProcessed(event.DocumentID, totalChunks, job.OcrLangs); err != nil {
 		log.Printf("[Consumer] publish document.processed failed: %v", err)
 		acker.nack(true)

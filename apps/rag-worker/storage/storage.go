@@ -62,6 +62,26 @@ CREATE TABLE IF NOT EXISTS document_ingest_checkpoints (
 ALTER TABLE document_ingest_checkpoints
     ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE;
 `)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.pool.Exec(ctx, `
+DELETE FROM document_ingest_checkpoints c
+WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.id = c.document_id);
+
+DO $$ BEGIN
+  IF to_regclass('public.documents') IS NOT NULL
+  AND to_regclass('public.document_ingest_checkpoints') IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'document_ingest_checkpoints_document_id_fkey'
+  ) THEN
+    ALTER TABLE document_ingest_checkpoints
+      ADD CONSTRAINT document_ingest_checkpoints_document_id_fkey
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+`)
 	return err
 }
 

@@ -200,10 +200,6 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 	}
 	_ = p.store.DeleteCheckpoint(ctx, event.DocumentID)
 
-	if p.redis != nil {
-		_ = p.redis.Del(ctx, "doc:"+event.DocumentID+":chunks").Err()
-	}
-
 	p.store.LogSystem(ctx, "document.deleted", event.DocumentID, time.Since(start), map[string]any{
 		"deletedChunks": deleted,
 	})
