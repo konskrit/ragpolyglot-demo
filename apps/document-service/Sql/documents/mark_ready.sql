@@ -6,4 +6,4 @@ SET status = 'ready',
     progress_total = NULL,
     ocr_lang = COALESCE(@ocrLang, ocr_lang),
     updated_at = NOW()
-WHERE id = @id;
+WHERE id = @id AND status = 'processing';
