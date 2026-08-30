@@ -1,3 +1,7 @@
+jest.mock('../config', () => ({
+  API_BASE_URL: '',
+}));
+
 import { mapApiDocuments } from './documents';
 import { formatSimilarityPercent } from './formatSimilarity';
 
