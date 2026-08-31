@@ -54,3 +54,14 @@ func TestFindBreakPoint_PrefersSentenceBoundary(t *testing.T) {
 		t.Fatalf("expected break after sentence, got %d", got)
 	}
 }
+
+func TestChunkText_WhitespaceWindowAdvances(t *testing.T) {
+	chunkSize := targetTokens * charsPerToken
+	var b strings.Builder
+	b.WriteString(strings.Repeat(" ", chunkSize))
+	b.WriteString("tail content that should still be chunked")
+	chunks := ChunkText(b.String())
+	if len(chunks) == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+}

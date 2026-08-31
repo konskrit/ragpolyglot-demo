@@ -260,8 +260,8 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 
 	texts := make([]string, len(outPaths))
 	for i, outPath := range outPaths {
-		defer os.Remove(outPath)
 		body, err := os.ReadFile(outPath)
+		_ = os.Remove(outPath)
 		if err != nil {
 			return nil, fmt.Errorf("kraken output %q: %w", outPath, err)
 		}

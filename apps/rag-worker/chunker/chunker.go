@@ -48,12 +48,19 @@ func ChunkText(text string) []string {
 			chunks = append(chunks, chunk)
 		}
 
+		prevStart := start
 		start = breakPoint - overlap
 		if start < 0 {
 			start = 0
 		}
 		if start >= breakPoint {
 			start = breakPoint
+		}
+		if chunk == "" && start <= prevStart {
+			if end >= len(runes) {
+				break
+			}
+			start = end
 		}
 	}
 

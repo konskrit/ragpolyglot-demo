@@ -228,15 +228,17 @@ public static class DocumentEndpoints
 
     private static async Task<IResult> FailStaleProcessing(
         DocumentRepository repo,
-        int minutes = 60,
+        IConfiguration config,
+        int? minutes,
         CancellationToken cancellationToken = default)
     {
-        if (minutes < 1)
+        var staleMinutes = minutes ?? MaintenanceSettings.FailStaleMinutes(config);
+        if (staleMinutes < 1)
         {
             return Results.BadRequest(new { error = "minutes must be >= 1" });
         }
 
-        var failed = await repo.FailStaleProcessingAsync(minutes, cancellationToken);
+        var failed = await repo.FailStaleProcessingAsync(staleMinutes, cancellationToken);
         return Results.Ok(new { failed });
     }
 

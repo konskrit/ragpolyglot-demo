@@ -23,5 +23,10 @@ func (a *ingestAck) nack(requeue bool) {
 	if a == nil || a.done {
 		return
 	}
+	a.done = true
 	_ = a.msg.Nack(false, requeue)
+}
+
+func (a *ingestAck) settled() bool {
+	return a == nil || a.done
 }

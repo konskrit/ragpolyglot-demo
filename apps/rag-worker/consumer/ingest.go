@@ -363,7 +363,6 @@ func (p *Processor) runEmbedPhase(
 		job.EmbedDone = totalChunks
 		job.Stage = "embedding"
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
-			_ = p.store.UpsertCheckpoint(ctx, *job)
 			fail("storage_error", err)
 			return
 		}
@@ -375,9 +374,13 @@ func (p *Processor) runEmbedPhase(
 		return
 	}
 
-	if err := p.publisher.PublishProcessed(event.DocumentID, totalChunks, job.OcrLangs); err != nil {
-		log.Printf("[Consumer] publish document.processed failed: %v", err)
-		acker.nack(true)
+	if err := publishWithRetry("document.processed", func() error {
+		return p.publisher.PublishProcessed(event.DocumentID, totalChunks, job.OcrLangs)
+	}); err != nil {
+		log.Printf("[Consumer] CRITICAL: document.processed publish failed documentId=%s: %v", event.DocumentID, err)
+		if !acker.settled() {
+			acker.nack(true)
+		}
 		return
 	}
 
@@ -416,9 +419,13 @@ func fillCheckpointFromEvent(job *storage.IngestCheckpoint, event models.Documen
 
 func (p *Processor) completeWithoutIngest(ctx context.Context, acker *ingestAck, documentID string, chunkCount int, start time.Time) {
 	log.Printf("[Consumer] document %s already has chunks=%d, skipping ingest", documentID, chunkCount)
-	if err := p.publisher.PublishProcessed(documentID, chunkCount, ""); err != nil {
-		log.Printf("[Consumer] publish document.processed failed: %v", err)
-		acker.nack(true)
+	if err := publishWithRetry("document.processed", func() error {
+		return p.publisher.PublishProcessed(documentID, chunkCount, "")
+	}); err != nil {
+		log.Printf("[Consumer] CRITICAL: document.processed publish failed documentId=%s: %v", documentID, err)
+		if !acker.settled() {
+			acker.nack(true)
+		}
 		return
 	}
 	p.store.LogSystem(ctx, "document.processed", documentID, time.Since(start), map[string]any{
@@ -445,16 +452,20 @@ func isResumableFailure(reason string) bool {
 
 func (p *Processor) failIngest(ctx context.Context, acker *ingestAck, documentID string, start time.Time, reason string, cause error) {
 	log.Printf("[Consumer] document %s failed (%s): %v", documentID, reason, cause)
+	if pubErr := publishWithRetry("document.failed", func() error {
+		return p.publisher.PublishFailed(documentID, reason)
+	}); pubErr != nil {
+		log.Printf("[Consumer] CRITICAL: document.failed publish failed documentId=%s: %v", documentID, pubErr)
+		if !acker.settled() {
+			acker.nack(true)
+		}
+		return
+	}
 	if isResumableFailure(reason) {
 		log.Printf("[Consumer] preserving ingest progress documentId=%s reason=%s", documentID, reason)
 	} else {
 		_, _ = p.store.DeleteChunks(ctx, documentID)
 		_ = p.store.DeleteCheckpoint(ctx, documentID)
-	}
-	if pubErr := p.publisher.PublishFailed(documentID, reason); pubErr != nil {
-		log.Printf("[Consumer] publish document.failed failed: %v", pubErr)
-		acker.nack(true)
-		return
 	}
 	p.store.LogSystem(ctx, reason, documentID, time.Since(start), map[string]any{
 		"error": cause.Error(),
@@ -464,9 +475,13 @@ func (p *Processor) failIngest(ctx context.Context, acker *ingestAck, documentID
 
 func (p *Processor) ackPaused(acker *ingestAck, documentID string) {
 	log.Printf("[Consumer] document %s paused", documentID)
-	if pubErr := p.publisher.PublishPaused(documentID); pubErr != nil {
-		log.Printf("[Consumer] publish document.paused failed: %v", pubErr)
-		acker.nack(true)
+	if pubErr := publishWithRetry("document.paused", func() error {
+		return p.publisher.PublishPaused(documentID)
+	}); pubErr != nil {
+		log.Printf("[Consumer] CRITICAL: document.paused publish failed documentId=%s: %v", documentID, pubErr)
+		if !acker.settled() {
+			acker.nack(true)
+		}
 		return
 	}
 	p.setPause(documentID, false)
