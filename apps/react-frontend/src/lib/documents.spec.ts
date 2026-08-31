@@ -1,9 +1,52 @@
-import { mapApiDocuments, mapApiChunks } from './documents';
+import {
+  mapApiDocuments,
+  mapApiChunks,
+  applyDocumentStatusUpdate,
+} from './documents';
 import { formatSimilarityPercent } from './formatSimilarity';
 
 jest.mock('../config', () => ({
   API_BASE_URL: '',
 }));
+
+describe('applyDocumentStatusUpdate', () => {
+  const base = {
+    id: '1',
+    title: 'Doc',
+    status: 'processing' as const,
+    errorReason: 'old',
+    progressStage: 'embedding' as const,
+    progressDone: 1,
+    progressTotal: 3,
+  };
+
+  it('clears fields on ready', () => {
+    expect(applyDocumentStatusUpdate(base, { status: 'ready' })).toMatchObject({
+      status: 'ready',
+      errorReason: undefined,
+      progressStage: undefined,
+    });
+  });
+
+  it('clears errorReason on processing', () => {
+    expect(
+      applyDocumentStatusUpdate(base, { status: 'processing' }),
+    ).toMatchObject({
+      status: 'processing',
+      errorReason: undefined,
+    });
+  });
+
+  it('clears progress on paused', () => {
+    expect(applyDocumentStatusUpdate(base, { status: 'paused' })).toMatchObject(
+      {
+        status: 'paused',
+        progressStage: undefined,
+        progressDone: undefined,
+      },
+    );
+  });
+});
 
 describe('mapApiDocuments', () => {
   it('returns empty array for non-arrays', () => {

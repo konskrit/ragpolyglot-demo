@@ -1,6 +1,7 @@
 import type {
   DocumentChunk,
   DocumentSummary,
+  DocumentStatusUpdate,
   OcrLanguageOption,
 } from '@ragpolyglot-shared';
 import {
@@ -8,6 +9,71 @@ import {
   normalizeDocumentStatus,
 } from '@ragpolyglot-shared';
 import { getJson } from '../api/client';
+
+export function applyDocumentStatusUpdate(
+  doc: DocumentSummary,
+  {
+    status,
+    errorReason,
+    progressStage,
+    progressDone,
+    progressTotal,
+  }: Pick<
+    DocumentStatusUpdate,
+    | 'status'
+    | 'errorReason'
+    | 'progressStage'
+    | 'progressDone'
+    | 'progressTotal'
+  >,
+): DocumentSummary | null {
+  const normalized = normalizeDocumentStatus(status);
+  if (!normalized) return null;
+
+  if (normalized === 'ready') {
+    return {
+      ...doc,
+      status: 'ready',
+      errorReason: undefined,
+      progressStage: undefined,
+      progressDone: undefined,
+      progressTotal: undefined,
+    };
+  }
+
+  if (normalized === 'failed') {
+    return {
+      ...doc,
+      status: 'failed',
+      errorReason:
+        typeof errorReason === 'string' ? errorReason : doc.errorReason,
+      progressStage: undefined,
+      progressDone: undefined,
+      progressTotal: undefined,
+    };
+  }
+
+  if (normalized === 'paused') {
+    return {
+      ...doc,
+      status: 'paused',
+      progressStage: undefined,
+      progressDone: undefined,
+      progressTotal: undefined,
+    };
+  }
+
+  return {
+    ...doc,
+    status: normalized,
+    ...(normalized === 'processing' ? { errorReason: undefined } : {}),
+    progressStage: isDocumentProgressStage(progressStage)
+      ? progressStage
+      : undefined,
+    progressDone,
+    progressTotal,
+  };
+}
 
 function mapDocumentSummary(item: unknown): DocumentSummary | null {
   if (!item || typeof item !== 'object') return null;

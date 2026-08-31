@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -8,13 +9,15 @@ import {
 } from 'react';
 import { deleteJson, getJson, postJson } from '../api/client';
 import {
-  isDocumentProgressStage,
   isActiveDocumentStatus,
-  normalizeDocumentStatus,
   type DocumentStatusUpdate,
   type DocumentSummary,
 } from '@ragpolyglot-shared';
-import { mapApiDocument, mapApiDocuments } from '../lib/documents';
+import {
+  applyDocumentStatusUpdate,
+  mapApiDocument,
+  mapApiDocuments,
+} from '../lib/documents';
 import {
   onWebSocketConnect,
   subscribeDocument,
@@ -31,6 +34,7 @@ interface DocumentsContextValue {
   changeOcrLang: (id: string, ocrLang?: string) => Promise<void>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
+  ensureSubscribed: (doc: Pick<DocumentSummary, 'id' | 'status'>) => void;
 }
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
@@ -42,6 +46,16 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const subscribedRef = useRef(new Set<string>());
   const documentsRef = useRef(documents);
   documentsRef.current = documents;
+
+  const ensureSubscribed = useCallback(
+    (doc: Pick<DocumentSummary, 'id' | 'status'>) => {
+      if (!isActiveDocumentStatus(doc.status)) return;
+      if (subscribedRef.current.has(doc.id)) return;
+      subscribedRef.current.add(doc.id);
+      subscribeDocument(doc.id);
+    },
+    [],
+  );
 
   function subscribeActiveDocuments(docs: DocumentSummary[], force = false) {
     for (const doc of docs) {
@@ -87,7 +101,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       }
 
       setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
-      subscribeDocument(id);
+      ensureSubscribed(mapped);
     } catch (e) {
       await refresh();
       throw e;
@@ -105,7 +119,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         throw new Error('Invalid OCR language response');
       }
       setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
-      subscribeActiveDocuments([mapped]);
+      ensureSubscribed(mapped);
     } catch (e) {
       await refresh();
       throw e;
@@ -120,7 +134,6 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           doc.id === id ? { ...doc, status: 'paused' as const } : doc,
         ),
       );
-      subscribeDocument(id);
     } catch (e) {
       await refresh();
       throw e;
@@ -137,7 +150,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         throw new Error('Invalid resume response');
       }
       setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
-      subscribeDocument(id);
+      ensureSubscribed(mapped);
     } catch (e) {
       await refresh();
       throw e;
@@ -157,15 +170,13 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
-    if (!hasActive) return;
-
     const timer = window.setInterval(() => {
-      void refresh();
+      if (documentsRef.current.some((d) => isActiveDocumentStatus(d.status))) {
+        void refresh();
+      }
     }, 3000);
-
     return () => window.clearInterval(timer);
-  }, [documents]);
+  }, []);
 
   useWebSocketEvent<DocumentStatusUpdate>(
     'document:status-update',
@@ -177,65 +188,34 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       progressDone,
       progressTotal,
     }) => {
-      const normalized = normalizeDocumentStatus(status);
-      if (!normalized) return;
-
       let missing = false;
+      let needsRefresh = false;
+
       setDocuments((prev) => {
         const exists = prev.some((d) => d.id === documentId);
         if (!exists) {
           missing = true;
           return prev;
         }
+
         return prev.map((doc) => {
           if (doc.id !== documentId) return doc;
-
-          if (normalized === 'ready') {
-            return {
-              ...doc,
-              status: 'ready',
-              errorReason: undefined,
-              progressStage: undefined,
-              progressDone: undefined,
-              progressTotal: undefined,
-            };
-          }
-
-          if (normalized === 'failed') {
-            return {
-              ...doc,
-              status: 'failed',
-              errorReason:
-                typeof errorReason === 'string' ? errorReason : doc.errorReason,
-              progressStage: undefined,
-              progressDone: undefined,
-              progressTotal: undefined,
-            };
-          }
-
-          if (normalized === 'paused') {
-            return { ...doc, status: 'paused' };
-          }
-
-          return {
-            ...doc,
-            status: normalized,
-            ...(normalized === 'processing' ? { errorReason: undefined } : {}),
-            progressStage: isDocumentProgressStage(progressStage)
-              ? progressStage
-              : undefined,
+          const updated = applyDocumentStatusUpdate(doc, {
+            status,
+            errorReason,
+            progressStage,
             progressDone,
             progressTotal,
-          };
+          });
+          if (!updated) return doc;
+          if (updated.status === 'failed' && typeof errorReason !== 'string') {
+            needsRefresh = true;
+          }
+          return updated;
         });
       });
 
-      if (missing) {
-        void refresh();
-        return;
-      }
-
-      if (normalized === 'failed' && typeof errorReason !== 'string') {
+      if (missing || needsRefresh) {
         void refresh();
       }
     },
@@ -253,6 +233,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         changeOcrLang,
         pause,
         resume,
+        ensureSubscribed,
       }}
     >
       {children}
