@@ -14,10 +14,6 @@ export function DashboardPage() {
     usePolledJson<MetricsSnapshot>('/api/metrics');
   const { documents, loading } = useDocuments();
 
-  if (loading && documents.length === 0) {
-    return <PageSpinner />;
-  }
-
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
@@ -70,7 +66,11 @@ export function DashboardPage() {
         </Link>
       </section>
 
-      <DocumentsList limit={5} title="Recent documents" showViewAll />
+      {loading && documents.length === 0 ? (
+        <PageSpinner />
+      ) : (
+        <DocumentsList limit={5} title="Recent documents" showViewAll />
+      )}
     </div>
   );
 }

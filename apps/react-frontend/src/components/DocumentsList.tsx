@@ -43,7 +43,7 @@ export function DocumentsList({
           )}
           <ul className="space-y-2">
             {visible.map((doc) => (
-              <DocumentRow key={doc.id} doc={doc} showDate />
+              <DocumentRow key={doc.id} doc={doc} />
             ))}
           </ul>
         </section>

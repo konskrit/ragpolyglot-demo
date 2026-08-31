@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import type { DocumentChunk, DocumentSummary } from '@ragpolyglot-shared';
-import { formatDocumentProgressLabel } from '@ragpolyglot-shared';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  formatDocumentProgressLabel,
+  type DocumentChunk,
+  type DocumentSummary,
+} from '@ragpolyglot-shared';
+import { DocumentActions } from '../components/DocumentActions';
 import { StatusBadge } from '../components/StatusBadge';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
@@ -9,8 +13,16 @@ import { loadDocument, loadDocumentChunks } from '../lib/documents';
 
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { documents } = useDocuments();
-  const listDoc = id ? documents.find((d) => d.id === id) : undefined;
+  if (!id) {
+    return <p className="text-red-400">Missing document id.</p>;
+  }
+  return <DocumentDetail key={id} id={id} />;
+}
+
+function DocumentDetail({ id }: { id: string }) {
+  const navigate = useNavigate();
+  const { documents, loading: listLoading } = useDocuments();
+  const listDoc = documents.find((d) => d.id === id);
 
   const [fetched, setFetched] = useState<DocumentSummary | null>(null);
   const [chunks, setChunks] = useState<DocumentChunk[]>([]);
@@ -20,20 +32,11 @@ export function DocumentDetailPage() {
   const [chunksError, setChunksError] = useState<string | null>(null);
 
   const doc = listDoc ?? fetched;
+  const inList = listDoc !== undefined;
 
   useEffect(() => {
-    setFetched(null);
-    setChunks([]);
-    setError(null);
-    setChunksError(null);
-    setLoading(true);
-    setChunksLoading(false);
-  }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-
-    if (listDoc) {
+    if (listLoading) return;
+    if (inList) {
       setLoading(false);
       return;
     }
@@ -60,10 +63,10 @@ export function DocumentDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, listDoc]);
+  }, [id, inList, listLoading]);
 
   useEffect(() => {
-    if (!id || doc?.status !== 'ready') {
+    if (doc?.status !== 'ready') {
       setChunks([]);
       return;
     }
@@ -91,10 +94,6 @@ export function DocumentDetailPage() {
       cancelled = true;
     };
   }, [id, doc?.status]);
-
-  if (!id) {
-    return <p className="text-red-400">Missing document id.</p>;
-  }
 
   if (loading && !doc) {
     return <PageSpinner />;
@@ -130,9 +129,12 @@ export function DocumentDetailPage() {
       </Link>
 
       <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold text-white">{doc.title}</h1>
-          <StatusBadge status={doc.status} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
+            <h1 className="text-2xl font-semibold text-white">{doc.title}</h1>
+            <StatusBadge status={doc.status} />
+          </div>
+          <DocumentActions doc={doc} onDeleted={() => navigate('/documents')} />
         </div>
         {doc.createdAt && (
           <p className="text-sm text-gray-500">

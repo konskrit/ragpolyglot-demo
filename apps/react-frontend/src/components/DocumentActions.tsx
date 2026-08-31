@@ -18,43 +18,36 @@ export function DocumentActions({
   doc: DocumentSummary;
   onDeleted?: () => void;
 }) {
-  const { remove, retry, changeOcrLang, pause, resume, ensureSubscribed } =
-    useDocuments();
+  const { remove, retry, changeOcrLang, pause, resume } = useDocuments();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [ocrLang, setOcrLang] = useState(doc.ocrLang ?? '');
+  const [draftLang, setDraftLang] = useState<string | null>(null);
   const [ocrLanguages, setOcrLanguages] = useState<OcrLanguageOption[]>([]);
 
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
   const canPause = doc.status === 'processing';
   const canResume = doc.status === 'paused';
+  const canDelete = canRetry || canResume || canPause;
+  const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
   const showOcrLanguage = showOcrLanguageMenu(doc);
   const liveOcrLangChange = canChangeOcrLangLive(doc);
-  const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
-  const selectLang = ocrLangSelectValue(ocrLang, ocrLanguages);
+  const selectLang = ocrLangSelectValue(draftLang ?? doc.ocrLang, ocrLanguages);
   const appliedLang = ocrLangSelectValue(doc.ocrLang, ocrLanguages);
   const selectedInList =
     !selectLang || ocrLanguages.some((lang) => lang.code === selectLang);
-
-  useEffect(() => {
-    setOcrLang(doc.ocrLang ?? '');
-  }, [doc.id, doc.ocrLang]);
-
-  useEffect(() => {
-    ensureSubscribed({ id: doc.id, status: doc.status });
-  }, [doc.id, doc.status, ensureSubscribed]);
 
   useEffect(() => {
     if (!showOcrLanguage) return;
     let cancelled = false;
     let attempt = 0;
     let timer: number | undefined;
+    const maxAttempts = 3;
 
     const load = () => {
       void loadOcrLanguages().then((langs) => {
         if (cancelled) return;
         setOcrLanguages(langs);
-        if (langs.length === 0 && attempt < 3) {
+        if (langs.length === 0 && attempt < maxAttempts) {
           attempt += 1;
           timer = window.setTimeout(load, 1000 * attempt);
         }
@@ -85,13 +78,20 @@ export function DocumentActions({
   };
 
   const onOcrLangChange = (value: string) => {
-    setOcrLang(value);
+    setDraftLang(value);
     if (!liveOcrLangChange || value === appliedLang) return;
-    void runAction(
-      () => changeOcrLang(doc.id, value || undefined),
-      'OCR language change failed',
-    );
+    void runAction(async () => {
+      try {
+        await changeOcrLang(doc.id, value || undefined);
+      } finally {
+        setDraftLang(null);
+      }
+    }, 'OCR language change failed');
   };
+
+  if (!showOcrLanguage && !canDelete) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -163,20 +163,22 @@ export function DocumentActions({
             {pending ? '…' : 'Retry'}
           </Button>
         )}
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() =>
-            void runAction(async () => {
-              await remove(doc.id);
-              onDeleted?.();
-            }, 'Delete failed')
-          }
-          disabled={pending}
-          aria-label={`Delete ${doc.title}`}
-        >
-          {pending ? '…' : 'Delete'}
-        </Button>
+        {canDelete && (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() =>
+              void runAction(async () => {
+                await remove(doc.id);
+                onDeleted?.();
+              }, 'Delete failed')
+            }
+            disabled={pending}
+            aria-label={`Delete ${doc.title}`}
+          >
+            {pending ? '…' : 'Delete'}
+          </Button>
+        )}
       </div>
       {actionError && <p className="text-xs text-red-400">{actionError}</p>}
     </div>

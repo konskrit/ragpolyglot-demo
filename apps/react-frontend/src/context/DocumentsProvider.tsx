@@ -37,12 +37,16 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const subscribedRef = useRef(new Set<string>());
 
+  function watchDocument(id: string) {
+    if (subscribedRef.current.has(id)) return;
+    subscribedRef.current.add(id);
+    subscribeDocument(id);
+  }
+
   function subscribeActiveDocuments(docs: DocumentSummary[]) {
     for (const doc of docs) {
       if (!isActiveDocumentStatus(doc.status)) continue;
-      if (subscribedRef.current.has(doc.id)) continue;
-      subscribedRef.current.add(doc.id);
-      subscribeDocument(doc.id);
+      watchDocument(doc.id);
     }
   }
 
@@ -69,41 +73,44 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     setDocuments((prev) => prev.filter((d) => d.id !== id));
   }
 
-  async function retry(id: string, ocrLang?: string) {
+  async function applyMappedUpdate(
+    id: string,
+    request: Promise<unknown>,
+    invalidMessage: string,
+  ): Promise<DocumentSummary> {
     try {
-      const updated = await postJson<unknown>(
-        `/api/documents/${encodeURIComponent(id)}/retry`,
-        { ocrLang: ocrLang ?? null },
-      );
-      const mapped = mapApiDocument(updated);
+      const mapped = mapApiDocument(await request);
       if (!mapped) {
-        throw new Error('Invalid retry response');
+        throw new Error(invalidMessage);
       }
-
       setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
-      subscribeDocument(id);
+      return mapped;
     } catch (e) {
       await refresh();
       throw e;
     }
   }
 
+  async function retry(id: string, ocrLang?: string) {
+    await applyMappedUpdate(
+      id,
+      postJson(`/api/documents/${encodeURIComponent(id)}/retry`, {
+        ocrLang: ocrLang ?? null,
+      }),
+      'Invalid retry response',
+    );
+    subscribeDocument(id);
+  }
+
   async function changeOcrLang(id: string, ocrLang?: string) {
-    try {
-      const updated = await postJson<unknown>(
-        `/api/documents/${encodeURIComponent(id)}/ocr-lang`,
-        { ocrLang: ocrLang ?? null },
-      );
-      const mapped = mapApiDocument(updated);
-      if (!mapped) {
-        throw new Error('Invalid OCR language response');
-      }
-      setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
-      subscribeActiveDocuments([mapped]);
-    } catch (e) {
-      await refresh();
-      throw e;
-    }
+    const mapped = await applyMappedUpdate(
+      id,
+      postJson(`/api/documents/${encodeURIComponent(id)}/ocr-lang`, {
+        ocrLang: ocrLang ?? null,
+      }),
+      'Invalid OCR language response',
+    );
+    subscribeActiveDocuments([mapped]);
   }
 
   async function pause(id: string) {
@@ -117,28 +124,21 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   }
 
   async function resume(id: string) {
-    try {
-      const updated = await postJson<unknown>(
-        `/api/documents/${encodeURIComponent(id)}/resume`,
-      );
-      const mapped = mapApiDocument(updated);
-      if (!mapped) {
-        throw new Error('Invalid resume response');
-      }
-      setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
-      subscribeDocument(id);
-    } catch (e) {
-      await refresh();
-      throw e;
-    }
+    await applyMappedUpdate(
+      id,
+      postJson(`/api/documents/${encodeURIComponent(id)}/resume`),
+      'Invalid resume response',
+    );
+    subscribeDocument(id);
   }
 
   useEffect(() => {
     void refresh();
   }, []);
 
+  const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
+
   useEffect(() => {
-    const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
     if (!hasActive) return;
 
     const timer = window.setInterval(() => {
@@ -146,7 +146,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     }, 3000);
 
     return () => window.clearInterval(timer);
-  }, [documents]);
+  }, [hasActive]);
 
   useWebSocketEvent<DocumentStatusUpdate>(
     'document:status-update',
@@ -172,18 +172,6 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         }
         return prev.map((doc) => {
           if (doc.id !== documentId) return doc;
-
-          if (normalized === 'ready') {
-            return {
-              ...doc,
-              status: 'ready',
-              errorReason: undefined,
-              progressStage: undefined,
-              progressDone: undefined,
-              progressTotal: undefined,
-            };
-          }
-
           return {
             ...doc,
             status: normalized,

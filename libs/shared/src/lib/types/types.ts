@@ -13,11 +13,7 @@ export type ChatRole = 'user' | 'assistant';
 
 export type OcrLanguageCode = string;
 
-export type ConsumerHandler<TMessage = unknown> = (
-  msg: TMessage | null,
-) => void | Promise<void>;
-
 export type ConsumerRegistration<TMessage = unknown> = {
   queueName: string;
-  handler: ConsumerHandler<TMessage>;
+  handler: (msg: TMessage | null) => void | Promise<void>;
 };

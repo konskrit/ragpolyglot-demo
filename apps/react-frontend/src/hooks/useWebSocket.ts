@@ -22,10 +22,7 @@ export function useWebSocketEvent<T>(
   handler: (payload: T) => void,
 ): void {
   const handlerRef = useRef(handler);
-
-  useEffect(() => {
-    handlerRef.current = handler;
-  }, [handler]);
+  handlerRef.current = handler;
 
   useEffect(() => {
     const socket = getSharedSocket();
@@ -69,10 +66,9 @@ export function emitWebSocket<T>(event: string, payload?: T): void {
   }
 
   const onConnect = () => {
-    socket.off('connect', onConnect);
     socket.emit(event, payload);
   };
-  socket.on('connect', onConnect);
+  socket.once('connect', onConnect);
 }
 
 export function subscribeDocument(documentId: string): void {

@@ -11,20 +11,13 @@ export function FileUploadZone() {
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const successResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-
-  useEffect(
-    () => () => {
-      if (successResetRef.current) {
-        clearTimeout(successResetRef.current);
-      }
-    },
-    [],
-  );
-
   const { refresh } = useDocuments();
+
+  useEffect(() => {
+    if (uploadState !== 'success') return;
+    const timer = window.setTimeout(() => setUploadState('idle'), 2500);
+    return () => window.clearTimeout(timer);
+  }, [uploadState]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -96,10 +89,6 @@ export function FileUploadZone() {
 
     setFiles([]);
     setUploadState('success');
-    if (successResetRef.current) {
-      clearTimeout(successResetRef.current);
-    }
-    successResetRef.current = setTimeout(() => setUploadState('idle'), 2500);
   };
 
   const isUploading = uploadState === 'uploading';
