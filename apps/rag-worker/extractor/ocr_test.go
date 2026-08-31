@@ -27,8 +27,17 @@ func TestParseOsdScript(t *testing.T) {
 	}
 }
 
+func TestResolvedOCRLangs(t *testing.T) {
+	if got := resolvedOCRLangs("ancient_greek", "grc+ell"); got != "grc" {
+		t.Fatalf("explicit hint should override cached langs, got %q", got)
+	}
+	if got := resolvedOCRLangs("", "grc+ell"); got != "grc+ell" {
+		t.Fatalf("cached langs should be kept without hint, got %q", got)
+	}
+}
+
 func TestTesseractLangs(t *testing.T) {
-	if got := tesseractLangs("ancient_greek"); got != "grc+ell" {
+	if got := tesseractLangs("ancient_greek"); got != "grc" {
 		t.Fatalf("got %q", got)
 	}
 	if got := tesseractLangs("modern_greek"); got != "ell" {
@@ -42,6 +51,24 @@ func TestTesseractLangs(t *testing.T) {
 	}
 	if got := tesseractLangs("fra"); got != "fra" {
 		t.Fatalf("tessdata codes pass through, got %q", got)
+	}
+}
+
+func TestUsesKraken(t *testing.T) {
+	if !usesKraken("grc") || !usesKraken("ancient_greek") {
+		t.Fatal("ancient greek codes should use kraken")
+	}
+	if usesKraken("grc+ell") || usesKraken("ell") || usesKraken("eng") || usesKraken("") {
+		t.Fatal("mixed or non-ancient codes should not use kraken")
+	}
+}
+
+func TestOcrEngine(t *testing.T) {
+	if ocrEngine("grc") != "kraken" {
+		t.Fatalf("got %q", ocrEngine("grc"))
+	}
+	if ocrEngine("ell") != "tesseract" {
+		t.Fatalf("got %q", ocrEngine("ell"))
 	}
 }
 

@@ -67,8 +67,12 @@ ALTER TABLE document_ingest_checkpoints
 	}
 
 	_, err = s.pool.Exec(ctx, `
-DELETE FROM document_ingest_checkpoints c
-WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.id = c.document_id);
+DO $$ BEGIN
+  IF to_regclass('public.documents') IS NOT NULL THEN
+    DELETE FROM document_ingest_checkpoints c
+    WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.id = c.document_id);
+  END IF;
+END $$;
 
 DO $$ BEGIN
   IF to_regclass('public.documents') IS NOT NULL

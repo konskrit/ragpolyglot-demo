@@ -120,6 +120,8 @@ services:
       dockerfile: Dockerfile
       args:
         INSTALL_OCR_LANGS: ${INSTALL_OCR_LANGS:-1}
+        INSTALL_KRAKEN: ${INSTALL_KRAKEN:-1}
+        KRAKEN_TORCH: ${KRAKEN_TORCH:-cu124}
     restart: unless-stopped
     env_file: [.env]
     environment:
@@ -143,6 +145,16 @@ services:
       OCR_PAGE_MEMORY_MB: ${OCR_PAGE_MEMORY_MB:-64}
       EMBED_BATCH_MEMORY_MB: ${EMBED_BATCH_MEMORY_MB:-32}
       OCR_RENDER_DPI: ${OCR_RENDER_DPI:-150}
+      KRAKEN_GRC_MODEL: ${KRAKEN_GRC_MODEL:-/models/grc.mlmodel}
+      KRAKEN_DEVICE: ${KRAKEN_DEVICE:-auto}
+      KRAKEN_BATCH_PAGES: ${KRAKEN_BATCH_PAGES:-4}
+      KRAKEN_THREADS: ${KRAKEN_THREADS:-}
+      KRAKEN_PRECISION: ${KRAKEN_PRECISION:-}
+      KRAKEN_LINE_BATCH: ${KRAKEN_LINE_BATCH:-}
+      KRAKEN_LINE_WORKERS: ${KRAKEN_LINE_WORKERS:-}
+      KRAKEN_VRAM_BUDGET_MB: ${KRAKEN_VRAM_BUDGET_MB:-4096}
+      KRAKEN_VRAM_PAGE_MB: ${KRAKEN_VRAM_PAGE_MB:-512}
+      KRAKEN_PAGE_MEMORY_MB: ${KRAKEN_PAGE_MEMORY_MB:-256}
       FAST_INGEST_PREFETCH: ${FAST_INGEST_PREFETCH:-4}
       OCR_INGEST_PREFETCH: ${OCR_INGEST_PREFETCH:-2}
       INGEST_PREFETCH: ${INGEST_PREFETCH:-}
@@ -152,12 +164,16 @@ services:
       - uploads_data:${UPLOADS_DIR:-/uploads}
     ports:
       - '${RAG_WORKER_PORT:-8081}:8081'
+    # NVIDIA GPU passthrough (requires Container Toolkit). Comment out on CPU-only hosts.
+    gpus: all
     depends_on:
       postgresql:
         condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      document-service:
         condition: service_healthy
       llm-stub:
         condition: service_healthy
@@ -166,7 +182,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'wget -qO- http://127.0.0.1:8081/health >/dev/null || exit 1',
+          'curl -fsS http://127.0.0.1:8081/health >/dev/null || exit 1',
         ]
       interval: 10s
       timeout: 5s
@@ -261,7 +277,7 @@ services:
       - rag-network
 
   pgadmin:
-    profiles: ['tools']
+    profiles: ['tools'] # docker compose --profile tools up
     image: dpage/pgadmin4:8
     restart: unless-stopped
     env_file: [.env]

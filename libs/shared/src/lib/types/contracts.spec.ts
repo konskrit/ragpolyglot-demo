@@ -70,7 +70,7 @@ describe('shared contracts', () => {
         status: 'processing',
         progressStage: 'extracting',
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       showOcrLanguageMenu({
         fileExt: 'pdf',
@@ -88,7 +88,7 @@ describe('shared contracts', () => {
         status: 'paused',
         progressStage: 'extracting',
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       showOcrLanguageMenu({
         fileExt: 'pdf',
@@ -110,7 +110,7 @@ describe('shared contracts', () => {
         status: 'processing',
         progressStage: 'extracting',
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canChangeOcrLangLive({
         fileExt: 'pdf',
@@ -128,7 +128,7 @@ describe('shared contracts', () => {
         status: 'paused',
         progressStage: 'extracting',
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canChangeOcrLangLive({
         fileExt: 'pdf',

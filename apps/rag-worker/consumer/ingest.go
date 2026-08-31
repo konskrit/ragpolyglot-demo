@@ -159,6 +159,9 @@ func (p *Processor) runExtract(
 		PageWorkers: p.ocrWorkerCount,
 		OnOCRStart: func() func() {
 			releaseFast()
+			done := job.OcrPageDone
+			total := job.OcrTotal
+			p.publishProgress(event.DocumentID, "extracting", done, total)
 			return p.acquireOCRIngestSlot()
 		},
 	}
@@ -177,7 +180,6 @@ func (p *Processor) runExtract(
 		}
 	}
 
-	p.publishProgress(event.DocumentID, "extracting", 0, 0)
 	state.OnProgress = func(done, total int, textSoFar, langs string) error {
 		if p.isIngestStale(event.DocumentID, gen) {
 			return extractor.ErrPaused
