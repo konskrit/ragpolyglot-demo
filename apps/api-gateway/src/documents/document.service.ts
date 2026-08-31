@@ -6,7 +6,6 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { isAxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { access, unlink } from 'fs/promises';
 import { constants } from 'fs';
@@ -181,18 +180,11 @@ export class DocumentService {
       }
     };
 
-    try {
-      await firstValueFrom(
-        this.httpService.delete(
-          `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
-        ),
-      );
-    } catch (err) {
-      if (isAxiosError(err) && err.response?.status === 503) {
-        await removeUpload();
-      }
-      throw err;
-    }
+    await firstValueFrom(
+      this.httpService.delete(
+        `${Config.documentServiceUrl}/api/documents/${encodeURIComponent(id)}`,
+      ),
+    );
 
     await removeUpload();
   }

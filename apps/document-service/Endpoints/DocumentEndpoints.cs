@@ -65,7 +65,7 @@ public static class DocumentEndpoints
 
         doc = await repo.GetByIdAsync(doc.Id, cancellationToken) ?? doc;
 
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        if (!await DocumentIngestPublish.PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
                 detail: "Document entered processing but the upload event could not be published.",
@@ -113,7 +113,7 @@ public static class DocumentEndpoints
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
         var fullRetry = IngestRetryPolicy.ShouldResetIngest(existing.ErrorReason);
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: fullRetry))
+        if (!await DocumentIngestPublish.PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: fullRetry))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -159,7 +159,7 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
+        if (!await DocumentIngestPublish.PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
         {
             return Results.Problem(
                 detail: "OCR language change could not be queued.",
@@ -216,7 +216,7 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        if (!await DocumentIngestPublish.PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
                 detail: "Resume could not be queued.",
@@ -283,7 +283,7 @@ public static class DocumentEndpoints
                 continue;
             }
 
-            if (!await PublishUploadedOrMarkFailedAsync(
+            if (!await DocumentIngestPublish.PublishUploadedOrMarkFailedAsync(
                     doc,
                     repo,
                     messageBroker,
@@ -314,11 +314,6 @@ public static class DocumentEndpoints
             return Results.NotFound(new { error = "Document not found" });
         }
 
-        if (!await repo.DeleteAsync(id, cancellationToken))
-        {
-            return Results.NotFound(new { error = "Document not found" });
-        }
-
         try
         {
             await messageBroker.PublishDocumentDeletedAsync(id, cancellationToken);
@@ -328,8 +323,13 @@ public static class DocumentEndpoints
             var logger = loggerFactory.CreateLogger("DocumentEndpoints");
             logger.LogError(ex, "Failed to publish document.deleted for {DocumentId}", id);
             return Results.Problem(
-                detail: "Document metadata was removed but the delete event could not be published.",
+                detail: "The delete event could not be published; document was not removed.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (!await repo.DeleteAsync(id, cancellationToken))
+        {
+            return Results.NotFound(new { error = "Document not found" });
         }
 
         return Results.Ok(new
@@ -337,27 +337,6 @@ public static class DocumentEndpoints
             success = true,
             message = "Document deleted successfully"
         });
-    }
-
-    private static async Task<bool> PublishUploadedOrMarkFailedAsync(
-        Document doc,
-        DocumentRepository repo,
-        MessageBroker messageBroker,
-        ILogger logger,
-        CancellationToken cancellationToken,
-        bool retry = false)
-    {
-        try
-        {
-            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang, retry, cancellationToken);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to publish document.uploaded for {DocumentId}", doc.Id);
-            await repo.MarkFailedAsync(doc.Id, "publish_error", cancellationToken);
-            return false;
-        }
     }
 
     private static bool TryNormalizeOcrLang(string? ocrLang, out string? normalized)

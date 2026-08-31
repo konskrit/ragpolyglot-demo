@@ -105,6 +105,12 @@ public sealed partial class EventConsumerBackgroundService(
             throw new ArgumentException("missing documentId");
         }
 
+        if (!DocumentProgressStages.IsValid(evt.Stage))
+        {
+            LogProgressIgnored(evt.DocumentId, evt.Stage);
+            return;
+        }
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
         await repo.UpdateProgressAsync(evt.DocumentId, evt.Stage, evt.Done, evt.Total);
@@ -162,4 +168,7 @@ public sealed partial class EventConsumerBackgroundService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Invalid event from {Queue}: {Error}")]
     private partial void LogInvalidEvent(string queue, string error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Ignored document.progress for {DocumentId}: invalid stage {Stage}")]
+    private partial void LogProgressIgnored(Guid documentId, string stage);
 }
