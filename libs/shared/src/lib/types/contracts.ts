@@ -42,7 +42,12 @@ export function showOcrLanguageMenu(
   doc: Partial<
     Pick<
       DocumentSummary,
-      'fileExt' | 'errorReason' | 'ocrLang' | 'status' | 'progressStage'
+      | 'fileExt'
+      | 'errorReason'
+      | 'ocrLang'
+      | 'status'
+      | 'progressStage'
+      | 'progressTotal'
     >
   >,
 ): boolean {
@@ -52,10 +57,7 @@ export function showOcrLanguageMenu(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (doc.status === 'processing') {
-    return true;
-  }
-  if (doc.status === 'paused') {
+  if (doc.progressStage === 'extracting' && (doc.progressTotal ?? 0) > 0) {
     return true;
   }
   return Boolean(doc.ocrLang);
@@ -65,17 +67,18 @@ export function canChangeOcrLangLive(
   doc: Partial<
     Pick<
       DocumentSummary,
-      'status' | 'errorReason' | 'progressStage' | 'fileExt'
+      'status' | 'errorReason' | 'progressStage' | 'progressTotal' | 'fileExt'
     >
   >,
 ): boolean {
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (doc.status === 'processing' && doc.progressStage === 'extracting') {
-    return true;
-  }
-  if (doc.status === 'paused') {
+  if (
+    doc.progressStage === 'extracting' &&
+    (doc.progressTotal ?? 0) > 0 &&
+    (doc.status === 'processing' || doc.status === 'paused')
+  ) {
     return true;
   }
   return doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED;

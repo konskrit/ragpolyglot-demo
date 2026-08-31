@@ -56,34 +56,87 @@ describe('shared contracts', () => {
         fileExt: 'pdf',
         status: 'processing',
       }),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'embedding',
+      }),
+    ).toBe(false);
     expect(
       showOcrLanguageMenu({
         fileExt: 'pdf',
         status: 'processing',
         progressStage: 'extracting',
       }),
+    ).toBe(false);
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'extracting',
+        progressTotal: 10,
+      }),
     ).toBe(true);
     expect(showOcrLanguageMenu({ fileExt: 'pdf', status: 'paused' })).toBe(
-      true,
+      false,
     );
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
+        status: 'paused',
+        progressStage: 'extracting',
+      }),
+    ).toBe(false);
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
+        status: 'paused',
+        progressStage: 'extracting',
+        progressTotal: 10,
+      }),
+    ).toBe(true);
     expect(showOcrLanguageMenu({ fileExt: 'pdf', ocrLang: 'ell' })).toBe(true);
     expect(showOcrLanguageMenu({ fileExt: 'pdf' })).toBe(false);
     expect(showOcrLanguageMenu({ fileExt: 'txt', ocrLang: 'eng' })).toBe(false);
     expect(showOcrLanguageMenu({})).toBe(false);
   });
 
-  it('allows live OCR language changes only while extracting or paused', () => {
+  it('allows live OCR language changes only while OCR is running or language is needed', () => {
     expect(
       canChangeOcrLangLive({
         fileExt: 'pdf',
         status: 'processing',
         progressStage: 'extracting',
       }),
+    ).toBe(false);
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'extracting',
+        progressTotal: 10,
+      }),
     ).toBe(true);
     expect(canChangeOcrLangLive({ fileExt: 'pdf', status: 'paused' })).toBe(
-      true,
+      false,
     );
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'paused',
+        progressStage: 'extracting',
+      }),
+    ).toBe(false);
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'paused',
+        progressStage: 'extracting',
+        progressTotal: 10,
+      }),
+    ).toBe(true);
     expect(
       canChangeOcrLangLive({
         fileExt: 'pdf',
