@@ -2,9 +2,9 @@ package publisher
 
 import "testing"
 
-func TestNew_not_connected_before_first_publish(t *testing.T) {
-	pub := New("amqp://guest:guest@127.0.0.1:9")
+func TestNew_not_connected_without_channel(t *testing.T) {
+	pub := New(nil)
 	if pub.Connected() {
-		t.Fatal("expected publisher to be disconnected before first publish")
+		t.Fatal("expected publisher to be disconnected without a channel")
 	}
 }

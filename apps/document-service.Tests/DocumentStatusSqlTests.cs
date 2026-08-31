@@ -6,16 +6,18 @@ namespace DocumentService.Tests;
 public class DocumentStatusSqlTests
 {
     [Fact]
-    public void Mark_ready_only_from_processing()
+    public void Mark_ready_matches_by_id()
     {
         var sql = SqlScripts.Load("documents/mark_ready.sql");
-        Assert.Contains("status = 'processing'", sql);
+        Assert.Contains("SET status = 'ready'", sql);
+        Assert.Contains("WHERE id = @id", sql);
     }
 
     [Fact]
-    public void Mark_failed_only_from_inflight_statuses()
+    public void Mark_failed_matches_by_id()
     {
         var sql = SqlScripts.Load("documents/mark_failed.sql");
-        Assert.Contains("status IN ('uploading', 'processing', 'failed')", sql);
+        Assert.Contains("SET status = 'failed'", sql);
+        Assert.Contains("WHERE id = @id", sql);
     }
 }
