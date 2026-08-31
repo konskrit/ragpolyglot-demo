@@ -74,7 +74,7 @@ export interface DocumentProcessedEvent {
   type: 'document.processed';
   documentId: string;
   chunkCount: number;
-  ocrLang?: string;
+  ocrLang?: OcrLanguageCode;
   timestamp: string;
 }
 

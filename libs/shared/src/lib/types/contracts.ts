@@ -38,16 +38,18 @@ export const CHAT_ROLES = [
 
 export const OCR_LANGUAGE_NEEDED = 'ocr_language_needed';
 
+function isOneOf<T extends string>(
+  values: readonly T[],
+  value: string,
+): value is T {
+  return (values as readonly string[]).includes(value);
+}
+
 export function showOcrLanguageMenu(
   doc: Partial<
     Pick<
       DocumentSummary,
-      | 'fileExt'
-      | 'errorReason'
-      | 'ocrLang'
-      | 'status'
-      | 'progressStage'
-      | 'progressTotal'
+      'fileExt' | 'errorReason' | 'ocrLang' | 'status' | 'progressStage'
     >
   >,
 ): boolean {
@@ -67,7 +69,7 @@ export function canChangeOcrLangLive(
   doc: Partial<
     Pick<
       DocumentSummary,
-      'status' | 'errorReason' | 'progressStage' | 'progressTotal' | 'fileExt'
+      'status' | 'errorReason' | 'progressStage' | 'fileExt'
     >
   >,
 ): boolean {
@@ -110,10 +112,7 @@ export function isOcrLanguageCode(value: unknown): value is string {
 }
 
 export function isChatRole(value: unknown): value is ChatRole {
-  return (
-    typeof value === 'string' &&
-    (CHAT_ROLES as readonly string[]).includes(value)
-  );
+  return typeof value === 'string' && isOneOf(CHAT_ROLES, value);
 }
 
 export function parseRagSources(value: unknown): Source[] | undefined {
@@ -147,10 +146,7 @@ export function conversationTitleFromQuery(query: string): string {
 }
 
 export function isDocumentStatus(value: unknown): value is DocumentStatus {
-  return (
-    typeof value === 'string' &&
-    (DOCUMENT_STATUSES as readonly string[]).includes(value)
-  );
+  return typeof value === 'string' && isOneOf(DOCUMENT_STATUSES, value);
 }
 
 export function normalizeDocumentStatus(
@@ -161,16 +157,13 @@ export function normalizeDocumentStatus(
 }
 
 export function isActiveDocumentStatus(status: DocumentStatus): boolean {
-  return (ACTIVE_DOCUMENT_STATUSES as readonly string[]).includes(status);
+  return isOneOf(ACTIVE_DOCUMENT_STATUSES, status);
 }
 
 export function isDocumentProgressStage(
   value: unknown,
 ): value is DocumentProgressStage {
-  return (
-    typeof value === 'string' &&
-    (DOCUMENT_PROGRESS_STAGES as readonly string[]).includes(value)
-  );
+  return typeof value === 'string' && isOneOf(DOCUMENT_PROGRESS_STAGES, value);
 }
 
 export function formatErrorReason(reason: string): string {

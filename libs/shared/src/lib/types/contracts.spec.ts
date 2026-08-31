@@ -71,14 +71,6 @@ describe('shared contracts', () => {
         progressStage: 'extracting',
       }),
     ).toBe(true);
-    expect(
-      showOcrLanguageMenu({
-        fileExt: 'pdf',
-        status: 'processing',
-        progressStage: 'extracting',
-        progressTotal: 10,
-      }),
-    ).toBe(true);
     expect(showOcrLanguageMenu({ fileExt: 'pdf', status: 'paused' })).toBe(
       false,
     );
@@ -87,14 +79,6 @@ describe('shared contracts', () => {
         fileExt: 'pdf',
         status: 'paused',
         progressStage: 'extracting',
-      }),
-    ).toBe(true);
-    expect(
-      showOcrLanguageMenu({
-        fileExt: 'pdf',
-        status: 'paused',
-        progressStage: 'extracting',
-        progressTotal: 10,
       }),
     ).toBe(true);
     expect(showOcrLanguageMenu({ fileExt: 'pdf', ocrLang: 'ell' })).toBe(true);
@@ -111,14 +95,6 @@ describe('shared contracts', () => {
         progressStage: 'extracting',
       }),
     ).toBe(true);
-    expect(
-      canChangeOcrLangLive({
-        fileExt: 'pdf',
-        status: 'processing',
-        progressStage: 'extracting',
-        progressTotal: 10,
-      }),
-    ).toBe(true);
     expect(canChangeOcrLangLive({ fileExt: 'pdf', status: 'paused' })).toBe(
       false,
     );
@@ -127,14 +103,6 @@ describe('shared contracts', () => {
         fileExt: 'pdf',
         status: 'paused',
         progressStage: 'extracting',
-      }),
-    ).toBe(true);
-    expect(
-      canChangeOcrLangLive({
-        fileExt: 'pdf',
-        status: 'paused',
-        progressStage: 'extracting',
-        progressTotal: 10,
       }),
     ).toBe(true);
     expect(
