@@ -1,28 +1,8 @@
 # RAGPolyglot
 
-Local **polyglot RAG** system: upload documents, extract/OCR → chunk → embed → pgvector, then chat with an LLM grounded only in retrieved context — streamed live to a React UI.
+> **Work in progress.** Local polyglot RAG demo — architecture and pipeline are in place; features and polish are still evolving.
 
-Built as an Nx monorepo with NestJS, .NET, Go, React, PostgreSQL/pgvector, Redis, and RabbitMQ. Useful as a **portfolio piece** (real service boundaries and an event-driven pipeline) and as a **runnable local demo** (`docker compose` + LM Studio or OpenAI).
-
-> **Not production.** Auth is off; this is a trusted local stack. Features are still evolving.
-
-## Why this shape
-
-| Choice                                       | Intent                                                                               |
-| -------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Separate document / RAG / job / BFF services | Clear ownership (metadata vs vectors vs background work vs edge)                     |
-| RabbitMQ events                              | Async ingest, pause/progress, delete stop-signals — not request/reply for heavy work |
-| Go rag-worker                                | CPU/IO-heavy OCR, embed, search, LLM HTTP                                            |
-| .NET document-service                        | Document lifecycle + Postgres schema                                                 |
-| Nest gateway                                 | Upload, Redis cache, Socket.IO streaming, metrics aggregation                        |
-| Shared TS contracts                          | Gateway + UI stay aligned on statuses and events                                     |
-
-## What you can do
-
-- Upload text/PDF (OCR when needed), watch **extracting / embedding** progress
-- **Pause / resume**, change OCR language mid-extract, **retry**, **delete while processing**
-- Agent chat with **live tokens**, sources, Stop/`chat:interrupt`, Redis answer cache
-- Dashboard: service health + 24h metrics (cache, queues, ingest/query timings)
+Event-driven retrieval in an Nx monorepo: upload documents, chunk + embed, search with pgvector, generate LLM answers from retrieved context, and show health/performance in a React UI.
 
 ## Stack
 
@@ -30,242 +10,110 @@ Built as an Nx monorepo with NestJS, .NET, Go, React, PostgreSQL/pgvector, Redis
 | --------------- | -------------------------------------- |
 | API gateway     | NestJS (REST + Socket.IO)              |
 | Documents       | .NET 10 Minimal API                    |
-| RAG worker      | Go (extract → embed → pgvector → LLM)  |
+| RAG worker      | Go (chunk → embed → pgvector → LLM)    |
 | Background jobs | Go event processor                     |
 | Frontend        | React + Vite                           |
 | Data            | PostgreSQL + pgvector, Redis, RabbitMQ |
 
 ## Architecture
 
-### System map
+### Document ingestion
 
-```mermaid
-flowchart TB
-  UI[React UI :4200]
-  GW[api-gateway Nest :3000]
-  DS[document-service .NET :5000]
-  RW[rag-worker Go :8081]
-  EP[event-processor Go :8082]
-  RMQ[(RabbitMQ)]
-  PG[(PostgreSQL + pgvector)]
-  Redis[(Redis)]
-  LLM[LM Studio / OpenAI]
-
-  UI <-->|REST + Socket.IO /ws| GW
-  GW -->|documents CRUD| DS
-  GW -->|chat stream HTTP| RW
-  GW <--> Redis
-  DS <--> PG
-  RW <--> PG
-  EP -->|maintenance HTTP| DS
-  EP --> Redis
-  EP --> PG
-  DS <--> RMQ
-  RW <--> RMQ
-  RMQ -->|processed / failed / paused / progress| GW
-  RW --> LLM
-  EP -.->|job.* on system.events| RMQ
+```
+Upload → api-gateway → document-service (metadata)
+       → document.uploaded (RabbitMQ)
+       → rag-worker: chunk → embed → pgvector
+       → document.processed | document.failed
+       → document-service updates status
+       → gateway WebSocket: document:status-update
 ```
 
-### Ingestion
+### Chat (RAG + LLM)
 
-```mermaid
-sequenceDiagram
-  actor User
-  participant UI as React UI
-  participant GW as api-gateway
-  participant DS as document-service
-  participant RMQ as RabbitMQ
-  participant RW as rag-worker
-  participant PG as Postgres
+```
+UI chat:query → gateway (Redis cache check)
+             → rag-worker POST /api/chat (embed → search → LLM)
+             → gateway relays chat:token → chat:complete
+               (native LLM token stream from rag-worker)
 
-  User->>UI: Upload file
-  UI->>GW: POST /api/documents/upload
-  GW->>DS: Create metadata + mark processing
-  DS-->>RMQ: document.uploaded
-  RW->>RMQ: consume uploaded
-  loop extract → chunk → embed
-    RW->>PG: checkpoint / chunks
-    RW-->>RMQ: document.progress
-    RMQ-->>GW: consume progress
-    GW-->>UI: document:status-update
-  end
-  alt success
-    RW-->>RMQ: document.processed
-  else pause
-    RW-->>RMQ: document.paused
-  else failure
-    RW-->>RMQ: document.failed
-  end
-  par status consumers
-    RMQ-->>DS: update documents status
-    RMQ-->>GW: emit document:status-update
-  end
-  GW-->>UI: document:status-update
+Stop → chat:interrupt → abort in-flight worker HTTP → LLM request cancels
 ```
 
-Resume re-publishes `document.uploaded`. Pause → `document.pause` → worker checkpoints → `document.paused`.
+Answers are **LLM-generated from retrieved chunks**. If the LLM is down, chat fails — no extractive fallback.
 
-### Deletion
+Hash embedding fallback is off by default (`EMBEDDING_FALLBACK=false`). Set `true` for chat-only LM Studio or CI (`--profile test` via `.env.test.example`).
 
-```mermaid
-sequenceDiagram
-  actor User
-  participant GW as api-gateway
-  participant DS as document-service
-  participant PG as Postgres
-  participant RMQ as RabbitMQ
-  participant RW as rag-worker
+### Dashboard
 
-  User->>GW: DELETE document
-  GW->>DS: DELETE /api/documents/:id
-  DS->>PG: delete documents row
-  Note over PG: chunks + checkpoints CASCADE
-  DS-->>RMQ: document.deleted (retried)
-  RW->>RMQ: consume deleted
-  RW->>RW: bump ingest gen / stop in-flight
-  RW->>PG: wipe leftovers if any
-```
+The UI polls `GET /api/health` and `GET /api/metrics`. Metrics come from Redis cache counters plus Postgres `query_logs`, `system_logs`, and document status counts.
 
-### Chat
-
-```mermaid
-sequenceDiagram
-  actor User
-  participant UI as React UI
-  participant GW as api-gateway
-  participant Redis as Redis
-  participant RW as rag-worker
-  participant PG as Postgres
-  participant LLM as LLM
-
-  User->>UI: Ask question
-  UI->>GW: chat:query
-  GW->>Redis: cache lookup
-  alt cache hit
-    Redis-->>GW: cached answer
-    Note over GW,UI: full answer emitted then chat:complete
-    GW-->>UI: chat:token + chat:complete
-  else cache miss
-    GW->>RW: POST /api/chat/stream
-    RW->>RW: embed query
-    RW->>PG: pgvector top-k
-    RW->>LLM: stream completion
-    loop tokens
-      LLM-->>RW: delta
-      RW-->>GW: NDJSON token
-      GW-->>UI: chat:token
-    end
-    GW->>Redis: store answer
-    GW-->>UI: chat:complete (sources)
-  end
-
-  User->>UI: Stop
-  UI->>GW: chat:interrupt
-  GW->>RW: abort HTTP
-  RW->>LLM: cancel request
-```
-
-Answers are **LLM-only from retrieved chunks** (no extractive fallback). Embedding hash fallback is off by default (`EMBEDDING_FALLBACK=false`); use `true` for CI/`--profile test` when you lack a real embed API.
-
-## Prerequisites
-
-- Docker + Docker Compose
-- Node.js 22+ (Nx, frontend)
-- Optional for real chat: [LM Studio](https://lmstudio.ai/) (or OpenAI) with an embedding model + chat model loaded
-
-## Run locally
+## Quick start
 
 ```bash
 cp .env.example .env
 npm install
 docker compose up --build
-```
-
-Wait until containers are healthy, then:
-
-```bash
 npx nx serve react-frontend
 ```
 
 | Service          | URL                                  |
 | ---------------- | ------------------------------------ |
-| UI               | http://localhost:4200                |
 | Gateway          | http://localhost:3000                |
+| UI               | http://localhost:4200                |
 | RabbitMQ UI      | http://localhost:15672 (guest/guest) |
 | Document service | http://localhost:5000                |
 | RAG worker       | http://localhost:8081                |
-| Event processor  | http://localhost:8082                |
 
-Quick checks:
+Auth is disabled for local/dev.
 
-```bash
-curl http://localhost:3000/api/health
-curl http://localhost:3000/api/metrics
-```
+### LLM (required for chat)
 
-### LLM (required for Agent chat)
+Set in `.env`:
 
-In `.env` (defaults target LM Studio on the host):
+- `LLM_MODEL` — model id (required; e.g. `local-model` for LM Studio)
+- `LMSTUDIO_API_URL` — OpenAI-compatible endpoint (`.env.example` uses `http://host.docker.internal:1234/v1`)
 
-| Variable              | Purpose                                     |
-| --------------------- | ------------------------------------------- |
-| `LLM_MODEL`           | Chat model id (e.g. `local-model`)          |
-| `LMSTUDIO_API_URL`    | `http://host.docker.internal:1234/v1`       |
-| `EMBEDDING_MODEL`     | Must match what your embed endpoint returns |
-| `EMBEDDING_DIMENSION` | Must match vector column / model output     |
+For OpenAI, set `OPENAI_API_KEY` and optionally `OPENAI_API_BASE_URL`. Chat uses `LMSTUDIO_API_URL` when set, otherwise OpenAI.
 
-OpenAI: set `OPENAI_API_KEY` (and optionally `OPENAI_API_BASE_URL`). Chat prefers `LMSTUDIO_API_URL` when set.
-
-Start the LLM **before** Agent mode. Full knobs (OCR pools, auto-retry, upload limits): see `.env.example`.
-
-### First walkthrough
-
-1. Open http://localhost:4200 — Dashboard should show services up.
-2. Upload a `.txt` or PDF → status moves through processing → **ready** (progress on the document).
-3. Agent → ask something answered only by that file → tokens stream; sources on complete.
-4. Try **Stop** mid-answer; optional: **Pause** during a large PDF OCR, **Resume**, or **Delete** while processing.
+Start the LLM before using Agent mode.
 
 ## Tests
 
-**Unit** (no full stack):
+**Unit** (no Docker stack):
 
 ```bash
 npx nx run-many -t test --exclude=api-gateway-e2e,react-frontend-e2e
 ```
 
-**Integration** (Compose `--profile test` + `tools/llm-stub`; project `ragpolyglot-ci`):
+**Integration** (CI — `--profile test` starts `llm-stub`; isolated compose project `ragpolyglot-ci`):
 
 ```bash
 npm run test:integration
 ```
 
-Needs `.env` and `.env.test.example`. No LM Studio. Successful runs tear down with `-p ragpolyglot-ci` (a plain `docker compose down` will not stop that project).
+Uses `.env` (from `.env.example`) plus `.env.test.example`. No LM Studio. Tears down with `-p ragpolyglot-ci` when the run succeeds.
+
+**Manual** (local LM Studio): upload → Ready → chat in Agent mode.
 
 ## Layout
 
 ```
 apps/
-  api-gateway/          Nest BFF — REST, WebSocket, cache, metrics
-  api-gateway-e2e/      Integration tests (llm-stub)
-  document-service/     .NET metadata + events + schema
-  document-service.Tests/
-  rag-worker/           Go ingest + search + LLM
-  event-processor/      Go scheduled jobs
-  react-frontend/       Dashboard, upload, agent chat
+  api-gateway/        Nest BFF — REST, WebSocket, Redis cache, /api/metrics
+  api-gateway-e2e/    Integration tests (--profile test + llm-stub)
+  document-service/   .NET metadata + events
+  rag-worker/         Go RAG pipeline + /api/chat
+  event-processor/    Go job runner + in-process scheduler
+  react-frontend/     UI (dashboard, upload, agent chat)
 libs/
-  shared/               TS contracts (@ragpolyglot-shared)
+  shared/             TS contracts
 tools/
-  llm-stub/             OpenAI-compatible stub for CI
+  llm-stub/           OpenAI-compatible stub for CI
 ```
 
-Per-service detail: each app’s `README.md`.
+## Status
 
-## Scope
-
-**In:** event-driven ingest with checkpoints, OCR path, live RAG chat + interrupt, pause/resume/delete-while-processing, metrics dashboard, unit + CI integration tests.
-
-**Out:** auth/multi-tenant, production HA, browser e2e, polished ops. Trusted local/demo only.
+**WIP** — upload → vector store → LLM chat with interrupt, dashboard metrics, unit tests, CI integration with a stub LLM. Not production-hardened (no auth, no browser e2e). Event-processor runs scheduled background jobs (snapshot, archive, lock cleanup).
 
 ## License
 

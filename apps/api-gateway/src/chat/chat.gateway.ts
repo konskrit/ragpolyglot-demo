@@ -13,7 +13,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { Config } from '../core/config';
-import { RabbitMQService, PoisonMessageError } from '../core/rabbitmq.service';
+import { RabbitMQService } from '../core/rabbitmq.service';
 import { RagService } from '../rag/rag.service';
 import { ConversationService } from './conversation.service';
 import {
@@ -46,43 +46,33 @@ export class ChatGateway implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.rabbitMQ.consumeWhenReady(Config.gatewayStatusQueue, async (msg) => {
+    this.rabbitMQ.consumeWhenReady(Config.gatewayStatusQueue, (msg) => {
       if (!msg?.content) return;
 
-      let event: {
-        type?: string;
-        documentId?: string;
-        errorReason?: string;
-      } & Partial<Pick<DocumentProgressEvent, 'stage' | 'done' | 'total'>>;
-
       try {
-        event = JSON.parse(msg.content.toString()) as typeof event;
-      } catch {
-        throw new PoisonMessageError('invalid JSON');
-      }
+        const event = JSON.parse(msg.content.toString()) as {
+          type?: string;
+          documentId?: string;
+        } & Partial<Pick<DocumentProgressEvent, 'stage' | 'done' | 'total'>>;
 
-      if (!event.documentId) {
-        throw new PoisonMessageError('missing documentId');
-      }
+        if (!event.documentId) return;
 
-      if (event.type === 'document.processed') {
-        this.emitDocumentStatusUpdate(event.documentId, 'ready');
-      } else if (event.type === 'document.failed') {
-        this.emitDocumentStatusUpdate(
-          event.documentId,
-          'failed',
-          undefined,
-          event.errorReason,
-        );
-      } else if (event.type === 'document.paused') {
-        this.emitDocumentStatusUpdate(event.documentId, 'paused');
-      } else if (event.type === 'document.progress') {
-        if (!isDocumentProgressStage(event.stage)) return;
-        this.emitDocumentStatusUpdate(event.documentId, 'processing', {
-          progressStage: event.stage,
-          progressDone: event.done ?? 0,
-          progressTotal: event.total ?? 0,
-        });
+        if (event.type === 'document.processed') {
+          this.emitDocumentStatusUpdate(event.documentId, 'ready');
+        } else if (event.type === 'document.failed') {
+          this.emitDocumentStatusUpdate(event.documentId, 'failed');
+        } else if (event.type === 'document.paused') {
+          this.emitDocumentStatusUpdate(event.documentId, 'paused');
+        } else if (event.type === 'document.progress') {
+          if (!isDocumentProgressStage(event.stage)) return;
+          this.emitDocumentStatusUpdate(event.documentId, 'processing', {
+            progressStage: event.stage,
+            progressDone: event.done ?? 0,
+            progressTotal: event.total ?? 0,
+          });
+        }
+      } catch (err) {
+        this.logger.error(`Failed to parse RabbitMQ message: ${err}`);
       }
     });
 
@@ -211,14 +201,12 @@ export class ChatGateway implements OnModuleInit {
       DocumentStatusUpdate,
       'progressStage' | 'progressDone' | 'progressTotal'
     >,
-    errorReason?: string,
   ): void {
     const payload: DocumentStatusUpdate = {
       documentId,
       status,
       timestamp: new Date().toISOString(),
       ...progress,
-      ...(errorReason !== undefined ? { errorReason } : {}),
     };
 
     this.server.to(`doc:${documentId}`).emit('document:status-update', payload);

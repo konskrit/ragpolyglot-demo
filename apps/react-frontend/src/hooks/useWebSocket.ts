@@ -78,11 +78,3 @@ export function emitWebSocket<T>(event: string, payload?: T): void {
 export function subscribeDocument(documentId: string): void {
   emitWebSocket('subscribe:document', { documentId });
 }
-
-export function onWebSocketConnect(handler: () => void): () => void {
-  const socket = getSharedSocket();
-  socket.on('connect', handler);
-  return () => {
-    socket.off('connect', handler);
-  };
-}

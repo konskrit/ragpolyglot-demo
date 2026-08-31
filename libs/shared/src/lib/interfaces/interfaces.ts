@@ -47,7 +47,6 @@ export interface DocumentStatusUpdate {
   documentId: string;
   status: DocumentStatus;
   timestamp?: string;
-  errorReason?: string;
   progressStage?: DocumentProgressStage;
   progressDone?: number;
   progressTotal?: number;
@@ -75,7 +74,7 @@ export interface DocumentProcessedEvent {
   type: 'document.processed';
   documentId: string;
   chunkCount: number;
-  ocrLang?: OcrLanguageCode;
+  ocrLang?: string;
   timestamp: string;
 }
 
@@ -199,16 +198,8 @@ export interface MetricsSnapshot {
   documents: {
     uploading: number;
     processing: number;
-    paused: number;
     ready: number;
     failed: number;
-  };
-  queues: {
-    documentUploaded: number;
-    documentDeleted: number;
-    documentPause: number;
-    gatewayStatus: number;
-    backgroundJobs: number;
   };
   jobs: {
     completed24h: number;

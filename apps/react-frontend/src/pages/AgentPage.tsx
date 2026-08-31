@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AgentChat } from '../components/AgentChat';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { useConversations } from '../hooks/useConversations';
-import { emitWebSocket } from '../hooks/useWebSocket';
 import type { Message } from '@ragpolyglot-shared';
 
 export function AgentPage() {
@@ -12,19 +11,9 @@ export function AgentPage() {
     crypto.randomUUID(),
   );
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
-
-  const interruptCurrent = () => {
-    emitWebSocket('chat:interrupt', { conversationId });
-  };
-
-  const startNew = () => {
-    interruptCurrent();
-    setConversationId(crypto.randomUUID());
-    setInitialMessages([]);
-  };
+  const restoredRef = useRef(false);
 
   const openConversation = async (id: string) => {
-    interruptCurrent();
     try {
       const messages = await loadMessages(id);
       setConversationId(id);
@@ -32,6 +21,20 @@ export function AgentPage() {
     } catch (e) {
       console.error('Failed to load conversation', e);
     }
+  };
+
+  const latestId = conversations[0]?.id;
+
+  useEffect(() => {
+    if (restoredRef.current || loading || !latestId) return;
+    restoredRef.current = true;
+    void openConversation(latestId);
+  }, [loading, latestId]);
+
+  const startNew = () => {
+    restoredRef.current = true;
+    setConversationId(crypto.randomUUID());
+    setInitialMessages([]);
   };
 
   const deleteConversation = async (id: string) => {

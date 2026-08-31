@@ -32,14 +32,14 @@ await using (var scope = app.Services.CreateAsyncScope())
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     foreach (var doc in await repo.ListProcessingAsync())
     {
-        if (await DocumentIngestPublish.PublishUploadedOrMarkFailedAsync(
-                doc,
-                repo,
-                messageBroker,
-                logger,
-                CancellationToken.None))
+        try
         {
+            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang);
             logger.LogInformation("Requeued processing document {DocumentId}", doc.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to requeue processing document {DocumentId}", doc.Id);
         }
     }
 }

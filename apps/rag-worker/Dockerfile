@@ -20,41 +20,18 @@ RUN apk add --no-cache wget \
          done; \
        fi
 
-FROM python:3.12-slim-bookworm
+FROM alpine:3.21
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates curl poppler-utils libgomp1 \
-        tesseract-ocr tesseract-ocr-osd \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --home-dir /app --shell /usr/sbin/nologin app \
-    && mkdir -p /uploads /models \
+RUN apk add --no-cache ca-certificates poppler-utils \
+        tesseract-ocr tesseract-ocr-data-osd \
+    && addgroup -S app && adduser -S -G app app \
+    && mkdir -p /uploads /usr/share/tessdata \
     && chown app:app /uploads
 
-ARG INSTALL_KRAKEN=1
-ARG KRAKEN_TORCH=cu124
-RUN if [ "$INSTALL_KRAKEN" = "1" ]; then \
-      if [ "$KRAKEN_TORCH" = "cpu" ]; then \
-        TORCH_INDEX="https://download.pytorch.org/whl/cpu"; \
-      else \
-        TORCH_INDEX="https://download.pytorch.org/whl/${KRAKEN_TORCH}"; \
-      fi \
-      && pip install --no-cache-dir --index-url "$TORCH_INDEX" torch torchvision \
-      && pip install --no-cache-dir kraken \
-      && pip install --no-cache-dir --force-reinstall --no-deps \
-           --index-url "$TORCH_INDEX" torch torchvision \
-      && python3 -c "import torch; import torchvision; from torchvision.transforms import v2; import kraken" \
-      && curl -fsSL --retry 5 -o /models/grc.mlmodel \
-           "https://zenodo.org/api/records/21295925/files/cllg_recognition_v1.mlmodel/content" \
-      && chown -R app:app /models; \
-    fi
-
-COPY --from=tessdata /out/ /usr/share/tesseract-ocr/5/tessdata/
+COPY --from=tessdata /out/ /usr/share/tessdata/
 
 WORKDIR /app
 COPY --from=builder /out/rag-worker /app/rag-worker
-
-ENV KRAKEN_GRC_MODEL=/models/grc.mlmodel
 
 USER app
 

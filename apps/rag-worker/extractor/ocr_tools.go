@@ -10,11 +10,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
-
-var krakenGPUMu sync.Mutex
 
 func ocrRenderDPI() int {
 	if v := os.Getenv("OCR_RENDER_DPI"); v != "" {
@@ -25,44 +22,10 @@ func ocrRenderDPI() int {
 	return 150
 }
 
-func usesKraken(langs string) bool {
-	switch strings.ToLower(strings.TrimSpace(langs)) {
-	case "grc", "ancient_greek":
-		return true
-	default:
-		return false
-	}
-}
-
-func ocrEngine(langs string) string {
-	if usesKraken(langs) {
-		return "kraken"
-	}
-	return "tesseract"
-}
-
-var errKrakenUnavailable = errors.New("kraken unavailable")
-
-func krakenModelPath() string {
-	candidates := []string{
-		strings.TrimSpace(os.Getenv("KRAKEN_GRC_MODEL")),
-		"/models/grc.mlmodel",
-	}
-	for _, path := range candidates {
-		if path == "" {
-			continue
-		}
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	return ""
-}
-
 func tesseractLangs(hint string) string {
 	switch strings.TrimSpace(hint) {
 	case "ancient_greek":
-		return "grc"
+		return "grc+ell"
 	case "modern_greek":
 		return "ell"
 	case "english":
@@ -72,13 +35,6 @@ func tesseractLangs(hint string) string {
 	default:
 		return strings.TrimSpace(hint)
 	}
-}
-
-func resolvedOCRLangs(ocrLangHint, cached string) string {
-	if langs := tesseractLangs(ocrLangHint); langs != "" {
-		return langs
-	}
-	return strings.TrimSpace(cached)
 }
 
 func parseOsdScript(osd string) string {
@@ -188,98 +144,6 @@ func tesseractPage(imagePath, langs string, stop func() bool) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
-}
-
-func krakenCLIArgs(device string, imagePaths []string, model string) []string {
-	args := []string{"--device", device, "--threads", strconv.Itoa(krakenThreads())}
-	if precision := krakenPrecision(); precision != "" {
-		args = append(args, "--precision", precision)
-	}
-	for _, imagePath := range imagePaths {
-		args = append(args, "-i", imagePath, imagePath+".txt")
-	}
-	args = append(args, "binarize", "segment", "-bl", "ocr", "-m", model)
-	if lineBatch, ok := krakenLineBatch(); ok {
-		args = append(args, "-B", strconv.Itoa(lineBatch))
-	}
-	if lineWorkers, ok := krakenLineWorkers(); ok {
-		args = append(args, "--num-line-workers", strconv.Itoa(lineWorkers))
-	}
-	return args
-}
-
-func krakenOutputPaths(imagePaths []string) []string {
-	out := make([]string, len(imagePaths))
-	for i, imagePath := range imagePaths {
-		out[i] = imagePath + ".txt"
-	}
-	return out
-}
-
-func krakenPages(imagePaths []string, stop func() bool) ([]string, error) {
-	if len(imagePaths) == 0 {
-		return nil, nil
-	}
-	device := resolveKrakenDevice()
-	texts, err := runKrakenPages(imagePaths, device, stop)
-	if err != nil && strings.HasPrefix(device, "cuda") && isKrakenDeviceError(err) {
-		log.Printf("[Extractor] kraken on %s failed, retrying on cpu: %v", device, err)
-		fallbackKrakenToCPU()
-		return runKrakenPages(imagePaths, "cpu", stop)
-	}
-	return texts, err
-}
-
-func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]string, error) {
-	if _, err := exec.LookPath("kraken"); err != nil {
-		return nil, errKrakenUnavailable
-	}
-	model := krakenModelPath()
-	if model == "" {
-		return nil, errKrakenUnavailable
-	}
-
-	outPaths := krakenOutputPaths(imagePaths)
-	args := krakenCLIArgs(device, imagePaths, model)
-
-	runKraken := func() error {
-		_, err := runCapture(stop, "kraken", args...)
-		return err
-	}
-	var err error
-	if strings.HasPrefix(device, "cuda") {
-		krakenGPUMu.Lock()
-		defer krakenGPUMu.Unlock()
-		err = runKraken()
-	} else {
-		err = runKraken()
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	texts := make([]string, len(outPaths))
-	for i, outPath := range outPaths {
-		body, err := os.ReadFile(outPath)
-		_ = os.Remove(outPath)
-		if err != nil {
-			return nil, fmt.Errorf("kraken output %q: %w", outPath, err)
-		}
-		texts[i] = strings.TrimSpace(string(body))
-	}
-	return texts, nil
-}
-
-func isKrakenDeviceError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "cuda") ||
-		strings.Contains(msg, "out of memory") ||
-		strings.Contains(msg, "cudnn") ||
-		strings.Contains(msg, "cublas") ||
-		strings.Contains(msg, "gpu")
 }
 
 func pdfPageCount(pdfPath string, stop func() bool) (int, error) {

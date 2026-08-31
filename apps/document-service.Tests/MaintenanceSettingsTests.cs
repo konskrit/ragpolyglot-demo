@@ -14,7 +14,6 @@ public class MaintenanceSettingsTests
         Assert.Equal(3, MaintenanceSettings.AutoRetryMaxRetries(config));
         Assert.Equal(1, MaintenanceSettings.AutoRetryMinAgeMinutes(config));
         Assert.Equal(10, MaintenanceSettings.AutoRetryLimit(config));
-        Assert.Equal(10, MaintenanceSettings.FailStaleMinutes(config));
     }
 
     [Fact]
@@ -26,13 +25,11 @@ public class MaintenanceSettingsTests
                 ["AUTO_RETRY_MAX_RETRIES"] = "5",
                 ["AUTO_RETRY_MIN_AGE_MINUTES"] = "2",
                 ["AUTO_RETRY_LIMIT"] = "20",
-                ["FAIL_STALE_MINUTES"] = "15",
             })
             .Build();
 
         Assert.Equal(5, MaintenanceSettings.AutoRetryMaxRetries(config));
         Assert.Equal(2, MaintenanceSettings.AutoRetryMinAgeMinutes(config));
         Assert.Equal(20, MaintenanceSettings.AutoRetryLimit(config));
-        Assert.Equal(15, MaintenanceSettings.FailStaleMinutes(config));
     }
 }

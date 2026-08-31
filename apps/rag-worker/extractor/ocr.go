@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -68,7 +67,7 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 
 	prior := strings.TrimSpace(state.PriorText)
 
-	langs := resolvedOCRLangs(ocrLang, state.Resolved)
+	langs := strings.TrimSpace(state.Resolved)
 	if langs == "" && start > 1 {
 		return prior, "", fmt.Errorf("ocr resume missing resolved language")
 	}
@@ -111,138 +110,8 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 		}
 	}
 
-	log.Printf("[Extractor] OCR engine=%s starting page=%d/%d langs=%s", ocrEngine(langs), start, total, langs)
-	if usesKraken(langs) {
-		return ocrPagesKraken(pdfPath, dir, start, total, langs, prior, ocrLang, stop, state)
-	}
+	log.Printf("[Extractor] OCR starting page=%d/%d langs=%s", start, total, langs)
 	return ocrPagesParallel(pdfPath, dir, start, total, langs, prior, ocrLang, stop, state)
-}
-
-func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang string, stop func() bool, state OCRState) (string, string, error) {
-	pageText := make([]string, total+1)
-	mem := krakenPageMemory()
-	lastDone := start - 1
-
-	lineBatchLabel := "default"
-	if n, ok := krakenLineBatch(); ok {
-		lineBatchLabel = strconv.Itoa(n)
-	}
-	lineWorkersLabel := "default"
-	if n, ok := krakenLineWorkers(); ok {
-		lineWorkersLabel = strconv.Itoa(n)
-	}
-	precision := krakenPrecision()
-	if precision == "" {
-		precision = "default"
-	}
-	log.Printf(
-		"[Extractor] OCR kraken device=%s batch=%d threads=%d precision=%s line_batch=%s line_workers=%s vram_budget_mb=%d pages=%d",
-		resolveKrakenDevice(),
-		effectiveKrakenBatchSize(),
-		krakenThreads(),
-		precision,
-		lineBatchLabel,
-		lineWorkersLabel,
-		krakenVRAMBudgetMB(),
-		total-start+1,
-	)
-
-	for batchStart := start; batchStart <= total; {
-		if stop != nil && stop() {
-			return joinPageText(prior, pageText, start, lastDone), langs, ErrPaused
-		}
-		batchSize := effectiveKrakenBatchSize()
-		batchEnd := batchStart + batchSize - 1
-		if batchEnd > total {
-			batchEnd = total
-		}
-		pages := make([]int, 0, batchEnd-batchStart+1)
-		images := make([]string, 0, batchEnd-batchStart+1)
-		pageCount := batchEnd - batchStart + 1
-
-		err := state.Pool.RunWhile(mem*int64(pageCount), stop, func() error {
-			for page := batchStart; page <= batchEnd; page++ {
-				if stop != nil && stop() {
-					return ErrPaused
-				}
-				log.Printf("[Extractor] OCR page %d langs=%s", page, langs)
-				img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
-				if err != nil {
-					return err
-				}
-				pages = append(pages, page)
-				images = append(images, img)
-			}
-			return nil
-		})
-		if err != nil {
-			for _, img := range images {
-				os.Remove(img)
-			}
-			if errors.Is(err, ErrPaused) || errors.Is(err, workpool.ErrStopped) {
-				return joinPageText(prior, pageText, start, lastDone), langs, ErrPaused
-			}
-			return "", langs, err
-		}
-
-		texts, err := krakenPages(images, stop)
-		if err != nil {
-			if errors.Is(err, ErrPaused) {
-				for _, img := range images {
-					os.Remove(img)
-				}
-				return joinPageText(prior, pageText, start, lastDone), langs, ErrPaused
-			}
-			if errors.Is(err, errKrakenUnavailable) {
-				log.Printf("[Extractor] kraken unavailable, tesseract fallback langs=%s", langs)
-				for i, page := range pages {
-					text, tessErr := tesseractPage(images[i], langs, stop)
-					if tessErr != nil {
-						for _, img := range images {
-							os.Remove(img)
-						}
-						return joinPageText(prior, pageText, start, lastDone), langs, tessErr
-					}
-					pageText[page] = text
-					lastDone = page
-				}
-				for _, img := range images {
-					os.Remove(img)
-				}
-				soFar := joinPageText(prior, pageText, start, lastDone)
-				log.Printf("[Extractor] OCR progress %d/%d", lastDone, total)
-				if state.OnProgress != nil {
-					if progErr := state.OnProgress(lastDone, total, soFar, langs); progErr != nil {
-						return soFar, langs, progErr
-					}
-				}
-				batchStart = batchEnd + 1
-				continue
-			}
-			for _, img := range images {
-				os.Remove(img)
-			}
-			return "", langs, err
-		}
-		for _, img := range images {
-			os.Remove(img)
-		}
-
-		for i, page := range pages {
-			pageText[page] = texts[i]
-			lastDone = page
-			soFar := joinPageText(prior, pageText, start, lastDone)
-			log.Printf("[Extractor] OCR progress %d/%d", lastDone, total)
-			if state.OnProgress != nil {
-				if err := state.OnProgress(lastDone, total, soFar, langs); err != nil {
-					return joinPageText(prior, pageText, start, lastDone), langs, err
-				}
-			}
-		}
-		batchStart = batchEnd + 1
-	}
-
-	return finishOCRText(joinPageText(prior, pageText, start, total), langs, state.Resolved, ocrLang)
 }
 
 func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLang string, stop func() bool, state OCRState) (string, string, error) {
@@ -362,7 +231,7 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 }
 
 func ocrOnePage(pdfPath, dir string, page int, langs string, stop func() bool) (string, error) {
-	log.Printf("[Extractor] OCR page %d langs=%s", page, langs)
+	log.Printf("[Extractor] OCR page %d", page)
 	img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
 	if err != nil {
 		return "", err

@@ -35,7 +35,7 @@ export class ConversationService {
   constructor(private readonly postgres: PostgresService) {}
 
   async list(): Promise<ConversationSummary[]> {
-    this.ensureReady();
+    await this.ensureReady();
     const rows = await this.postgres.exec<ConversationRow>(
       loadSql('list-conversations.sql'),
     );
@@ -43,7 +43,7 @@ export class ConversationService {
   }
 
   async getMessages(id: string): Promise<ConversationMessage[]> {
-    this.ensureReady();
+    await this.ensureReady();
     const existing = await this.postgres.exec<ConversationRow>(
       loadSql('get-conversation.sql'),
       [id],
@@ -59,7 +59,7 @@ export class ConversationService {
   }
 
   async delete(id: string): Promise<void> {
-    this.ensureReady();
+    await this.ensureReady();
     const rows = await this.postgres.exec(loadSql('delete-conversation.sql'), [
       id,
     ]);
@@ -74,7 +74,7 @@ export class ConversationService {
     answer: string,
     sources: Source[],
   ): Promise<void> {
-    if (!this.postgres.isReady()) return;
+    await this.ensureReady();
     const insertMessage = loadSql('insert-message.sql');
     await this.postgres.runInTransaction([
       {
@@ -91,14 +91,14 @@ export class ConversationService {
           conversationId,
           'assistant',
           answer,
-          sources.length > 0 ? sources : null,
+          sources.length > 0 ? JSON.stringify(sources) : null,
         ],
       },
     ]);
   }
 
-  private ensureReady(): void {
-    if (!this.postgres.isReady()) {
+  private async ensureReady(): Promise<void> {
+    if (!(await this.postgres.ensureReady())) {
       throw new ServiceUnavailableException('Chat history is unavailable');
     }
   }

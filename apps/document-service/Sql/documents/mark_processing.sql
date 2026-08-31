@@ -1,3 +1,3 @@
 UPDATE documents
 SET status = 'processing', error_reason = NULL, progress_stage = NULL, progress_done = NULL, progress_total = NULL, updated_at = NOW()
-WHERE id = @id AND status = 'uploading';
+WHERE id = @id;

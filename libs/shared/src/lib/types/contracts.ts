@@ -38,13 +38,6 @@ export const CHAT_ROLES = [
 
 export const OCR_LANGUAGE_NEEDED = 'ocr_language_needed';
 
-function isOneOf<T extends string>(
-  values: readonly T[],
-  value: string,
-): value is T {
-  return (values as readonly string[]).includes(value);
-}
-
 export function showOcrLanguageMenu(
   doc: Partial<
     Pick<
@@ -59,7 +52,10 @@ export function showOcrLanguageMenu(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (doc.progressStage === 'extracting') {
+  if (doc.status === 'processing') {
+    return true;
+  }
+  if (doc.status === 'paused') {
     return true;
   }
   return Boolean(doc.ocrLang);
@@ -76,10 +72,10 @@ export function canChangeOcrLangLive(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (
-    doc.progressStage === 'extracting' &&
-    (doc.status === 'processing' || doc.status === 'paused')
-  ) {
+  if (doc.status === 'processing' && doc.progressStage === 'extracting') {
+    return true;
+  }
+  if (doc.status === 'paused') {
     return true;
   }
   return doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED;
@@ -112,7 +108,10 @@ export function isOcrLanguageCode(value: unknown): value is string {
 }
 
 export function isChatRole(value: unknown): value is ChatRole {
-  return typeof value === 'string' && isOneOf(CHAT_ROLES, value);
+  return (
+    typeof value === 'string' &&
+    (CHAT_ROLES as readonly string[]).includes(value)
+  );
 }
 
 export function parseRagSources(value: unknown): Source[] | undefined {
@@ -146,7 +145,10 @@ export function conversationTitleFromQuery(query: string): string {
 }
 
 export function isDocumentStatus(value: unknown): value is DocumentStatus {
-  return typeof value === 'string' && isOneOf(DOCUMENT_STATUSES, value);
+  return (
+    typeof value === 'string' &&
+    (DOCUMENT_STATUSES as readonly string[]).includes(value)
+  );
 }
 
 export function normalizeDocumentStatus(
@@ -157,13 +159,16 @@ export function normalizeDocumentStatus(
 }
 
 export function isActiveDocumentStatus(status: DocumentStatus): boolean {
-  return isOneOf(ACTIVE_DOCUMENT_STATUSES, status);
+  return (ACTIVE_DOCUMENT_STATUSES as readonly string[]).includes(status);
 }
 
 export function isDocumentProgressStage(
   value: unknown,
 ): value is DocumentProgressStage {
-  return typeof value === 'string' && isOneOf(DOCUMENT_PROGRESS_STAGES, value);
+  return (
+    typeof value === 'string' &&
+    (DOCUMENT_PROGRESS_STAGES as readonly string[]).includes(value)
+  );
 }
 
 export function formatErrorReason(reason: string): string {

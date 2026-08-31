@@ -5,5 +5,5 @@ SET status = 'failed',
     progress_done = NULL,
     progress_total = NULL,
     updated_at = NOW()
-WHERE status IN ('processing', 'paused')
+WHERE status = 'processing'
   AND updated_at < NOW() - (@minutes * INTERVAL '1 minute');

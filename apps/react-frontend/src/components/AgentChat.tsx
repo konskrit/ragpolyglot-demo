@@ -4,19 +4,10 @@ import { emitWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
 import { Button, ButtonLink } from './Button';
 import { formatSimilarityPercent } from '../lib/formatSimilarity';
-import type {
-  ChatCompletePayload,
-  DocumentSummary,
-  Message,
-  Source,
-} from '@ragpolyglot-shared';
+import type { ChatCompletePayload, Message, Source } from '@ragpolyglot-shared';
 
-function sourceLabel(source: Source, documents: DocumentSummary[]): string {
+function sourceLabel(source: Source): string {
   if (source.documentTitle?.trim()) return source.documentTitle;
-  const title = documents
-    .find((d) => d.id === source.documentId)
-    ?.title?.trim();
-  if (title) return title;
   if (source.documentId) return `Doc ${source.documentId.slice(0, 8)}`;
   return 'Source';
 }
@@ -123,6 +114,7 @@ export function AgentChat({
     const id = activeConversationIdRef.current;
     if (!id) return;
     emitWebSocket('chat:interrupt', { conversationId: id });
+    finishAssistant('(interrupted)');
   };
 
   const send = () => {
@@ -205,11 +197,11 @@ export function AgentChat({
                             to={`/documents/${s.documentId}`}
                             className="font-medium text-indigo-400 truncate hover:text-indigo-300 hover:underline"
                           >
-                            {sourceLabel(s, documents)}
+                            {sourceLabel(s)}
                           </Link>
                         ) : (
                           <span className="font-medium text-indigo-400 truncate">
-                            {sourceLabel(s, documents)}
+                            {sourceLabel(s)}
                           </span>
                         )}
                         <span className="text-green-400 font-mono shrink-0">

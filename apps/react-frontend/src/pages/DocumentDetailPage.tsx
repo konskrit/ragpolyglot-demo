@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import type { DocumentChunk, DocumentSummary } from '@ragpolyglot-shared';
 import { formatDocumentProgressLabel } from '@ragpolyglot-shared';
 import { StatusBadge } from '../components/StatusBadge';
-import { DocumentActions } from '../components/DocumentActions';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
 import { loadDocument, loadDocumentChunks } from '../lib/documents';
 
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { documents } = useDocuments();
   const listDoc = id ? documents.find((d) => d.id === id) : undefined;
 
@@ -132,12 +130,9 @@ export function DocumentDetailPage() {
       </Link>
 
       <header className="space-y-2">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-semibold text-white">{doc.title}</h1>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold text-white">{doc.title}</h1>
           <StatusBadge status={doc.status} />
-          <DocumentActions doc={doc} onDeleted={() => navigate('/documents')} />
         </div>
         {doc.createdAt && (
           <p className="text-sm text-gray-500">

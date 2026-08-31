@@ -8,19 +8,6 @@ import amqp, { ChannelModel, Channel, ConsumeMessage } from 'amqplib';
 import { ConsumerRegistration } from '@ragpolyglot-shared';
 import { Config } from './config';
 
-export class PoisonMessageError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PoisonMessageError';
-  }
-}
-
-export function isPoisonMessageError(
-  error: unknown,
-): error is PoisonMessageError {
-  return error instanceof PoisonMessageError;
-}
-
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQService.name);
@@ -174,30 +161,13 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     await channel.consume(
       queueName,
       (msg) => {
-        void (async () => {
-          if (!msg) return;
-
-          try {
-            await handler(msg);
-            if (!this.shuttingDown) {
-              channel.ack(msg);
-            }
-          } catch (error) {
-            const requeue = !isPoisonMessageError(error);
-            this.logger.warn(
-              `Consumer handler failed (${queueName}, requeue=${requeue}): ${(error as Error).message}`,
-            );
-            if (!this.shuttingDown) {
-              channel.nack(msg, false, requeue);
-            }
-          }
-        })().catch((error: Error) => {
+        void Promise.resolve(handler(msg)).catch((err) => {
           this.logger.error(
-            `Unhandled consumer error (${queueName}): ${error.message}`,
+            `Consumer handler failed: ${(err as Error).message}`,
           );
         });
       },
-      { noAck: false },
+      { noAck: true },
     );
   }
 

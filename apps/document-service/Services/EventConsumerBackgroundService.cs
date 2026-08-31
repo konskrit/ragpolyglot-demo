@@ -54,7 +54,7 @@ public sealed partial class EventConsumerBackgroundService(
         }
         else
         {
-            LogProcessedIgnored(evt.DocumentId);
+            LogProcessedNotFound(evt.DocumentId);
         }
     }
 
@@ -74,7 +74,7 @@ public sealed partial class EventConsumerBackgroundService(
         }
         else
         {
-            LogFailedIgnored(evt.DocumentId);
+            LogFailedNotFound(evt.DocumentId);
         }
     }
 
@@ -103,12 +103,6 @@ public sealed partial class EventConsumerBackgroundService(
         if (evt.DocumentId == Guid.Empty)
         {
             throw new ArgumentException("missing documentId");
-        }
-
-        if (!DocumentProgressStages.IsValid(evt.Stage))
-        {
-            LogProgressIgnored(evt.DocumentId, evt.Stage);
-            return;
         }
 
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -151,14 +145,14 @@ public sealed partial class EventConsumerBackgroundService(
     [LoggerMessage(Level = LogLevel.Information, Message = "Document {DocumentId} marked as ready ({ChunkCount} chunks)")]
     private partial void LogMarkedReady(Guid documentId, int chunkCount);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not updated for document.processed event (missing or not processing)")]
-    private partial void LogProcessedIgnored(Guid documentId);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not found for document.processed event")]
+    private partial void LogProcessedNotFound(Guid documentId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} marked as failed: {ErrorReason}")]
     private partial void LogMarkedFailed(Guid documentId, string errorReason);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not updated for document.failed event (missing or terminal status)")]
-    private partial void LogFailedIgnored(Guid documentId);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Document {DocumentId} not found for document.failed event")]
+    private partial void LogFailedNotFound(Guid documentId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Document {DocumentId} marked as paused")]
     private partial void LogMarkedPaused(Guid documentId);
@@ -168,7 +162,4 @@ public sealed partial class EventConsumerBackgroundService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Invalid event from {Queue}: {Error}")]
     private partial void LogInvalidEvent(string queue, string error);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Ignored document.progress for {DocumentId}: invalid stage {Stage}")]
-    private partial void LogProgressIgnored(Guid documentId, string stage);
 }
