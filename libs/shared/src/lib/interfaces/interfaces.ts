@@ -47,6 +47,7 @@ export interface DocumentStatusUpdate {
   documentId: string;
   status: DocumentStatus;
   timestamp?: string;
+  errorReason?: string;
   progressStage?: DocumentProgressStage;
   progressDone?: number;
   progressTotal?: number;

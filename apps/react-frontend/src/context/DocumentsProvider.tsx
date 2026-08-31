@@ -150,18 +150,16 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
   useWebSocketEvent<DocumentStatusUpdate>(
     'document:status-update',
-    ({ documentId, status, progressStage, progressDone, progressTotal }) => {
+    ({
+      documentId,
+      status,
+      errorReason,
+      progressStage,
+      progressDone,
+      progressTotal,
+    }) => {
       const normalized = normalizeDocumentStatus(status);
       if (!normalized) return;
-
-      if (
-        normalized === 'failed' ||
-        normalized === 'paused' ||
-        normalized === 'ready'
-      ) {
-        void refresh();
-        return;
-      }
 
       let missing = false;
       setDocuments((prev) => {
@@ -184,6 +182,22 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
             };
           }
 
+          if (normalized === 'failed') {
+            return {
+              ...doc,
+              status: 'failed',
+              errorReason:
+                typeof errorReason === 'string' ? errorReason : doc.errorReason,
+              progressStage: undefined,
+              progressDone: undefined,
+              progressTotal: undefined,
+            };
+          }
+
+          if (normalized === 'paused') {
+            return { ...doc, status: 'paused' };
+          }
+
           return {
             ...doc,
             status: normalized,
@@ -197,6 +211,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       });
 
       if (missing) {
+        void refresh();
+        return;
+      }
+
+      if (normalized === 'failed' && typeof errorReason !== 'string') {
         void refresh();
       }
     },

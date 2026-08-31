@@ -52,6 +52,7 @@ export class ChatGateway implements OnModuleInit {
       let event: {
         type?: string;
         documentId?: string;
+        errorReason?: string;
       } & Partial<Pick<DocumentProgressEvent, 'stage' | 'done' | 'total'>>;
 
       try {
@@ -67,7 +68,12 @@ export class ChatGateway implements OnModuleInit {
       if (event.type === 'document.processed') {
         this.emitDocumentStatusUpdate(event.documentId, 'ready');
       } else if (event.type === 'document.failed') {
-        this.emitDocumentStatusUpdate(event.documentId, 'failed');
+        this.emitDocumentStatusUpdate(
+          event.documentId,
+          'failed',
+          undefined,
+          event.errorReason,
+        );
       } else if (event.type === 'document.paused') {
         this.emitDocumentStatusUpdate(event.documentId, 'paused');
       } else if (event.type === 'document.progress') {
@@ -205,12 +211,14 @@ export class ChatGateway implements OnModuleInit {
       DocumentStatusUpdate,
       'progressStage' | 'progressDone' | 'progressTotal'
     >,
+    errorReason?: string,
   ): void {
     const payload: DocumentStatusUpdate = {
       documentId,
       status,
       timestamp: new Date().toISOString(),
       ...progress,
+      ...(errorReason !== undefined ? { errorReason } : {}),
     };
 
     this.server.to(`doc:${documentId}`).emit('document:status-update', payload);

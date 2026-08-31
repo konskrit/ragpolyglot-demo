@@ -18,6 +18,7 @@ import {
   OcrLanguageOption,
   isOcrLanguageCode,
 } from '@ragpolyglot-shared';
+import { shouldDiscardUploadAfterFailure } from './document-upload';
 
 type DocumentRecord = Document & { filePath?: string };
 
@@ -88,9 +89,11 @@ export class DocumentService {
       this.logger.log(`Document created via document-service: ${res.data.id}`);
       return this.toPublicDocument(res.data);
     } catch (err) {
-      await unlink(join(Config.uploadsDir, file.filename)).catch(
-        () => undefined,
-      );
+      if (shouldDiscardUploadAfterFailure(err)) {
+        await unlink(join(Config.uploadsDir, file.filename)).catch(
+          () => undefined,
+        );
+      }
       throw err;
     }
   }
