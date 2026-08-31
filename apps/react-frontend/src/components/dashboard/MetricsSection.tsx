@@ -43,7 +43,14 @@ export function MetricsSection({
             <MetricCard
               label="Documents"
               value={String(metrics.documents.ready)}
-              hint={`${metrics.documents.failed} failed · ${metrics.documents.uploading + metrics.documents.processing} in flight`}
+              hint={`${metrics.documents.failed} failed · ${metrics.documents.paused} paused · ${metrics.documents.uploading + metrics.documents.processing} in flight`}
+            />
+            <MetricCard
+              label="Queue depth"
+              value={String(
+                metrics.queues.documentUploaded + metrics.queues.gatewayStatus,
+              )}
+              hint={`upload ${metrics.queues.documentUploaded} · status ${metrics.queues.gatewayStatus} · jobs ${metrics.queues.backgroundJobs}`}
             />
             <MetricCard
               label="Background jobs"

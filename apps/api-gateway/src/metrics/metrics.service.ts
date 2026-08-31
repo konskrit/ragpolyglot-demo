@@ -45,7 +45,7 @@ export class MetricsService {
       this.postgres.query<{ completed: string; failed: string }>(
         loadSql('jobs-summary.sql'),
       ),
-      this.postgres.query<{ used_memory: string | null }>(
+      this.postgres.query<{ used_memory: string | null; queues: unknown }>(
         loadSql('redis-stats-latest.sql'),
       ),
     ]);
@@ -60,6 +60,7 @@ export class MetricsService {
     const documents = {
       uploading: 0,
       processing: 0,
+      paused: 0,
       ready: 0,
       failed: 0,
     };
@@ -69,6 +70,8 @@ export class MetricsService {
           Number(row.count) || 0;
       }
     }
+
+    const queues = this.parseQueueDepths(redisStats[0]?.queues);
 
     return {
       cache: {
@@ -94,6 +97,7 @@ export class MetricsService {
           ing?.avg_embedding == null ? null : Number(ing.avg_embedding),
       },
       documents,
+      queues,
       jobs: {
         completed24h: Number(j?.completed) || 0,
         failed24h: Number(j?.failed) || 0,
@@ -108,5 +112,27 @@ export class MetricsService {
     const raw = await this.redis.get(key);
     const n = Number(raw);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  private parseQueueDepths(raw: unknown): MetricsSnapshot['queues'] {
+    const defaults: MetricsSnapshot['queues'] = {
+      documentUploaded: 0,
+      documentDeleted: 0,
+      documentPause: 0,
+      gatewayStatus: 0,
+      backgroundJobs: 0,
+    };
+    if (!raw || typeof raw !== 'object') {
+      return defaults;
+    }
+
+    for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
+      const value = (raw as Record<string, unknown>)[key];
+      const n = Number(value);
+      if (Number.isFinite(n)) {
+        defaults[key] = n;
+      }
+    }
+    return defaults;
   }
 }

@@ -198,8 +198,16 @@ export interface MetricsSnapshot {
   documents: {
     uploading: number;
     processing: number;
+    paused: number;
     ready: number;
     failed: number;
+  };
+  queues: {
+    documentUploaded: number;
+    documentDeleted: number;
+    documentPause: number;
+    gatewayStatus: number;
+    backgroundJobs: number;
   };
   jobs: {
     completed24h: number;

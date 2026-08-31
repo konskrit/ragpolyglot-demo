@@ -24,20 +24,22 @@ import (
 var errUnknownJob = errors.New("unknown job type")
 
 type Runner struct {
-	store              *storage.Store
-	redis              *redis.Client
-	logRetentionD      int
-	documentServiceURL string
-	httpClient         *http.Client
+	store                 *storage.Store
+	redis                 *redis.Client
+	logRetentionD         int
+	documentServiceURL    string
+	rabbitMQManagementURL string
+	httpClient            *http.Client
 }
 
 func NewRunner(store *storage.Store, redisClient *redis.Client, cfg *config.Config) *Runner {
 	return &Runner{
-		store:              store,
-		redis:              redisClient,
-		logRetentionD:      cfg.LogRetentionD,
-		documentServiceURL: cfg.DocumentServiceURL,
-		httpClient:         &http.Client{Timeout: 30 * time.Second},
+		store:                 store,
+		redis:                 redisClient,
+		logRetentionD:         cfg.LogRetentionD,
+		documentServiceURL:    cfg.DocumentServiceURL,
+		rabbitMQManagementURL: cfg.RabbitMQManagementURL,
+		httpClient:            &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -305,6 +307,7 @@ func (r *Runner) snapshotRedisStats(ctx context.Context) (map[string]any, error)
 	if peak, ok := infoInt(info, "used_memory_peak"); ok {
 		stats["usedMemoryPeakBytes"] = peak
 	}
+	stats["queues"] = normalizeQueueDepths(r.fetchQueueDepths(ctx))
 
 	r.store.LogSystem(ctx, "redis.stats", 0, stats)
 	return stats, nil

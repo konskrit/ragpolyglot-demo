@@ -115,40 +115,6 @@ func (p *Processor) handlePause(msg amqp.Delivery) {
 	_ = msg.Ack(false)
 }
 
-func (p *Processor) setPause(documentID string, requested bool) {
-	p.pauseMu.Lock()
-	defer p.pauseMu.Unlock()
-	if requested {
-		p.pauseRequested[documentID] = struct{}{}
-		return
-	}
-	delete(p.pauseRequested, documentID)
-}
-
-func (p *Processor) pauseRequestedFor(documentID string) bool {
-	p.pauseMu.Lock()
-	defer p.pauseMu.Unlock()
-	_, ok := p.pauseRequested[documentID]
-	return ok
-}
-
-func (p *Processor) nextIngestGen(documentID string) uint64 {
-	p.ingestGenMu.Lock()
-	defer p.ingestGenMu.Unlock()
-	p.ingestGen[documentID]++
-	return p.ingestGen[documentID]
-}
-
-func (p *Processor) isIngestStale(documentID string, gen uint64) bool {
-	p.ingestGenMu.Lock()
-	defer p.ingestGenMu.Unlock()
-	return p.ingestGen[documentID] != gen
-}
-
-func (p *Processor) shouldStopIngest(documentID string, gen uint64) bool {
-	return p.pauseRequestedFor(documentID) || p.isIngestStale(documentID, gen)
-}
-
 func (p *Processor) ocrWorkerCount(pages int) int {
 	slots := p.pools.OCR.Slots()
 	active := int(p.ocrIngestActive.Load())

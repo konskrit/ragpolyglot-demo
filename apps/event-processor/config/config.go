@@ -18,6 +18,7 @@ type Config struct {
 	LogRetentionD            int
 	DocumentServiceURL       string
 	AutoRetryIntervalMinutes int
+	RabbitMQManagementURL    string
 }
 
 func Load() *Config {
@@ -36,6 +37,7 @@ func Load() *Config {
 		LogRetentionD:            getEnvInt("LOG_RETENTION_DAYS", 30),
 		DocumentServiceURL:       strings.TrimRight(getEnv("DOCUMENT_SERVICE_URL", "http://localhost:5000"), "/"),
 		AutoRetryIntervalMinutes: getEnvInt("AUTO_RETRY_INTERVAL_MINUTES", 1),
+		RabbitMQManagementURL:    getEnv("RABBITMQ_MANAGEMENT_URL", "http://guest:guest@rabbitmq:15672"),
 	}
 }
 
