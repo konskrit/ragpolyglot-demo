@@ -80,7 +80,7 @@ Start the LLM before using Agent mode.
 
 ### GPU / OCR
 
-`rag-worker` is composed with `gpus: all` so Kraken can use CUDA. That needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If the daemon has no NVIDIA runtime, `docker compose up` can fail — comment out `gpus: all` in `docker-compose.yml` and Kraken will run on CPU (or fall back to Tesseract).
+`rag-worker` is composed with `gpus: all` so Kraken can use CUDA. That needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If the daemon has no NVIDIA runtime, `docker compose up` can fail — comment out `gpus: all` in `docker-compose.yml`. CI uses `docker-compose.ci.yml` to drop GPUs (GitHub-hosted runners have no NVIDIA runtime).
 
 ## Tests
 

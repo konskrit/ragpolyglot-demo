@@ -69,11 +69,11 @@ jobs:
 
       - run: cp .env.example .env
 
-      - run: docker compose --profile test --env-file .env --env-file .env.test.example -p ragpolyglot-ci up -d --wait --build
+      - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile test --env-file .env --env-file .env.test.example -p ragpolyglot-ci up -d --wait --build
 
       - run: npx nx run api-gateway-e2e:e2e
         env:
           STUB_LLM_ANSWER: Integration test answer from stub LLM.
 
       - if: always()
-        run: docker compose --profile test -p ragpolyglot-ci down -v --remove-orphans
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile test -p ragpolyglot-ci down -v --remove-orphans

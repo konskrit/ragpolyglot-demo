@@ -1,0 +1,4 @@
+# GitHub runners have no NVIDIA runtime. Drops gpus: all from docker-compose.yml.
+services:
+  rag-worker:
+    gpus: !reset null
