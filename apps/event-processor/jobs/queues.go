@@ -6,14 +6,16 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	rmq "apps/event-processor/rabbitmq"
 )
 
-var watchedQueues = []string{
-	"document.uploaded.queue",
-	"document.deleted.queue",
-	"document.pause.queue",
-	"gateway.document-status.queue",
-	"background.jobs.queue",
+var queueLabels = map[string]string{
+	"document.uploaded.queue":       "documentUploaded",
+	"document.deleted.queue":        "documentDeleted",
+	"document.pause.queue":          "documentPause",
+	"gateway.document-status.queue": "gatewayStatus",
+	rmq.JobsQueue:                   "backgroundJobs",
 }
 
 type managementQueue struct {
@@ -22,7 +24,7 @@ type managementQueue struct {
 }
 
 func (r *Runner) fetchQueueDepths(ctx context.Context) map[string]int {
-	depths := make(map[string]int, len(watchedQueues))
+	depths := make(map[string]int, len(queueLabels))
 	if strings.TrimSpace(r.rabbitMQManagementURL) == "" {
 		return depths
 	}
@@ -57,13 +59,8 @@ func (r *Runner) fetchQueueDepths(ctx context.Context) map[string]int {
 		return depths
 	}
 
-	watched := make(map[string]struct{}, len(watchedQueues))
-	for _, name := range watchedQueues {
-		watched[name] = struct{}{}
-	}
-
 	for _, queue := range queues {
-		if _, ok := watched[queue.Name]; ok {
+		if _, ok := queueLabels[queue.Name]; ok {
 			depths[queue.Name] = queue.Messages
 		}
 	}
@@ -72,24 +69,9 @@ func (r *Runner) fetchQueueDepths(ctx context.Context) map[string]int {
 }
 
 func normalizeQueueDepths(raw map[string]int) map[string]int {
-	labels := map[string]string{
-		"document.uploaded.queue":       "documentUploaded",
-		"document.deleted.queue":        "documentDeleted",
-		"document.pause.queue":          "documentPause",
-		"gateway.document-status.queue": "gatewayStatus",
-		"background.jobs.queue":         "backgroundJobs",
-	}
-	out := map[string]int{
-		"documentUploaded": 0,
-		"documentDeleted":  0,
-		"documentPause":    0,
-		"gatewayStatus":    0,
-		"backgroundJobs":   0,
-	}
-	for rabbitName, depth := range raw {
-		if label, ok := labels[rabbitName]; ok {
-			out[label] = depth
-		}
+	out := make(map[string]int, len(queueLabels))
+	for name, label := range queueLabels {
+		out[label] = raw[name]
 	}
 	return out
 }
