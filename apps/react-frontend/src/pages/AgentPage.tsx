@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AgentChat } from '../components/AgentChat';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { useConversations } from '../hooks/useConversations';
+import { emitWebSocket } from '../hooks/useWebSocket';
 import type { Message } from '@ragpolyglot-shared';
 
 export function AgentPage() {
@@ -12,12 +13,18 @@ export function AgentPage() {
   );
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
 
+  const interruptCurrent = () => {
+    emitWebSocket('chat:interrupt', { conversationId });
+  };
+
   const startNew = () => {
+    interruptCurrent();
     setConversationId(crypto.randomUUID());
     setInitialMessages([]);
   };
 
   const openConversation = async (id: string) => {
+    interruptCurrent();
     try {
       const messages = await loadMessages(id);
       setConversationId(id);

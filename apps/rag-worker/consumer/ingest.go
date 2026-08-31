@@ -31,6 +31,7 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		_ = msg.Nack(false, false)
 		return
 	}
+	p.setDeleted(event.DocumentID, false)
 	gen := p.nextIngestGen(event.DocumentID)
 	go func() {
 		p.ingest(msg, event, gen)
@@ -192,6 +193,9 @@ func (p *Processor) runExtract(
 		job.Paused = false
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 			return err
+		}
+		if p.shouldStopIngest(event.DocumentID, gen) {
+			return extractor.ErrPaused
 		}
 		p.publishProgress(event.DocumentID, "extracting", done, total)
 		return nil
@@ -359,11 +363,17 @@ func (p *Processor) runEmbedPhase(
 			fail("storage_error", err)
 			return
 		}
+		if p.ackIfStale(acker, event.DocumentID, gen) {
+			return
+		}
 		totalChunks += len(chunks)
 		job.EmbedDone = totalChunks
 		job.Stage = "embedding"
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 			fail("storage_error", err)
+			return
+		}
+		if p.ackIfStale(acker, event.DocumentID, gen) {
 			return
 		}
 		p.publishProgress(event.DocumentID, "embedding", totalChunks, len(textChunks))
@@ -397,8 +407,14 @@ func (p *Processor) runEmbedPhase(
 }
 
 func (p *Processor) ackIfStale(acker *ingestAck, documentID string, gen uint64) bool {
-	if !p.isIngestStale(documentID, gen) {
+	deleted := p.deletedRequestedFor(documentID)
+	if !deleted && !p.isIngestStale(documentID, gen) {
 		return false
+	}
+	if deleted && p.store != nil {
+		ctx := context.Background()
+		_, _ = p.store.DeleteChunks(ctx, documentID)
+		_ = p.store.DeleteCheckpoint(ctx, documentID)
 	}
 	acker.ack()
 	return true

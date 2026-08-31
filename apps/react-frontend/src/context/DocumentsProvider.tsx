@@ -15,7 +15,11 @@ import {
   type DocumentSummary,
 } from '@ragpolyglot-shared';
 import { mapApiDocument, mapApiDocuments } from '../lib/documents';
-import { subscribeDocument, useWebSocketEvent } from '../hooks/useWebSocket';
+import {
+  onWebSocketConnect,
+  subscribeDocument,
+  useWebSocketEvent,
+} from '../hooks/useWebSocket';
 
 interface DocumentsContextValue {
   documents: DocumentSummary[];
@@ -36,11 +40,13 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const subscribedRef = useRef(new Set<string>());
+  const documentsRef = useRef(documents);
+  documentsRef.current = documents;
 
-  function subscribeActiveDocuments(docs: DocumentSummary[]) {
+  function subscribeActiveDocuments(docs: DocumentSummary[], force = false) {
     for (const doc of docs) {
       if (!isActiveDocumentStatus(doc.status)) continue;
-      if (subscribedRef.current.has(doc.id)) continue;
+      if (!force && subscribedRef.current.has(doc.id)) continue;
       subscribedRef.current.add(doc.id);
       subscribeDocument(doc.id);
     }
@@ -109,6 +115,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   async function pause(id: string) {
     try {
       await postJson(`/api/documents/${encodeURIComponent(id)}/pause`);
+      setDocuments((prev) =>
+        prev.map((doc) =>
+          doc.id === id ? { ...doc, status: 'paused' as const } : doc,
+        ),
+      );
       subscribeDocument(id);
     } catch (e) {
       await refresh();
@@ -136,6 +147,14 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(
+    () =>
+      onWebSocketConnect(() => {
+        subscribeActiveDocuments(documentsRef.current, true);
+      }),
+    [],
+  );
 
   useEffect(() => {
     const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
@@ -201,6 +220,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           return {
             ...doc,
             status: normalized,
+            ...(normalized === 'processing' ? { errorReason: undefined } : {}),
             progressStage: isDocumentProgressStage(progressStage)
               ? progressStage
               : undefined,

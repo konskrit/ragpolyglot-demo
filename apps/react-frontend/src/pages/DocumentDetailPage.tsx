@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { DocumentChunk, DocumentSummary } from '@ragpolyglot-shared';
 import { formatDocumentProgressLabel } from '@ragpolyglot-shared';
 import { StatusBadge } from '../components/StatusBadge';
+import { Button } from '../components/Button';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
 import { loadDocument, loadDocumentChunks } from '../lib/documents';
 
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { documents } = useDocuments();
+  const navigate = useNavigate();
+  const { documents, remove } = useDocuments();
   const listDoc = id ? documents.find((d) => d.id === id) : undefined;
 
   const [fetched, setFetched] = useState<DocumentSummary | null>(null);
@@ -18,6 +20,8 @@ export function DocumentDetailPage() {
   const [chunksLoading, setChunksLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chunksError, setChunksError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const doc = listDoc ?? fetched;
 
@@ -133,7 +137,30 @@ export function DocumentDetailPage() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-white">{doc.title}</h1>
           <StatusBadge status={doc.status} />
+          <Button
+            variant="danger"
+            size="sm"
+            className="ml-auto"
+            disabled={deleting}
+            aria-label={`Delete ${doc.title}`}
+            onClick={() => {
+              if (!id || deleting) return;
+              setDeleting(true);
+              setDeleteError(null);
+              void remove(id)
+                .then(() => navigate('/documents'))
+                .catch((e) => {
+                  setDeleteError(
+                    e instanceof Error ? e.message : 'Delete failed',
+                  );
+                })
+                .finally(() => setDeleting(false));
+            }}
+          >
+            {deleting ? '…' : 'Delete'}
+          </Button>
         </div>
+        {deleteError && <p className="text-sm text-red-400">{deleteError}</p>}
         {doc.createdAt && (
           <p className="text-sm text-gray-500">
             Uploaded {new Date(doc.createdAt).toLocaleString()}

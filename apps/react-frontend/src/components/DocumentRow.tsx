@@ -32,7 +32,6 @@ export function DocumentRow({
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
   const canPause = doc.status === 'processing';
   const canResume = doc.status === 'paused';
-  const canDelete = canRetry || canResume || canPause;
   const needsOcrLanguage = doc.errorReason === OCR_LANGUAGE_NEEDED;
   const showOcrLanguage = showOcrLanguageMenu(doc);
   const liveOcrLangChange = canChangeOcrLangLive(doc);
@@ -201,19 +200,17 @@ export function DocumentRow({
               {pending ? '…' : 'Retry'}
             </Button>
           )}
-          {canDelete && (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() =>
-                void runAction(() => remove(doc.id), 'Delete failed')
-              }
-              disabled={pending}
-              aria-label={`Delete ${doc.title}`}
-            >
-              {pending ? '…' : 'Delete'}
-            </Button>
-          )}
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() =>
+              void runAction(() => remove(doc.id), 'Delete failed')
+            }
+            disabled={pending}
+            aria-label={`Delete ${doc.title}`}
+          >
+            {pending ? '…' : 'Delete'}
+          </Button>
         </div>
       </div>
       {actionError && <p className="text-xs text-red-400">{actionError}</p>}

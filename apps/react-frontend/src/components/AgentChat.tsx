@@ -123,7 +123,6 @@ export function AgentChat({
     const id = activeConversationIdRef.current;
     if (!id) return;
     emitWebSocket('chat:interrupt', { conversationId: id });
-    finishAssistant('(interrupted)');
   };
 
   const send = () => {

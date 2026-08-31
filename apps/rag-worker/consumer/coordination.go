@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	redisPauseKeyPrefix = "ingest:pause:"
-	redisGenKeyPrefix   = "ingest:gen:"
+	redisPauseKeyPrefix   = "ingest:pause:"
+	redisDeletedKeyPrefix = "ingest:deleted:"
+	redisGenKeyPrefix     = "ingest:gen:"
 )
 
 func (p *Processor) setPause(documentID string, requested bool) {
@@ -44,6 +45,41 @@ func (p *Processor) pauseRequestedFor(documentID string) bool {
 	p.pauseMu.Lock()
 	defer p.pauseMu.Unlock()
 	_, ok := p.pauseRequested[documentID]
+	return ok
+}
+
+func (p *Processor) setDeleted(documentID string, deleted bool) {
+	if p.redis != nil {
+		ctx := context.Background()
+		key := redisDeletedKeyPrefix + documentID
+		if deleted {
+			_ = p.redis.Set(ctx, key, "1", 0).Err()
+		} else {
+			_ = p.redis.Del(ctx, key).Err()
+		}
+	}
+
+	p.deletedMu.Lock()
+	defer p.deletedMu.Unlock()
+	if deleted {
+		p.deletedRequested[documentID] = struct{}{}
+		return
+	}
+	delete(p.deletedRequested, documentID)
+}
+
+func (p *Processor) deletedRequestedFor(documentID string) bool {
+	if p.redis != nil {
+		ctx := context.Background()
+		n, err := p.redis.Exists(ctx, redisDeletedKeyPrefix+documentID).Result()
+		if err == nil && n > 0 {
+			return true
+		}
+	}
+
+	p.deletedMu.Lock()
+	defer p.deletedMu.Unlock()
+	_, ok := p.deletedRequested[documentID]
 	return ok
 }
 
@@ -91,5 +127,5 @@ func (p *Processor) setLocalIngestGen(documentID string, gen uint64) {
 }
 
 func (p *Processor) shouldStopIngest(documentID string, gen uint64) bool {
-	return p.pauseRequestedFor(documentID) || p.isIngestStale(documentID, gen)
+	return p.pauseRequestedFor(documentID) || p.deletedRequestedFor(documentID) || p.isIngestStale(documentID, gen)
 }

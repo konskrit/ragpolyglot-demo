@@ -19,31 +19,34 @@ import (
 )
 
 type Processor struct {
-	store           *storage.Store
-	publisher       *publisher.Publisher
-	redis           *redis.Client
-	allowFallback   bool
-	pools           *workpool.Pools
-	pauseMu         sync.Mutex
-	pauseRequested  map[string]struct{}
-	ingestGenMu     sync.Mutex
-	ingestGen       map[string]uint64
-	ocrIngestActive atomic.Int32
-	fastIngestSem   chan struct{}
-	ocrIngestSem    chan struct{}
+	store            *storage.Store
+	publisher        *publisher.Publisher
+	redis            *redis.Client
+	allowFallback    bool
+	pools            *workpool.Pools
+	pauseMu          sync.Mutex
+	pauseRequested   map[string]struct{}
+	deletedMu        sync.Mutex
+	deletedRequested map[string]struct{}
+	ingestGenMu      sync.Mutex
+	ingestGen        map[string]uint64
+	ocrIngestActive  atomic.Int32
+	fastIngestSem    chan struct{}
+	ocrIngestSem     chan struct{}
 }
 
 func NewProcessor(store *storage.Store, pub *publisher.Publisher, redisClient *redis.Client, allowFallback bool, pools *workpool.Pools) *Processor {
 	return &Processor{
-		store:          store,
-		publisher:      pub,
-		redis:          redisClient,
-		allowFallback:  allowFallback,
-		pools:          pools,
-		pauseRequested: make(map[string]struct{}),
-		ingestGen:      make(map[string]uint64),
-		fastIngestSem:  make(chan struct{}, workpool.FastIngestPrefetch()),
-		ocrIngestSem:   make(chan struct{}, workpool.OCRIngestPrefetch()),
+		store:            store,
+		publisher:        pub,
+		redis:            redisClient,
+		allowFallback:    allowFallback,
+		pools:            pools,
+		pauseRequested:   make(map[string]struct{}),
+		deletedRequested: make(map[string]struct{}),
+		ingestGen:        make(map[string]uint64),
+		fastIngestSem:    make(chan struct{}, workpool.FastIngestPrefetch()),
+		ocrIngestSem:     make(chan struct{}, workpool.OCRIngestPrefetch()),
 	}
 }
 
@@ -156,6 +159,7 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 	ctx := context.Background()
 	start := time.Now()
 	p.setPause(event.DocumentID, false)
+	p.setDeleted(event.DocumentID, true)
 	p.nextIngestGen(event.DocumentID)
 
 	deleted, err := p.store.DeleteChunks(ctx, event.DocumentID)

@@ -10,6 +10,14 @@ func TestShouldStopIngest_pause(t *testing.T) {
 	}
 }
 
+func TestShouldStopIngest_deleted(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, false, nil)
+	p.setDeleted("doc-1", true)
+	if !p.shouldStopIngest("doc-1", 1) {
+		t.Fatal("expected delete to stop ingest")
+	}
+}
+
 func TestIsIngestStale_localGen(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, false, nil)
 	gen := p.nextIngestGen("doc-1")
