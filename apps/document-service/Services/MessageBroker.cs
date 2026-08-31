@@ -314,11 +314,6 @@ public sealed partial class MessageBroker(
     {
         await InitializeAsync(cancellationToken);
 
-        if (_publishingChannel is null)
-        {
-            throw new InvalidOperationException("Publishing channel is not initialized.");
-        }
-
         var body = JsonSerializer.SerializeToUtf8Bytes(message, JsonOptions);
         var properties = new BasicProperties
         {
@@ -332,19 +327,86 @@ public sealed partial class MessageBroker(
         await _publishLock.WaitAsync(cancellationToken);
         try
         {
-            await _publishingChannel.BasicPublishAsync(
-                exchange: ExchangeName,
-                routingKey: routingKey,
-                mandatory: false,
-                basicProperties: properties,
-                body: body,
-                cancellationToken: cancellationToken);
+            Exception? lastError = null;
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                await EnsurePublishingChannelAsync(cancellationToken);
 
-            LogPublished(routingKey);
+                try
+                {
+                    await _publishingChannel!.BasicPublishAsync(
+                        exchange: ExchangeName,
+                        routingKey: routingKey,
+                        mandatory: false,
+                        basicProperties: properties,
+                        body: body,
+                        cancellationToken: cancellationToken);
+
+                    LogPublished(routingKey);
+                    return;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException && attempt == 0)
+                {
+                    lastError = ex;
+                    LogPublishRetry(ex, routingKey);
+                    await ResetPublishingChannelAsync();
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"Failed to publish {routingKey}.",
+                lastError);
         }
         finally
         {
             _publishLock.Release();
+        }
+    }
+
+    private async Task EnsurePublishingChannelAsync(CancellationToken cancellationToken)
+    {
+        if (_publishingChannel is { IsOpen: true } && _connection is { IsOpen: true })
+        {
+            return;
+        }
+
+        if (_publishingChannel is not null)
+        {
+            await _publishingChannel.DisposeAsync();
+            _publishingChannel = null;
+        }
+
+        if (_connection is null || !_connection.IsOpen)
+        {
+            if (_connection is not null)
+            {
+                await _connection.DisposeAsync();
+                _connection = null;
+            }
+
+            _connection = await factory.CreateConnectionAsync(cancellationToken);
+        }
+
+        _publishingChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
+        await _publishingChannel.ExchangeDeclareAsync(
+            exchange: ExchangeName,
+            type: ExchangeType.Topic,
+            durable: true,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task ResetPublishingChannelAsync()
+    {
+        if (_publishingChannel is not null)
+        {
+            await _publishingChannel.DisposeAsync();
+            _publishingChannel = null;
+        }
+
+        if (_connection is not null && !_connection.IsOpen)
+        {
+            await _connection.DisposeAsync();
+            _connection = null;
         }
     }
 

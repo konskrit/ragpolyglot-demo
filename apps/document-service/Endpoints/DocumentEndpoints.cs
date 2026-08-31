@@ -270,6 +270,13 @@ public static class DocumentEndpoints
 
         foreach (var id in candidates)
         {
+            var existing = await repo.GetByIdAsync(id, cancellationToken);
+            if (existing is null)
+            {
+                continue;
+            }
+
+            var fullRetry = IngestRetryPolicy.ShouldResetIngest(existing.ErrorReason);
             var doc = await repo.ClaimRetryAsync(id, ocrLang: null, updateOcrLang: false, cancellationToken);
             if (doc is null)
             {
@@ -281,7 +288,8 @@ public static class DocumentEndpoints
                     repo,
                     messageBroker,
                     logger,
-                    cancellationToken))
+                    cancellationToken,
+                    retry: fullRetry))
             {
                 continue;
             }

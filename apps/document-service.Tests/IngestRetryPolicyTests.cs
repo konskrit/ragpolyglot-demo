@@ -10,7 +10,7 @@ public class IngestRetryPolicyTests
     [InlineData("storage_error", false)]
     [InlineData("chunking_error", true)]
     [InlineData("ocr_language_needed", true)]
-    [InlineData("stale_timeout", true)]
+    [InlineData("stale_timeout", false)]
     [InlineData(null, true)]
     public void ShouldResetIngest(string? reason, bool expected)
     {

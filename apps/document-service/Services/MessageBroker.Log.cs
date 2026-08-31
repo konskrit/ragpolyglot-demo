@@ -19,4 +19,7 @@ public sealed partial class MessageBroker
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Published {RoutingKey}")]
     private partial void LogPublished(string routingKey);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Publish failed for {RoutingKey}, reconnecting publisher")]
+    private partial void LogPublishRetry(Exception ex, string routingKey);
 }

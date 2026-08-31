@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-test('has title', async ({ page }) => {
+test('shows dashboard', async ({ page }) => {
   await page.goto('/');
-  expect(await page.locator('h1').innerText()).toContain('Welcome');
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByText('RAGPolyglot')).toBeVisible();
 });
