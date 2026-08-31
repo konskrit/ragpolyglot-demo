@@ -162,7 +162,6 @@ func extractJSON(content []byte) string {
 func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 	resume := state.StartPage > 1 || strings.TrimSpace(state.PriorText) != "" || strings.TrimSpace(state.Resolved) != ""
 	if resume || strings.TrimSpace(ocrLang) != "" {
-		log.Println("[Extractor] Running OCR")
 		return runPDFWithOCR(path, ocrLang, state)
 	}
 

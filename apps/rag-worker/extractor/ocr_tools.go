@@ -25,7 +25,7 @@ func ocrRenderDPI() int {
 func tesseractLangs(hint string) string {
 	switch strings.TrimSpace(hint) {
 	case "ancient_greek":
-		return "grc+ell"
+		return "grc"
 	case "modern_greek":
 		return "ell"
 	case "english":
@@ -35,6 +35,13 @@ func tesseractLangs(hint string) string {
 	default:
 		return strings.TrimSpace(hint)
 	}
+}
+
+func resolvedOCRLangs(ocrLangHint, cached string) string {
+	if langs := tesseractLangs(ocrLangHint); langs != "" {
+		return langs
+	}
+	return strings.TrimSpace(cached)
 }
 
 func parseOsdScript(osd string) string {

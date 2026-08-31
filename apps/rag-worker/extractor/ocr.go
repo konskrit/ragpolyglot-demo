@@ -67,7 +67,7 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 
 	prior := strings.TrimSpace(state.PriorText)
 
-	langs := strings.TrimSpace(state.Resolved)
+	langs := resolvedOCRLangs(ocrLang, state.Resolved)
 	if langs == "" && start > 1 {
 		return prior, "", fmt.Errorf("ocr resume missing resolved language")
 	}
@@ -110,7 +110,14 @@ func extractPDFWithOCR(pdfPath, ocrLang string, state OCRState) (text string, re
 		}
 	}
 
-	log.Printf("[Extractor] OCR starting page=%d/%d langs=%s", start, total, langs)
+	action := "starting"
+	if start > 1 {
+		action = "resuming"
+	}
+	log.Printf("[Extractor] OCR engine=%s %s page=%d/%d langs=%s", ocrEngine(langs), action, start, total, langs)
+	if usesKraken(langs) {
+		return ocrPagesKraken(pdfPath, dir, start, total, langs, prior, ocrLang, stop, state)
+	}
 	return ocrPagesParallel(pdfPath, dir, start, total, langs, prior, ocrLang, stop, state)
 }
 
@@ -167,7 +174,7 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 				return nil
 			}
 			soFar := joinPageText(prior, pageText, start, done)
-			log.Printf("[Extractor] OCR progress %d/%d", done, total)
+			log.Printf("[Extractor] OCR engine=tesseract progress %d/%d", done, total)
 			if state.OnProgress != nil {
 				if err := state.OnProgress(done, total, soFar, langs); err != nil {
 					return err
@@ -192,7 +199,7 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 	if workers > pages {
 		workers = pages
 	}
-	log.Printf("[Extractor] OCR workers=%d slots=%d pages=%d", workers, state.Pool.Slots(), pages)
+	log.Printf("[Extractor] OCR engine=tesseract workers=%d slots=%d pages=%d", workers, state.Pool.Slots(), pages)
 
 	pageCh := make(chan int, pages)
 	for page := start; page <= total; page++ {
@@ -231,7 +238,7 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 }
 
 func ocrOnePage(pdfPath, dir string, page int, langs string, stop func() bool) (string, error) {
-	log.Printf("[Extractor] OCR page %d", page)
+	log.Printf("[Extractor] OCR engine=tesseract page %d langs=%s", page, langs)
 	img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
 	if err != nil {
 		return "", err
@@ -267,4 +274,10 @@ func finishOCRText(raw, langs, resolved, ocrLang string) (string, string, error)
 		return "", langs, fmt.Errorf("no text extracted")
 	}
 	return text, langs, nil
+}
+
+func removeFiles(paths []string) {
+	for _, p := range paths {
+		os.Remove(p)
+	}
 }
