@@ -1,10 +1,8 @@
 # document-service
 
-> **WIP** — .NET 10 document metadata service.
+.NET 10 metadata service. Owns `documents`: create/list/delete, pause/resume/retry, OCR language, publish `document.uploaded` / `document.deleted` / `document.pause`, consume `document.processed` / `document.failed` / `document.paused` / `document.progress`.
 
-Owns `documents`: create/list/delete, publish `document.uploaded` / `document.deleted`, consume `document.processed` / `document.failed` and update status. Applies the Postgres schema (including `document_chunks` and log tables).
-
-Can list chunk **text** for a document. Does not chunk, embed, or write vectors.
+Applies the Postgres schema (including `document_chunks` and log tables). Can list chunk text. Does not chunk, embed, or write vectors.
 
 ```bash
 dotnet run --project apps/document-service

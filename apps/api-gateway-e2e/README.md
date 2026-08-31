@@ -1,3 +1,5 @@
+# api-gateway-e2e
+
 HTTP + WebSocket tests against compose `--profile test` (starts `llm-stub` instead of LM Studio).
 
 ```bash
