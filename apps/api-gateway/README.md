@@ -2,11 +2,11 @@
 
 > **WIP** — NestJS BFF for RAGPolyglot.
 
-Routes document CRUD to document-service, RAG chat to rag-worker (`POST /api/chat` JSON, `POST /api/chat/stream` NDJSON for Socket.IO), caches answers in Redis, and serves `GET /api/metrics` from Redis counters plus Postgres logs (`DATABASE_URL`). Streams chat and document status over Socket.IO (`/ws`).
+Routes document CRUD (upload, retry, ocr-lang, pause/resume, delete, chunks) to document-service, RAG chat to rag-worker (`POST /api/chat` JSON, `POST /api/chat/stream` NDJSON), caches answers in Redis, and serves `GET /api/health` + `GET /api/metrics` (Redis counters + Postgres logs). Conversations REST under `/api/conversations`.
 
-WebSocket: `chat:query`, `chat:token`, `chat:complete`, `chat:interrupt` (aborts the in-flight worker stream), `document:status-update`.
+Consumes RabbitMQ `document.processed` / `failed` / `paused` / `progress` and fans out Socket.IO `document:status-update` (namespace `/ws`). Clients join with `subscribe:document`.
 
-`chat:token` events are real LLM deltas from rag-worker (not paced playback).
+WebSocket chat: `chat:query`, `chat:token` (live LLM deltas), `chat:complete`, `chat:interrupt` (aborts the in-flight worker stream).
 
 ```bash
 npx nx serve api-gateway   # needs Postgres, Redis, RabbitMQ, workers

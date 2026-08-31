@@ -6,4 +6,4 @@ npm run test:integration
 
 Needs `.env` (copy `.env.example`) and `.env.test.example`. Project `ragpolyglot-ci` stays isolated from a normal `docker compose up` stack. Teardown uses `-p ragpolyglot-ci` (a plain `docker compose down` will not stop it).
 
-Covers gateway health, upload → ready, WebSocket chat + interrupt, and REST `POST /api/chat`.
+Covers gateway health, upload → ready, WebSocket chat + interrupt, and REST `POST /api/chat`. Does not cover pause/resume or delete-while-processing.

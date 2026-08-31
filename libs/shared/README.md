@@ -1,12 +1,12 @@
 # @ragpolyglot-shared
 
-Shared TypeScript contracts for the RAG polyglot monorepo: document/RAG DTOs, RabbitMQ event shapes, metrics types, and UI helpers used by the API gateway and React frontend.
+Shared TypeScript contracts for the RAG polyglot monorepo: document/RAG DTOs, RabbitMQ event shapes, metrics types, conversation types, and UI helpers used by the API gateway and React frontend.
 
 ## Contents
 
-- **`interfaces/`** — `Document`, `DocumentSummary`, events (`document.uploaded`, `document.processed`, …), RAG/chat DTOs, `MetricsSnapshot`
-- **`types/`** — status unions (`DocumentStatus`, `DocumentProgressStage`, …)
-- **`types/contracts.ts`** — runtime helpers: status guards, OCR language menu rules, progress labels, `parseRagSources`, `formatErrorReason`
+- **`interfaces/`** — `Document`, `DocumentSummary`, RabbitMQ events (`document.uploaded` / `deleted` / `processed` / `failed` / `pause` / `paused` / `progress`), RAG/chat DTOs (`ChatCompletePayload`, …), `MetricsSnapshot`, `SystemHealth`, conversations
+- **`types/`** — status unions (`DocumentStatus` includes `paused`, `DocumentProgressStage`: `extracting` | `embedding`, …)
+- **`types/contracts.ts`** — runtime helpers: status guards, OCR menu rules (`showOcrLanguageMenu`, `canChangeOcrLangLive`, `OCR_LANGUAGE_NEEDED`), progress labels, `parseRagSources`, `formatErrorReason`
 
 Go and .NET services define their own structs; keep event field names and status strings aligned with this package.
 
