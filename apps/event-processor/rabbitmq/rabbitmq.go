@@ -28,6 +28,11 @@ func SetupTopology(ch *amqp.Channel) error {
 	return nil
 }
 
-func Consume(ch *amqp.Channel, queueName string) (<-chan amqp.Delivery, error) {
+func Consume(ch *amqp.Channel, queueName string, prefetch int) (<-chan amqp.Delivery, error) {
+	if prefetch > 0 {
+		if err := ch.Qos(prefetch, 0, false); err != nil {
+			return nil, fmt.Errorf("qos: %w", err)
+		}
+	}
 	return ch.Consume(queueName, "", false, false, false, false, nil)
 }

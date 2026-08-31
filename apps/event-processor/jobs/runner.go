@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -22,6 +19,8 @@ import (
 )
 
 var errUnknownJob = errors.New("unknown job type")
+
+const requeueBackoff = 2 * time.Second
 
 type Runner struct {
 	store                 *storage.Store
@@ -84,7 +83,7 @@ func (r *Runner) reconnectLoop(rabbitURL string) {
 			continue
 		}
 
-		msgs, err := rmq.Consume(ch, rmq.JobsQueue)
+		msgs, err := rmq.Consume(ch, rmq.JobsQueue, 1)
 		if err != nil {
 			_ = ch.Close()
 			_ = conn.Close()
@@ -131,11 +130,15 @@ func (r *Runner) handle(msg amqp.Delivery) {
 		acquired, err := r.acquireLock(ctx, job.ID)
 		if err != nil {
 			log.Printf("[Jobs] lock error id=%s: %v", job.ID, err)
+			time.Sleep(requeueBackoff)
 			_ = msg.Nack(false, true)
 			return
 		}
 		if !acquired {
-			log.Printf("[Jobs] already locked, requeue id=%s", job.ID)
+			// Redelivery while lock TTL remains (e.g. after crash). Brief backoff
+			// avoids a tight requeue loop; same message runs once the lock expires.
+			log.Printf("[Jobs] already locked, backoff requeue id=%s", job.ID)
+			time.Sleep(requeueBackoff)
 			_ = msg.Nack(false, true)
 			return
 		}
@@ -162,6 +165,7 @@ func (r *Runner) handle(msg amqp.Delivery) {
 			"type":  job.Type,
 			"error": err.Error(),
 		})
+		time.Sleep(requeueBackoff)
 		_ = msg.Nack(false, true)
 		return
 	}
@@ -204,147 +208,22 @@ func (r *Runner) dispatch(ctx context.Context, job models.BackgroundJob) (map[st
 	}
 }
 
-func (r *Runner) cleanupExpiredSessions(ctx context.Context) (map[string]any, error) {
-	if r.redis == nil {
-		return nil, fmt.Errorf("redis unavailable")
-	}
-	cleaned, err := r.deleteKeysWithoutTTL(ctx, "session:*")
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"cleanedSessions": cleaned}, nil
-}
-
-func (r *Runner) cleanupStaleJobLocks(ctx context.Context) (map[string]any, error) {
-	if r.redis == nil {
-		return nil, fmt.Errorf("redis unavailable")
-	}
-	cleaned, err := r.deleteKeysWithoutTTL(ctx, "job:*:processing")
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"cleanedLocks": cleaned}, nil
-}
-
-func (r *Runner) deleteKeysWithoutTTL(ctx context.Context, pattern string) (int, error) {
-	cleaned := 0
-	var cursor uint64
-	for {
-		keys, next, err := r.redis.Scan(ctx, cursor, pattern, 100).Result()
-		if err != nil {
-			return 0, err
-		}
-		for _, key := range keys {
-			ttl, err := r.redis.TTL(ctx, key).Result()
-			if err != nil {
-				continue
-			}
-			if ttl == -1 {
-				if err := r.redis.Del(ctx, key).Err(); err == nil {
-					cleaned++
-				}
-			}
-		}
-		cursor = next
-		if cursor == 0 {
-			break
-		}
-	}
-	return cleaned, nil
-}
-
-func (r *Runner) archiveOldLogs(ctx context.Context, payload map[string]any) (map[string]any, error) {
-	days := r.logRetentionD
-	if v, ok := intFromPayload(payload, "retentionDays"); ok {
-		days = v
-	}
-
-	systemMoved, queryMoved, err := r.store.ArchiveOldLogs(ctx, days)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"retentionDays":      days,
-		"systemLogsArchived": systemMoved,
-		"queryLogsArchived":  queryMoved,
-	}, nil
-}
-
-func (r *Runner) purgeArchivedLogs(ctx context.Context, payload map[string]any) (map[string]any, error) {
-	days := r.logRetentionD * 3
-	if v, ok := intFromPayload(payload, "retentionDays"); ok {
-		days = v
-	}
-
-	systemDeleted, queryDeleted, err := r.store.PurgeArchivedLogs(ctx, days)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"retentionDays":    days,
-		"systemLogsPurged": systemDeleted,
-		"queryLogsPurged":  queryDeleted,
-	}, nil
-}
-
-func (r *Runner) snapshotRedisStats(ctx context.Context) (map[string]any, error) {
-	if r.redis == nil {
-		return nil, fmt.Errorf("redis unavailable")
-	}
-
-	info, err := r.redis.Info(ctx, "memory").Result()
-	if err != nil {
-		return nil, err
-	}
-
-	completed, _ := r.redis.Get(ctx, "metrics:event-processor:jobs_completed").Int64()
-	stats := map[string]any{
-		"jobsCompleted": completed,
-	}
-	if used, ok := infoInt(info, "used_memory"); ok {
-		stats["usedMemoryBytes"] = used
-	}
-	if peak, ok := infoInt(info, "used_memory_peak"); ok {
-		stats["usedMemoryPeakBytes"] = peak
-	}
-	stats["queues"] = normalizeQueueDepths(r.fetchQueueDepths(ctx))
-
-	r.store.LogSystem(ctx, "redis.stats", 0, stats)
-	return stats, nil
-}
-
-func (r *Runner) postDocumentMaintenance(ctx context.Context, path string) (map[string]any, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.documentServiceURL+path, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := r.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("document-service %s: %s", res.Status, strings.TrimSpace(string(body)))
-	}
-
-	var payload map[string]any
-	if len(body) == 0 {
-		return map[string]any{}, nil
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return payload, nil
-}
-
 func (r *Runner) acquireLock(ctx context.Context, jobID string) (bool, error) {
-	return r.redis.SetNX(ctx, lockKey(jobID), "1", 5*time.Minute).Result()
+	key := lockKey(jobID)
+	ok, err := r.redis.SetNX(ctx, key, "1", 5*time.Minute).Result()
+	if err != nil || ok {
+		return ok, err
+	}
+
+	// Immortal lock (no TTL) from an old bug/crash path — clear and retry once.
+	ttl, ttlErr := r.redis.TTL(ctx, key).Result()
+	if ttlErr != nil || ttl != -1 {
+		return false, nil
+	}
+	if err := r.redis.Del(ctx, key).Err(); err != nil {
+		return false, err
+	}
+	return r.redis.SetNX(ctx, key, "1", 5*time.Minute).Result()
 }
 
 func (r *Runner) releaseLock(ctx context.Context, jobID string) {
@@ -353,44 +232,4 @@ func (r *Runner) releaseLock(ctx context.Context, jobID string) {
 
 func lockKey(jobID string) string {
 	return "job:" + jobID + ":processing"
-}
-
-func intFromPayload(payload map[string]any, key string) (int, bool) {
-	if payload == nil {
-		return 0, false
-	}
-	raw, ok := payload[key]
-	if !ok {
-		return 0, false
-	}
-	switch v := raw.(type) {
-	case float64:
-		return int(v), true
-	case int:
-		return v, true
-	case string:
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, false
-		}
-		return n, true
-	default:
-		return 0, false
-	}
-}
-
-func infoInt(info, key string) (int64, bool) {
-	prefix := key + ":"
-	for _, line := range strings.Split(info, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		n, err := strconv.ParseInt(strings.TrimPrefix(line, prefix), 10, 64)
-		if err != nil {
-			return 0, false
-		}
-		return n, true
-	}
-	return 0, false
 }
