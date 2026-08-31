@@ -11,24 +11,22 @@ public static class DatabaseInitializer
         var sql = SqlScripts.Load("schema.sql")
             .Replace("__EMBEDDING_DIMENSION__", dimension.ToString(), StringComparison.Ordinal);
 
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await using (var command = new NpgsqlCommand(sql, connection))
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
 
-        var migration = SqlScripts.Load("migrations/001_document_retry_columns.sql");
-        await using var migrationCmd = new NpgsqlCommand(migration, connection);
-        await migrationCmd.ExecuteNonQueryAsync(cancellationToken);
-
-        var progressMigration = SqlScripts.Load("migrations/002_document_progress_columns.sql");
-        await using var progressMigrationCmd = new NpgsqlCommand(progressMigration, connection);
-        await progressMigrationCmd.ExecuteNonQueryAsync(cancellationToken);
-
-        var ocrLangMigration = SqlScripts.Load("migrations/003_document_ocr_lang.sql");
-        await using var ocrLangMigrationCmd = new NpgsqlCommand(ocrLangMigration, connection);
-        await ocrLangMigrationCmd.ExecuteNonQueryAsync(cancellationToken);
-
-        var pausedMigration = SqlScripts.Load("migrations/004_document_paused_status.sql");
-        await using var pausedMigrationCmd = new NpgsqlCommand(pausedMigration, connection);
-        await pausedMigrationCmd.ExecuteNonQueryAsync(cancellationToken);
+        foreach (var path in new[]
+        {
+            "migrations/001_document_retry_columns.sql",
+            "migrations/002_document_progress_columns.sql",
+            "migrations/003_document_ocr_lang.sql",
+            "migrations/004_document_paused_status.sql",
+        })
+        {
+            await using var cmd = new NpgsqlCommand(SqlScripts.Load(path), connection);
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static int GetEmbeddingDimension()

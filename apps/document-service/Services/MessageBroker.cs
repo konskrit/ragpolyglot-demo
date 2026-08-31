@@ -19,6 +19,17 @@ public sealed partial class MessageBroker(
     public const string PausedQueue = "document.paused.queue";
     public const string ProgressQueue = "document.progress.queue";
 
+    private static readonly (string Queue, string RoutingKey)[] Topology =
+    [
+        (UploadedQueue, "document.uploaded"),
+        (DeletedQueue, "document.deleted"),
+        (PauseQueue, "document.pause"),
+        (ProcessedQueue, "document.processed"),
+        (FailedQueue, "document.failed"),
+        (PausedQueue, "document.paused"),
+        (ProgressQueue, "document.progress"),
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -68,13 +79,10 @@ public sealed partial class MessageBroker(
                         durable: true,
                         cancellationToken: cancellationToken);
 
-                    await DeclareAndBindQueueAsync(_publishingChannel, UploadedQueue, "document.uploaded", cancellationToken);
-                    await DeclareAndBindQueueAsync(_publishingChannel, DeletedQueue, "document.deleted", cancellationToken);
-                    await DeclareAndBindQueueAsync(_publishingChannel, PauseQueue, "document.pause", cancellationToken);
-                    await DeclareAndBindQueueAsync(_publishingChannel, ProcessedQueue, "document.processed", cancellationToken);
-                    await DeclareAndBindQueueAsync(_publishingChannel, FailedQueue, "document.failed", cancellationToken);
-                    await DeclareAndBindQueueAsync(_publishingChannel, PausedQueue, "document.paused", cancellationToken);
-                    await DeclareAndBindQueueAsync(_publishingChannel, ProgressQueue, "document.progress", cancellationToken);
+                    foreach (var (queue, routingKey) in Topology)
+                    {
+                        await DeclareAndBindQueueAsync(_publishingChannel, queue, routingKey, cancellationToken);
+                    }
 
                     _initialized = true;
                     LogInitialized(ExchangeName);
@@ -195,48 +203,32 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _processedChannel,
             ProcessedQueue,
-            async body =>
-            {
-                var message = JsonSerializer.Deserialize<DocumentProcessedEvent>(body, JsonOptions)
-                    ?? throw new JsonException("Failed to deserialize document.processed event");
-                await onProcessed(message);
-            },
+            "document.processed",
+            onProcessed,
             onInvalidPayload,
             cancellationToken);
 
         await BindConsumerAsync(
             _failedChannel,
             FailedQueue,
-            async body =>
-            {
-                var message = JsonSerializer.Deserialize<DocumentFailedEvent>(body, JsonOptions)
-                    ?? throw new JsonException("Failed to deserialize document.failed event");
-                await onFailed(message);
-            },
+            "document.failed",
+            onFailed,
             onInvalidPayload,
             cancellationToken);
 
         await BindConsumerAsync(
             _pausedChannel,
             PausedQueue,
-            async body =>
-            {
-                var message = JsonSerializer.Deserialize<DocumentPausedEvent>(body, JsonOptions)
-                    ?? throw new JsonException("Failed to deserialize document.paused event");
-                await onPaused(message);
-            },
+            "document.paused",
+            onPaused,
             onInvalidPayload,
             cancellationToken);
 
         await BindConsumerAsync(
             _progressChannel,
             ProgressQueue,
-            async body =>
-            {
-                var message = JsonSerializer.Deserialize<DocumentProgressEvent>(body, JsonOptions)
-                    ?? throw new JsonException("Failed to deserialize document.progress event");
-                await onProgress(message);
-            },
+            "document.progress",
+            onProgress,
             onInvalidPayload,
             cancellationToken);
 
@@ -263,10 +255,11 @@ public sealed partial class MessageBroker(
             cancellationToken: cancellationToken);
     }
 
-    private async Task BindConsumerAsync(
+    private async Task BindConsumerAsync<T>(
         IChannel channel,
         string queueName,
-        Func<byte[], Task> handler,
+        string eventName,
+        Func<T, Task> onMessage,
         Func<string, Exception, byte[]?, Task> onInvalidPayload,
         CancellationToken cancellationToken)
     {
@@ -278,7 +271,9 @@ public sealed partial class MessageBroker(
             try
             {
                 body = ea.Body.ToArray();
-                await handler(body);
+                var message = JsonSerializer.Deserialize<T>(body, JsonOptions)
+                    ?? throw new JsonException($"Failed to deserialize {eventName} event");
+                await onMessage(message);
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: CancellationToken.None);
             }
             catch (Exception ex) when (MessageClassification.IsPoison(ex))
