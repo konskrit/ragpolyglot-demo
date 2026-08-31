@@ -52,10 +52,7 @@ export function showOcrLanguageMenu(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (doc.status === 'processing') {
-    return true;
-  }
-  if (doc.status === 'paused') {
+  if (doc.progressStage === 'extracting') {
     return true;
   }
   return Boolean(doc.ocrLang);
@@ -72,10 +69,10 @@ export function canChangeOcrLangLive(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (doc.status === 'processing' && doc.progressStage === 'extracting') {
-    return true;
-  }
-  if (doc.status === 'paused') {
+  if (
+    doc.progressStage === 'extracting' &&
+    (doc.status === 'processing' || doc.status === 'paused')
+  ) {
     return true;
   }
   return doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED;
