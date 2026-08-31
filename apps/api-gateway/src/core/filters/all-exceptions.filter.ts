@@ -5,7 +5,7 @@ import {
   HttpException,
   Logger,
 } from '@nestjs/common';
-import { AxiosError } from 'axios';
+import { AxiosError, isAxiosError } from 'axios';
 import { Response } from 'express';
 import { MulterError } from 'multer';
 import { Config } from '../config';
@@ -33,7 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return this.send(response, new HttpException(exception.message, 400));
     }
 
-    if (this.isAxiosError(exception)) {
+    if (isAxiosError(exception)) {
       const err = exception as AxiosError<{
         message?: string;
         error?: string;
@@ -73,14 +73,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const body = exception.getResponse() as Record<string, unknown>;
     response.status(status).json(body);
-  }
-
-  private isAxiosError(err: unknown): err is AxiosError {
-    return (
-      typeof err === 'object' &&
-      err !== null &&
-      (err as AxiosError).isAxiosError === true
-    );
   }
 
   private describeAxiosError(err: AxiosError): string {

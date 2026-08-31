@@ -18,10 +18,6 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private readonly consumers: ConsumerRegistration<ConsumeMessage>[] = [];
 
   onModuleInit(): void {
-    this.start();
-  }
-
-  start(): void {
     this.connectLoop();
   }
 
@@ -70,6 +66,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
     void attempt();
   }
+
   private async connect(): Promise<void> {
     const model = await amqp.connect(Config.rabbitmqUrl);
 
@@ -81,26 +78,18 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       });
 
       await channel.assertQueue(Config.gatewayStatusQueue, { durable: true });
-      await channel.bindQueue(
-        Config.gatewayStatusQueue,
-        Config.documentEventsExchange,
+      for (const routingKey of [
         'document.processed',
-      );
-      await channel.bindQueue(
-        Config.gatewayStatusQueue,
-        Config.documentEventsExchange,
         'document.failed',
-      );
-      await channel.bindQueue(
-        Config.gatewayStatusQueue,
-        Config.documentEventsExchange,
         'document.progress',
-      );
-      await channel.bindQueue(
-        Config.gatewayStatusQueue,
-        Config.documentEventsExchange,
         'document.paused',
-      );
+      ]) {
+        await channel.bindQueue(
+          Config.gatewayStatusQueue,
+          Config.documentEventsExchange,
+          routingKey,
+        );
+      }
 
       this.channelModel = model;
       this.channel = channel;
@@ -153,7 +142,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       });
   }
 
-  async consume(
+  private async consume(
     queueName: string,
     handler: (msg: ConsumeMessage | null) => void | Promise<void>,
   ): Promise<void> {

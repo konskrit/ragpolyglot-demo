@@ -16,12 +16,18 @@ export class HealthController {
 
   @Get()
   async health(@Res({ passthrough: true }) res: Response) {
+    const [document_service, rag_worker, event_processor] = await Promise.all([
+      this.probe(`${Config.documentServiceUrl}/health`),
+      this.probe(`${Config.ragWorkerUrl}/health`),
+      this.probe(`${Config.eventProcessorUrl}/health`),
+    ]);
+
     const checks = {
       service: 'api-gateway',
       timestamp: new Date().toISOString(),
-      document_service: await this.probe(`${Config.documentServiceUrl}/health`),
-      rag_worker: await this.probe(`${Config.ragWorkerUrl}/health`),
-      event_processor: await this.probe(`${Config.eventProcessorUrl}/health`),
+      document_service,
+      rag_worker,
+      event_processor,
       redis: this.redis.isReady() ? 'ok' : 'error',
       rabbitmq: this.rabbitMQ.isConnected() ? 'ok' : 'error',
     };

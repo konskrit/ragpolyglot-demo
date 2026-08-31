@@ -17,13 +17,12 @@ import { RabbitMQService } from '../core/rabbitmq.service';
 import { RagService } from '../rag/rag.service';
 import { ConversationService } from './conversation.service';
 import {
-  isDocumentProgressStage,
-  type DocumentProgressEvent,
   type DocumentStatus,
   type DocumentStatusUpdate,
   type Source,
 } from '@ragpolyglot-shared';
 import { randomUUID } from 'crypto';
+import { parseDocumentStatusEvent } from './chat.status';
 
 @Injectable()
 @WebSocketGateway({
@@ -50,27 +49,15 @@ export class ChatGateway implements OnModuleInit {
       if (!msg?.content) return;
 
       try {
-        const event = JSON.parse(msg.content.toString()) as {
-          type?: string;
-          documentId?: string;
-        } & Partial<Pick<DocumentProgressEvent, 'stage' | 'done' | 'total'>>;
-
-        if (!event.documentId) return;
-
-        if (event.type === 'document.processed') {
-          this.emitDocumentStatusUpdate(event.documentId, 'ready');
-        } else if (event.type === 'document.failed') {
-          this.emitDocumentStatusUpdate(event.documentId, 'failed');
-        } else if (event.type === 'document.paused') {
-          this.emitDocumentStatusUpdate(event.documentId, 'paused');
-        } else if (event.type === 'document.progress') {
-          if (!isDocumentProgressStage(event.stage)) return;
-          this.emitDocumentStatusUpdate(event.documentId, 'processing', {
-            progressStage: event.stage,
-            progressDone: event.done ?? 0,
-            progressTotal: event.total ?? 0,
-          });
-        }
+        const parsed = parseDocumentStatusEvent(
+          JSON.parse(msg.content.toString()),
+        );
+        if (!parsed) return;
+        this.emitDocumentStatusUpdate(
+          parsed.documentId,
+          parsed.status,
+          parsed.progress,
+        );
       } catch (err) {
         this.logger.error(`Failed to parse RabbitMQ message: ${err}`);
       }
@@ -194,7 +181,7 @@ export class ChatGateway implements OnModuleInit {
     client.join(`doc:${documentId}`);
   }
 
-  emitDocumentStatusUpdate(
+  private emitDocumentStatusUpdate(
     documentId: string,
     status: DocumentStatus,
     progress?: Pick<
