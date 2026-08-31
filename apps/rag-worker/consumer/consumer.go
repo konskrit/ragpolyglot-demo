@@ -18,6 +18,8 @@ import (
 	"apps/rag-worker/workpool"
 )
 
+const requeueBackoff = 2 * time.Second
+
 type Processor struct {
 	store            *storage.Store
 	publisher        *publisher.Publisher
@@ -165,10 +167,16 @@ func (p *Processor) handleDeleted(msg amqp.Delivery) {
 	deleted, err := p.store.DeleteChunks(ctx, event.DocumentID)
 	if err != nil {
 		log.Printf("[Consumer] delete chunks failed for %s: %v", event.DocumentID, err)
+		time.Sleep(requeueBackoff)
 		_ = msg.Nack(false, true)
 		return
 	}
-	_ = p.store.DeleteCheckpoint(ctx, event.DocumentID)
+	if err := p.store.DeleteCheckpoint(ctx, event.DocumentID); err != nil {
+		log.Printf("[Consumer] delete checkpoint failed for %s: %v", event.DocumentID, err)
+		time.Sleep(requeueBackoff)
+		_ = msg.Nack(false, true)
+		return
+	}
 
 	p.store.LogSystem(ctx, "document.deleted", event.DocumentID, time.Since(start), map[string]any{
 		"deletedChunks": deleted,

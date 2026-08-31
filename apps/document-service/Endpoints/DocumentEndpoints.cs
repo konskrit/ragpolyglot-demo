@@ -310,28 +310,39 @@ public static class DocumentEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        var existing = await repo.GetByIdAsync(id, cancellationToken);
-        if (existing is null)
-        {
-            return Results.NotFound(new { error = "Document not found" });
-        }
-
-        try
-        {
-            await messageBroker.PublishDocumentDeletedAsync(id, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-            logger.LogError(ex, "Failed to publish document.deleted for {DocumentId}", id);
-            return Results.Problem(
-                detail: "The delete event could not be published; document was not removed.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-
+        // Delete row first so chunks/checkpoints CASCADE away. Publish after so a
+        // failed DeleteAsync cannot leave metadata without vectors. Retry publish so
+        // in-flight ingest still gets the stop signal when the broker blips.
         if (!await repo.DeleteAsync(id, cancellationToken))
         {
             return Results.NotFound(new { error = "Document not found" });
+        }
+
+        Exception? publishError = null;
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            try
+            {
+                await messageBroker.PublishDocumentDeletedAsync(id, cancellationToken);
+                publishError = null;
+                break;
+            }
+            catch (Exception ex)
+            {
+                publishError = ex;
+                if (attempt == 5)
+                {
+                    break;
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(attempt), CancellationToken.None);
+            }
+        }
+
+        if (publishError is not null)
+        {
+            var logger = loggerFactory.CreateLogger("DocumentEndpoints");
+            logger.LogError(publishError, "Document {DocumentId} deleted but document.deleted publish failed after retries", id);
         }
 
         return Results.Ok(new

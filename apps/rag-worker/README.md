@@ -1,8 +1,10 @@
 # rag-worker
 
-> **WIP** — Go RAG pipeline worker.
+Go RAG pipeline worker.
 
-Consumes `document.uploaded` / `document.deleted`, chunks (~750 tokens, 10% overlap), embeds (API; hash fallback only when `EMBEDDING_FALLBACK=true`), writes pgvector chunks, publishes `document.processed` / `document.failed`. Logs query and ingest timings to Postgres.
+Consumes `document.uploaded` / `document.deleted` / `document.pause`, chunks (~750 tokens, 10% overlap), embeds (API; hash fallback only when `EMBEDDING_FALLBACK=true`), writes pgvector chunks, publishes `document.processed` / `document.failed` / `document.paused` / `document.progress`. Logs query and ingest timings to Postgres.
+
+Delete bumps ingest generation so in-flight work stops and leftover chunks/checkpoints are wiped.
 
 HTTP:
 
