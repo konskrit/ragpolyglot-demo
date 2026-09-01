@@ -79,6 +79,20 @@ func checkPaused(stop func() bool) error {
 	return nil
 }
 
+func IsProcessAbort(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, ErrPaused) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "signal:") ||
+		strings.Contains(msg, "exit status 137") ||
+		strings.Contains(msg, "exit status 143") ||
+		strings.Contains(msg, "broken pipe")
+}
+
 func runCapture(stop func() bool, name string, args ...string) (stdout string, err error) {
 	return runCaptureOutput(stop, true, name, args...)
 }
@@ -131,6 +145,9 @@ func runCaptureOutput(stop func() bool, capture bool, name string, args ...strin
 
 	if err := cmd.Run(); err != nil {
 		if stop != nil && stop() {
+			return "", ErrPaused
+		}
+		if IsProcessAbort(err) {
 			return "", ErrPaused
 		}
 		errText := stderr.String()

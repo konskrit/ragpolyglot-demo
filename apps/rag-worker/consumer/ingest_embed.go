@@ -47,6 +47,8 @@ func (p *Processor) runEmbedPhase(
 		return
 	}
 
+	embedDone = syncEmbedDoneFromChunks(ctx, p.store, event.DocumentID, embedDone)
+
 	textChunks := chunker.ChunkText(job.PartialText)
 	if len(textChunks) == 0 {
 		fail("chunking_error", fmt.Errorf("chunker produced zero chunks"))
@@ -65,13 +67,6 @@ func (p *Processor) runEmbedPhase(
 	if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 		fail("storage_error", err)
 		return
-	}
-
-	if embedDone == 0 {
-		if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
-			fail("storage_error", err)
-			return
-		}
 	}
 
 	embedStart := time.Now()

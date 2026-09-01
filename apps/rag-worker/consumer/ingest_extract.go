@@ -79,15 +79,12 @@ func (p *Processor) runExtract(
 		}
 		return nil
 	}
-	state.OnRenderPage = func(page, total int) {
-		p.publishProgress(event.DocumentID, "extracting", page, total)
-	}
 
 	acker.ack()
 
 	text, langs, extractErr := extractor.ExtractFromPathWithOCR(job.FilePath, job.OcrLangHint, state)
 	if extractErr != nil {
-		if errors.Is(extractErr, extractor.ErrPaused) {
+		if errors.Is(extractErr, extractor.ErrPaused) || extractor.IsProcessAbort(extractErr) {
 			if p.ackIfStale(acker, event.DocumentID, gen) {
 				return false
 			}

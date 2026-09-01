@@ -34,17 +34,24 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /models
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/modelcache \
     if [ "$INSTALL_KRAKEN" = "1" ]; then \
       if [ "$KRAKEN_TORCH" = "cpu" ]; then \
         TORCH_INDEX="https://download.pytorch.org/whl/cpu"; \
       else \
         TORCH_INDEX="https://download.pytorch.org/whl/${KRAKEN_TORCH}"; \
       fi \
-      && pip install --index-url "$TORCH_INDEX" torch torchvision \
-      && pip install kraken \
-      && pip install --force-reinstall --no-deps \
-           --index-url "$TORCH_INDEX" torch torchvision \
+      && pip install --index-url "$TORCH_INDEX" torch torchvision; \
+    fi
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/modelcache \
+    if [ "$INSTALL_KRAKEN" = "1" ]; then \
+      pip install 'kraken>=7,<8' --no-deps \
+      && pip install \
+           click coremltools htrmopo iso639-lang jinja2 jsonschema lightning lxml \
+           numpy packaging pillow platformdirs protobuf pyarrow python-bidi regex \
+           requests rich safetensors scikit-image scikit-learn scipy shapely \
+           threadpoolctl torchmetrics \
       && python3 -c "import torch; import torchvision; from torchvision.transforms import v2; import kraken" \
       && if [ ! -s /modelcache/grc.mlmodel ]; then \
            curl -fsSL --retry 5 -o /modelcache/grc.mlmodel \

@@ -106,9 +106,6 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 				}
 				pages = append(pages, page)
 				images = append(images, img)
-				if state.OnRenderPage != nil {
-					state.OnRenderPage(page, total)
-				}
 			}
 			return nil
 		})
@@ -165,12 +162,12 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 		for i, page := range pages {
 			pageText[page] = texts[i]
 			lastDone = page
-			soFar := joinPageText(prior, pageText, start, lastDone)
-			log.Printf("[Extractor] OCR engine=kraken progress %d/%d", lastDone, total)
-			if state.OnProgress != nil {
-				if err := state.OnProgress(lastDone, total, soFar, langs); err != nil {
-					return joinPageText(prior, pageText, start, lastDone), langs, err
-				}
+		}
+		soFar := joinPageText(prior, pageText, start, lastDone)
+		log.Printf("[Extractor] OCR engine=kraken progress %d/%d", lastDone, total)
+		if state.OnProgress != nil {
+			if err := state.OnProgress(lastDone, total, soFar, langs); err != nil {
+				return joinPageText(prior, pageText, start, lastDone), langs, err
 			}
 		}
 		batchStart = batchEnd + 1
@@ -187,7 +184,7 @@ func krakenCLIArgs(device string, imagePaths []string, model string) []string {
 	for _, imagePath := range imagePaths {
 		args = append(args, "-i", imagePath, imagePath+".txt")
 	}
-	args = append(args, "binarize", "segment", "-bl", "ocr", "-m", model)
+	args = append(args, "segment", "-bl", "ocr", "-m", model)
 	if lineBatch, ok := krakenLineBatch(); ok {
 		args = append(args, "-B", strconv.Itoa(lineBatch))
 	}

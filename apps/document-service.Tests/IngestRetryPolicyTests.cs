@@ -6,14 +6,14 @@ namespace DocumentService.Tests;
 public class IngestRetryPolicyTests
 {
     [Theory]
-    [InlineData("embedding_error", false)]
-    [InlineData("storage_error", false)]
-    [InlineData("chunking_error", true)]
-    [InlineData("ocr_language_needed", true)]
-    [InlineData("stale_timeout", true)]
-    [InlineData(null, true)]
-    public void ShouldResetIngest(string? reason, bool expected)
+    [InlineData("embedding_error")]
+    [InlineData("storage_error")]
+    [InlineData("chunking_error")]
+    [InlineData("ocr_language_needed")]
+    [InlineData("stale_timeout")]
+    [InlineData(null)]
+    public void ShouldResetIngest_always_false(string? reason)
     {
-        Assert.Equal(expected, IngestRetryPolicy.ShouldResetIngest(reason));
+        Assert.False(IngestRetryPolicy.ShouldResetIngest(reason));
     }
 }

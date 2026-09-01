@@ -13,11 +13,12 @@ import (
 const (
 	defaultKrakenBatchPages    = 16
 	defaultKrakenBatchPagesGPU = 64
-	defaultKrakenThreads       = 4
+	defaultKrakenThreads       = 8
 	defaultKrakenVRAMBudgetMB  = 16384
 	defaultKrakenVRAMPageMB    = 256
 	defaultKrakenPageMemoryMB  = 256
-	defaultKrakenLineBatch     = 128
+	defaultKrakenLineBatch     = 256
+	defaultKrakenLineWorkers   = 16
 	defaultKrakenPrecisionGPU  = "bf16-mixed"
 )
 
@@ -86,8 +87,8 @@ func krakenLineWorkers() (int, bool) {
 	}
 	if krakenOnCUDA() {
 		n := runtime.NumCPU()
-		if n > 8 {
-			n = 8
+		if n > defaultKrakenLineWorkers {
+			n = defaultKrakenLineWorkers
 		}
 		if n < 1 {
 			n = 1

@@ -106,8 +106,7 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        var fullRetry = IngestRetryPolicy.ShouldResetIngest(existing.ErrorReason);
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: fullRetry))
+        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -281,7 +280,8 @@ public static class DocumentEndpoints
                     repo,
                     messageBroker,
                     logger,
-                    cancellationToken))
+                    cancellationToken,
+                    retry: true))
             {
                 continue;
             }

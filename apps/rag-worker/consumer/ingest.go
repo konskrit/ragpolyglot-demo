@@ -79,22 +79,7 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		fail("storage_error", err)
 		return
 	}
-	if event.Retry {
-		resumeEmbed := cp != nil && cp.Stage == "embedding"
-		if !resumeEmbed {
-			if _, err := p.store.DeleteChunks(ctx, event.DocumentID); err != nil {
-				fail("storage_error", err)
-				return
-			}
-			if err := p.store.DeleteCheckpoint(ctx, event.DocumentID); err != nil {
-				fail("storage_error", err)
-				return
-			}
-			cp = nil
-		} else {
-			log.Printf("[Consumer] preserving embedding checkpoint documentId=%s embedDone=%d", event.DocumentID, cp.EmbedDone)
-		}
-	} else if cp == nil {
+	if cp == nil {
 		n, err := p.store.CountChunks(ctx, event.DocumentID)
 		if err != nil {
 			fail("storage_error", err)
@@ -137,6 +122,8 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	if !p.runExtract(ctx, acker, event, gen, &job, cp, stopIngest, fail, pause) {
 		return
 	}
+
+	embedDone = syncEmbedDoneFromChunks(ctx, p.store, event.DocumentID, embedDone)
 
 	if err := p.withFastIngestSlot(stopIngest, func() {
 		p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
@@ -268,26 +255,9 @@ func syncEmbedDoneFromChunks(ctx context.Context, store *storage.Store, document
 	return int(n)
 }
 
-func isResumableFailure(reason string) bool {
-	return reason == "embedding_error" || reason == "storage_error"
-}
-
 func (p *Processor) failIngest(ctx context.Context, acker *ingestAck, documentID string, start time.Time, reason string, cause error) {
 	log.Printf("[Consumer] document %s failed (%s): %v", documentID, reason, cause)
-
-	if isResumableFailure(reason) {
-		log.Printf("[Consumer] preserving ingest progress documentId=%s reason=%s", documentID, reason)
-	} else if err := wipeIngestDataWithRetry(ctx, p.store, documentID); err != nil {
-		log.Printf("[Consumer] CRITICAL: wipe after %s failed documentId=%s: %v", reason, documentID, err)
-		if !acker.settled() {
-			time.Sleep(requeueBackoff)
-			acker.nack(true)
-			return
-		}
-		scheduleAsyncRetry("wipe", documentID, func() error {
-			return wipeIngestData(context.Background(), p.store, documentID)
-		})
-	}
+	log.Printf("[Consumer] preserving ingest progress documentId=%s reason=%s", documentID, reason)
 
 	if pubErr := publishWithRetry("document.failed", func() error {
 		return p.publisher.PublishFailed(documentID, reason)

@@ -1,7 +1,9 @@
 package extractor
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -33,6 +35,18 @@ func TestLockKrakenGPUHonorsPause(t *testing.T) {
 	err := lockKrakenGPU(func() bool { return true })
 	if !errors.Is(err, ErrPaused) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestIsProcessAbort(t *testing.T) {
+	if !IsProcessAbort(context.Canceled) {
+		t.Fatal("context.Canceled should abort")
+	}
+	if !IsProcessAbort(fmt.Errorf("kraken failed: signal: killed")) {
+		t.Fatal("signal killed should abort")
+	}
+	if IsProcessAbort(fmt.Errorf("kraken failed: ocr failed")) {
+		t.Fatal("ordinary error should not abort")
 	}
 }
 
