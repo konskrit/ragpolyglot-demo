@@ -140,6 +140,9 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# ----- Off-repo file-level docs (local only) -----
+/docs/
+
 # ----- AI / agent local state (do not commit session dumps) -----
 .continue/
 .cursor/
