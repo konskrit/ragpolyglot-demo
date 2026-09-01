@@ -4,12 +4,36 @@ import { emitWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
 import { Button, ButtonLink } from './Button';
 import { formatSimilarityPercent } from '../lib/formatSimilarity';
-import type { ChatCompletePayload, Message, Source } from '@ragpolyglot-shared';
+import { chunkAnchorId } from '../lib/chunkAnchor';
+import type {
+  ChatCompletePayload,
+  DocumentSummary,
+  Message,
+  Source,
+} from '@ragpolyglot-shared';
 
-function sourceLabel(source: Source): string {
+function sourceLabel(source: Source, documents: DocumentSummary[]): string {
   if (source.documentTitle?.trim()) return source.documentTitle;
+  const doc = documents.find((d) => d.id === source.documentId);
+  if (doc?.title?.trim()) return doc.title;
   if (source.documentId) return `Doc ${source.documentId.slice(0, 8)}`;
   return 'Source';
+}
+
+function sourceLink(source: Source): {
+  pathname: string;
+  hash?: string;
+  state?: { chunkIndex: number };
+} {
+  const pathname = `/documents/${source.documentId}`;
+  if (typeof source.chunkIndex !== 'number') {
+    return { pathname };
+  }
+  return {
+    pathname,
+    hash: chunkAnchorId(source.chunkIndex),
+    state: { chunkIndex: source.chunkIndex },
+  };
 }
 
 export function AgentChat({
@@ -186,22 +210,25 @@ export function AgentChat({
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
                     Sources
                   </p>
-                  {m.sources.map((s, idx) => (
+                  {m.sources.map((s) => (
                     <div
-                      key={`${s.documentId}-${idx}`}
+                      key={`${s.documentId}-${s.chunkIndex ?? 'x'}-${s.similarity}`}
                       className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs space-y-1"
                     >
                       <div className="flex items-center justify-between gap-2">
                         {s.documentId ? (
                           <Link
-                            to={`/documents/${s.documentId}`}
+                            to={sourceLink(s)}
                             className="font-medium text-indigo-400 truncate hover:text-indigo-300 hover:underline"
                           >
-                            {sourceLabel(s)}
+                            {sourceLabel(s, documents)}
+                            {typeof s.chunkIndex === 'number'
+                              ? ` · chunk ${s.chunkIndex + 1}`
+                              : ''}
                           </Link>
                         ) : (
                           <span className="font-medium text-indigo-400 truncate">
-                            {sourceLabel(s)}
+                            {sourceLabel(s, documents)}
                           </span>
                         )}
                         <span className="text-green-400 font-mono shrink-0">

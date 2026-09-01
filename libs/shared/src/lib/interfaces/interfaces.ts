@@ -135,6 +135,7 @@ export interface Source {
   documentTitle: string;
   chunkContent: string;
   similarity: number;
+  chunkIndex?: number;
 }
 
 export interface RAGResult {

@@ -12,5 +12,6 @@ export function toSources(hits: RagSearchHit[]): Source[] {
     documentTitle: '',
     chunkContent: h.content,
     similarity: h.similarity,
+    chunkIndex: h.chunkIndex,
   }));
 }

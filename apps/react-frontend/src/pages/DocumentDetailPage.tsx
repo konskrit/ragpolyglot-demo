@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   formatDocumentProgressLabel,
   type DocumentChunk,
@@ -10,6 +10,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
 import { loadDocument, loadDocumentChunks } from '../lib/documents';
+import { chunkAnchorId, parseChunkNavigationTarget } from '../lib/chunkAnchor';
 
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +22,7 @@ export function DocumentDetailPage() {
 
 function DocumentDetail({ id }: { id: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { documents, loading: listLoading } = useDocuments();
   const listDoc = documents.find((d) => d.id === id);
 
@@ -30,6 +32,12 @@ function DocumentDetail({ id }: { id: string }) {
   const [chunksLoading, setChunksLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chunksError, setChunksError] = useState<string | null>(null);
+  const scrolledChunkRef = useRef<number | null>(null);
+
+  const targetChunkIndex = useMemo(
+    () => parseChunkNavigationTarget(location.hash, location.state),
+    [location.hash, location.state],
+  );
 
   const doc = listDoc ?? fetched;
   const inList = listDoc !== undefined;
@@ -94,6 +102,18 @@ function DocumentDetail({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, doc?.status]);
+
+  useEffect(() => {
+    scrolledChunkRef.current = null;
+  }, [id, targetChunkIndex]);
+
+  const scrollToChunk = (chunkIndex: number, el: HTMLElement) => {
+    if (scrolledChunkRef.current === chunkIndex) return;
+    scrolledChunkRef.current = chunkIndex;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
 
   if (loading && !doc) {
     return <PageSpinner />;
@@ -168,7 +188,21 @@ function DocumentDetail({ id }: { id: string }) {
             {chunks.map((chunk) => (
               <li
                 key={chunk.chunkIndex}
-                className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 min-w-0 max-w-full"
+                id={chunkAnchorId(chunk.chunkIndex)}
+                ref={(el) => {
+                  if (
+                    el &&
+                    targetChunkIndex !== null &&
+                    chunk.chunkIndex === targetChunkIndex
+                  ) {
+                    scrollToChunk(chunk.chunkIndex, el);
+                  }
+                }}
+                className={`rounded-lg border px-4 py-3 min-w-0 max-w-full scroll-mt-24 ${
+                  targetChunkIndex === chunk.chunkIndex
+                    ? 'border-indigo-500 bg-indigo-950/30 ring-1 ring-indigo-500/40'
+                    : 'border-gray-800 bg-gray-900'
+                }`}
               >
                 <p className="text-xs font-medium text-gray-500 mb-2">
                   Chunk {chunk.chunkIndex + 1}

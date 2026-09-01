@@ -130,6 +130,9 @@ export function parseRagSources(value: unknown): Source[] | undefined {
       documentTitle: row.documentTitle,
       chunkContent: row.chunkContent,
       similarity: row.similarity,
+      ...(typeof row.chunkIndex === 'number'
+        ? { chunkIndex: row.chunkIndex }
+        : {}),
     });
   }
   return sources.length > 0 ? sources : undefined;

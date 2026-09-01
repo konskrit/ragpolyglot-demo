@@ -25,6 +25,7 @@ describe('toSources', () => {
         documentTitle: '',
         chunkContent: 'chunk',
         similarity: 0.42,
+        chunkIndex: 0,
       },
     ]);
   });

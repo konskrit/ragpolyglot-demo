@@ -147,6 +147,7 @@ describe('shared contracts', () => {
           documentTitle: 'Doc',
           chunkContent: 'hello',
           similarity: 0.9,
+          chunkIndex: 2,
         },
         { documentId: 'bad' },
       ]),
@@ -156,6 +157,7 @@ describe('shared contracts', () => {
         documentTitle: 'Doc',
         chunkContent: 'hello',
         similarity: 0.9,
+        chunkIndex: 2,
       },
     ]);
   });
