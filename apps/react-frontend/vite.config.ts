@@ -6,6 +6,11 @@ import { resolve } from 'path';
 // Large uploads need a longer proxy timeout than the default 15s API calls.
 const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 
+const engineIoEsm = resolve(
+  __dirname,
+  '../../node_modules/engine.io-client/build/esm',
+);
+
 export default defineConfig({
   root: __dirname,
   envDir: resolve(__dirname, '../..'),
@@ -31,6 +36,31 @@ export default defineConfig({
     host: 'localhost',
   },
   plugins: [react(), nxViteTsPaths()],
+  resolve: {
+    conditions: ['browser', 'import', 'module', 'default'],
+    alias: {
+      'socket.io-client': resolve(
+        __dirname,
+        '../../node_modules/socket.io-client/build/esm/index.js',
+      ),
+      'engine.io-client': resolve(engineIoEsm, 'index.js'),
+      [resolve(engineIoEsm, 'globals.node.js')]: resolve(
+        engineIoEsm,
+        'globals.js',
+      ),
+      [resolve(engineIoEsm, 'transports/websocket.node.js')]: resolve(
+        engineIoEsm,
+        'transports/websocket.js',
+      ),
+      [resolve(engineIoEsm, 'transports/polling-xhr.node.js')]: resolve(
+        engineIoEsm,
+        'transports/polling-xhr.js',
+      ),
+    },
+  },
+  optimizeDeps: {
+    include: ['socket.io-client', 'engine.io-client'],
+  },
   build: {
     outDir: '../../dist/apps/react-frontend',
     emptyOutDir: true,

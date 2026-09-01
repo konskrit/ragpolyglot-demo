@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import io, { Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 import { WS_URL } from '../config';
 
 let sharedSocket: Socket | null = null;

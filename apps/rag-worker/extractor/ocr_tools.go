@@ -87,6 +87,8 @@ func runCapture(stop func() bool, name string, args ...string) (stdout string, e
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureKillGroup(cmd)
+	cmd.WaitDelay = 200 * time.Millisecond
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"apps/rag-worker/workpool"
 )
@@ -220,7 +221,9 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 	args := krakenCLIArgs(device, imagePaths, model)
 
 	if strings.HasPrefix(device, "cuda") {
-		krakenGPUMu.Lock()
+		if err := lockKrakenGPU(stop); err != nil {
+			return nil, err
+		}
 		defer krakenGPUMu.Unlock()
 	}
 	if _, err := runCapture(stop, "kraken", args...); err != nil {
@@ -236,6 +239,18 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 		texts[i] = strings.TrimSpace(string(body))
 	}
 	return texts, nil
+}
+
+func lockKrakenGPU(stop func() bool) error {
+	for {
+		if err := checkPaused(stop); err != nil {
+			return err
+		}
+		if krakenGPUMu.TryLock() {
+			return nil
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 func isKrakenDeviceError(err error) bool {
