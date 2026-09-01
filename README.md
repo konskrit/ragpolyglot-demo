@@ -8,7 +8,7 @@ Built as a personal stack and a portfolio piece — event-driven microservices i
 
 | Piece           | Tech                                          |
 | --------------- | --------------------------------------------- |
-| API gateway     | NestJS (REST + Socket.IO)                     |
+| API gateway     | NestJS (REST + Socket.IO + Scalar `/docs`)    |
 | Documents       | .NET 10 Minimal API                           |
 | RAG worker      | Go (extract → chunk → embed → pgvector → LLM) |
 | Background jobs | Go event processor                            |
@@ -48,6 +48,19 @@ Hash embedding fallback is off by default (`EMBEDDING_FALLBACK=false`). Set `tru
 
 The UI polls `GET /api/health` and `GET /api/metrics`. Metrics come from Redis cache counters plus Postgres `query_logs`, `system_logs`, and document status counts.
 
+### Public API (custom clients)
+
+All browser and third-party traffic goes through the **api-gateway** — not document-service or rag-worker directly.
+
+| Need                         | Where                                                    |
+| ---------------------------- | -------------------------------------------------------- |
+| Interactive REST docs        | http://localhost:3000/docs (Scalar)                      |
+| OpenAPI JSON                 | http://localhost:3000/api/openapi-json                   |
+| TypeScript contracts         | `libs/shared` (`interfaces.ts`, `contracts.ts`)          |
+| Streaming chat + live status | Socket.IO namespace `/ws` (event table in `/docs` intro) |
+
+Vite proxies `/api` and `/socket.io` only — open `/docs` on port **3000**, not 4200.
+
 ## Quick start
 
 ```bash
@@ -61,13 +74,15 @@ Day-to-day: `docker compose up -d` (no `--build`). Rebuild one service when need
 
 Infra only (Postgres on `5433`, Redis, RabbitMQ): `docker compose -f docker-compose.debug.yml up` — use when the apps run on the host.
 
-| Service          | URL                                  |
-| ---------------- | ------------------------------------ |
-| Gateway          | http://localhost:3000                |
-| UI               | http://localhost:4200                |
-| RabbitMQ UI      | http://localhost:15672 (guest/guest) |
-| Document service | http://localhost:5000                |
-| RAG worker       | http://localhost:8081                |
+| Service           | URL                                    |
+| ----------------- | -------------------------------------- |
+| Gateway           | http://localhost:3000                  |
+| API docs (Scalar) | http://localhost:3000/docs             |
+| OpenAPI JSON      | http://localhost:3000/api/openapi-json |
+| UI                | http://localhost:4200                  |
+| RabbitMQ UI       | http://localhost:15672 (guest/guest)   |
+| Document service  | http://localhost:5000                  |
+| RAG worker        | http://localhost:8081                  |
 
 ### LLM (required for chat)
 
@@ -108,7 +123,7 @@ Uses `.env` (from `.env.example`) plus `.env.test.example`. No LM Studio. Tears 
 
 ```
 apps/
-  api-gateway/        Nest BFF — REST, WebSocket, Redis cache, /api/metrics
+  api-gateway/        Nest BFF — REST, WebSocket, Scalar `/docs`, Redis cache
   api-gateway-e2e/    Integration tests (--profile test + llm-stub)
   document-service/   .NET metadata + events
   rag-worker/         Go RAG pipeline + OCR + /api/chat

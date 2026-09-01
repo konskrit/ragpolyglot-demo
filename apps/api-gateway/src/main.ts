@@ -8,6 +8,7 @@ import { RedisService } from './core/redis.service';
 import { PostgresService } from './core/postgres.service';
 import { Config } from './core/config';
 import { AllExceptionsFilter } from './core/filters/all-exceptions.filter';
+import { setupOpenApi } from './core/openapi';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -23,6 +24,8 @@ async function bootstrap() {
     mkdirSync(Config.uploadsDir, { recursive: true });
   }
 
+  setupOpenApi(app);
+
   const redis = app.get(RedisService);
   await redis.connect();
 
@@ -32,7 +35,7 @@ async function bootstrap() {
   await app.listen(Config.port);
 
   Logger.log(
-    `API Gateway running on http://localhost:${Config.port}/api`,
+    `API Gateway running on http://localhost:${Config.port}/api (docs: /docs)`,
     'Bootstrap',
   );
 }

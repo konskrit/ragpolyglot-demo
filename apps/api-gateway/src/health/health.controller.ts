@@ -1,11 +1,14 @@
 import { Controller, Get, Res } from '@nestjs/common';
+import { ApiTags, ApiOkResponse } from '@nestjs/swagger';
 import { HttpService } from '@nestjs/axios';
 import { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { RabbitMQService } from '../core/rabbitmq.service';
 import { RedisService } from '../core/redis.service';
 import { Config } from '../core/config';
+import { HealthResponseDto } from '../core/openapi-schemas';
 
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
   constructor(
@@ -15,6 +18,7 @@ export class HealthController {
   ) {}
 
   @Get()
+  @ApiOkResponse({ type: HealthResponseDto, description: '503 when degraded' })
   async health(@Res({ passthrough: true }) res: Response) {
     const [document_service, rag_worker, event_processor] = await Promise.all([
       this.probe(`${Config.documentServiceUrl}/health`),
