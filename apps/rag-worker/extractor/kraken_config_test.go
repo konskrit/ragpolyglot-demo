@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"sync"
 	"testing"
 )
 
@@ -10,6 +11,12 @@ func resetKrakenDeviceForTest(t *testing.T) {
 	krakenDeviceInit = false
 	krakenDevice = ""
 	krakenDeviceMu.Unlock()
+}
+
+func resetKrakenGPUSemForTest(t *testing.T) {
+	t.Helper()
+	krakenGPUSemOnce = sync.Once{}
+	krakenGPUSem = nil
 }
 
 func TestKrakenBatchPages(t *testing.T) {
@@ -67,6 +74,18 @@ func TestKrakenCPUSkipsGPUDefaults(t *testing.T) {
 	}
 }
 
+func TestKrakenVRAMBudgetPerJob(t *testing.T) {
+	t.Setenv("KRAKEN_VRAM_BUDGET_MB", "22528")
+	t.Setenv("KRAKEN_GPU_CONCURRENT", "2")
+	if got := krakenVRAMBudgetPerJobMB(); got != 11264 {
+		t.Fatalf("got %d want 11264", got)
+	}
+	t.Setenv("KRAKEN_GPU_CONCURRENT", "1")
+	if got := krakenVRAMBudgetPerJobMB(); got != 22528 {
+		t.Fatalf("single job: got %d want 22528", got)
+	}
+}
+
 func TestEffectiveKrakenBatchSizeVRAMCap(t *testing.T) {
 	resetKrakenDeviceForTest(t)
 	krakenDeviceMu.Lock()
@@ -77,6 +96,7 @@ func TestEffectiveKrakenBatchSizeVRAMCap(t *testing.T) {
 	t.Setenv("KRAKEN_BATCH_PAGES", "10")
 	t.Setenv("KRAKEN_VRAM_BUDGET_MB", "1536")
 	t.Setenv("KRAKEN_VRAM_PAGE_MB", "512")
+	t.Setenv("KRAKEN_GPU_CONCURRENT", "1")
 	if got := effectiveKrakenBatchSize(); got != 3 {
 		t.Fatalf("VRAM cap: got %d want 3", got)
 	}

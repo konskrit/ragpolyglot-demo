@@ -28,7 +28,7 @@ Upload → api-gateway → document-service (metadata)
        → gateway WebSocket: document:status-update
 ```
 
-Uploads: `.txt`, `.md`, `.markdown`, `.json`, `.pdf`. PDFs can run OCR (Tesseract by default; Ancient Greek / `grc` uses Kraken 7, with Tesseract fallback). The UI can pause, resume, retry, and set OCR language. During Kraken ingest, `document.progress` counts **OCR’d** pages (after each batch), not pdftoppm renders.
+Uploads: `.txt`, `.md`, `.markdown`, `.json`, `.pdf`. PDFs can run OCR (Tesseract by default; Ancient Greek / `grc` uses Kraken 7, with Tesseract fallback). The UI can pause, resume, retry, and set OCR language. Progress stages: `waiting_for_ocr` (queued on the OCR GPU slot), `extracting`, `embedding`. During Kraken ingest, `document.progress` counts **OCR’d** pages (after each batch), not pdftoppm renders.
 
 ### Chat (RAG + LLM)
 
@@ -43,6 +43,8 @@ Stop → chat:interrupt → abort in-flight worker HTTP → LLM request cancels
 Answers are LLM-generated from retrieved chunks only. If nothing is retrieved, the worker returns a fixed I-don't-know line without calling the LLM. If the LLM is down, chat fails — no extractive fallback.
 
 Hash embedding fallback is off by default (`EMBEDDING_FALLBACK=false`). Set `true` when the embedding API is missing or fails (CI: `.env.test.example`).
+
+**Embeddings:** `EMBEDDING_DIMENSION` must match the model behind `LMSTUDIO_API_URL` / OpenAI (e.g. **768** for many LM Studio embed models, **1536** for `text-embedding-ada-002`). It is baked into `document_chunks.embedding` at schema init — change dimension only with a fresh DB or a migration.
 
 ### Dashboard
 
@@ -99,7 +101,9 @@ Start the LLM before using Agent mode.
 
 `rag-worker` is composed with `gpus: all` so Kraken can use CUDA. That needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If the daemon has no NVIDIA runtime, `docker compose up` can fail — comment out `gpus: all` in `docker-compose.yml`. CI uses `docker-compose.ci.yml` to drop GPUs (GitHub-hosted runners have no NVIDIA runtime).
 
-Kraken 7 and CUDA torch live in a **separate Docker stage** split into two layers (torch, then kraken deps). Go-only `rag-worker` rebuilds skip both; kraken-version bumps skip the torch layer. Pip and model caches speed re-runs when a layer does execute. Compose, Dockerfiles, env: [docs/docker-compose.yml/README.md](docs/docker-compose.yml/README.md).
+Kraken 7 and CUDA torch live in a **separate Docker stage** split into two layers (torch, then kraken deps). Go-only `rag-worker` rebuilds skip both; kraken-version bumps skip the torch layer. Pip and model caches speed re-runs when a layer does execute.
+
+**Concurrent OCR:** `OCR_INGEST_PREFETCH` caps how many documents can run Kraken OCR at once; `KRAKEN_GPU_CONCURRENT` (defaults to the same value) caps parallel CUDA `kraken` subprocesses and splits `KRAKEN_VRAM_BUDGET_MB` per job. Queued docs publish `waiting_for_ocr` (heartbeat every 30s) and are excluded from stale-timeout maintenance. Compose, Dockerfiles, env: [docs/docker-compose.yml/README.md](docs/docker-compose.yml/README.md).
 
 ## Tests
 

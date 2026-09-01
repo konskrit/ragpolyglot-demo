@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"apps/rag-worker/workpool"
 )
 
 const (
@@ -139,8 +141,30 @@ func krakenThreads() int {
 	return n
 }
 
+func krakenGPUConcurrent() int {
+	if v := os.Getenv("KRAKEN_GPU_CONCURRENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return workpool.OCRIngestPrefetch()
+}
+
 func krakenVRAMBudgetMB() int {
 	return envPositiveInt("KRAKEN_VRAM_BUDGET_MB", defaultKrakenVRAMBudgetMB)
+}
+
+func krakenVRAMBudgetPerJobMB() int {
+	total := krakenVRAMBudgetMB()
+	concurrent := krakenGPUConcurrent()
+	if concurrent <= 1 {
+		return total
+	}
+	per := total / concurrent
+	if per < 2048 {
+		per = 2048
+	}
+	return per
 }
 
 func krakenVRAMPerPageMB() int {
@@ -157,7 +181,7 @@ func effectiveKrakenBatchSize() int {
 	if !strings.HasPrefix(device, "cuda") {
 		return configured
 	}
-	budget := krakenVRAMBudgetMB()
+	budget := krakenVRAMBudgetPerJobMB()
 	perPage := krakenVRAMPerPageMB()
 	if budget <= 0 || perPage <= 0 {
 		return configured

@@ -16,7 +16,7 @@ Not part of OpenAPI — connect with Socket.IO client.
 | client → server | \`subscribe:document\` | \`{ documentId }\` |
 | server → client | \`document:status-update\` | \`{ documentId, status, progressStage?, progressDone?, progressTotal?, timestamp? }\` |
 
-\`status\`: \`uploading\` | \`processing\` | \`paused\` | \`ready\` | \`failed\`. \`progressStage\`: \`extracting\` | \`embedding\`.
+\`status\`: \`uploading\` | \`processing\` | \`paused\` | \`ready\` | \`failed\`. \`progressStage\`: \`waiting_for_ocr\` | \`extracting\` | \`embedding\`.
 `;
 
 export function setupOpenApi(app: INestApplication): void {

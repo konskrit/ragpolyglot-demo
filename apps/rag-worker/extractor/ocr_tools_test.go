@@ -28,11 +28,13 @@ func TestRunCapturePauseKillsProcess(t *testing.T) {
 	}
 }
 
-func TestLockKrakenGPUHonorsPause(t *testing.T) {
-	krakenGPUMu.Lock()
-	defer krakenGPUMu.Unlock()
+func TestAcquireKrakenGPUHonorsPause(t *testing.T) {
+	resetKrakenGPUSemForTest(t)
+	t.Setenv("KRAKEN_GPU_CONCURRENT", "1")
+	sem := initKrakenGPUSem()
+	sem <- struct{}{}
 
-	err := lockKrakenGPU(func() bool { return true })
+	err := acquireKrakenGPU(func() bool { return true })
 	if !errors.Is(err, ErrPaused) {
 		t.Fatalf("got %v", err)
 	}

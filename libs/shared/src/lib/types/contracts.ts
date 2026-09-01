@@ -20,6 +20,7 @@ export const ACTIVE_DOCUMENT_STATUSES = [
 ] as const satisfies readonly DocumentStatus[];
 
 export const DOCUMENT_PROGRESS_STAGES = [
+  'waiting_for_ocr',
   'extracting',
   'embedding',
 ] as const satisfies readonly DocumentProgressStage[];
@@ -188,6 +189,14 @@ export function formatDocumentProgressLabel(
 ): string | null {
   if (doc.status !== 'processing' && doc.status !== 'paused') return null;
   const paused = doc.status === 'paused';
+  if (doc.progressStage === 'waiting_for_ocr') {
+    const total = doc.progressTotal ?? 0;
+    if (total > 0) {
+      const label = `Waiting for OCR · ${doc.progressDone ?? 0}/${total} done`;
+      return paused ? `Paused · ${label}` : label;
+    }
+    return paused ? 'Paused · Waiting for OCR…' : 'Waiting for OCR…';
+  }
   if (doc.progressStage === 'extracting') {
     const total = doc.progressTotal ?? 0;
     if (total > 0) {

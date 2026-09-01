@@ -38,9 +38,15 @@ func (p *Processor) runExtract(
 		PageWorkers: p.ocrWorkerCount,
 		OnOCRStart: func() func() {
 			releaseFast()
-			release, err := p.acquireOCRIngestSlot(stopIngest)
+			waiting := func() {
+				p.publishProgress(event.DocumentID, "waiting_for_ocr", job.OcrPageDone, job.OcrTotal)
+			}
+			release, err := p.acquireOCRIngestSlot(stopIngest, waiting)
 			if err != nil {
 				return nil
+			}
+			if job.OcrTotal > 0 {
+				p.publishProgress(event.DocumentID, "extracting", job.OcrPageDone, job.OcrTotal)
 			}
 			return release
 		},

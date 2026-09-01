@@ -20,6 +20,7 @@ import (
 )
 
 const requeueBackoff = 2 * time.Second
+const ocrQueueHeartbeat = 30 * time.Second
 
 type Processor struct {
 	store            *storage.Store
@@ -151,15 +152,31 @@ func waitChanSlot(ch chan struct{}, stop func() bool) error {
 	}
 }
 
-func (p *Processor) acquireOCRIngestSlot(stop func() bool) (func(), error) {
-	if err := waitChanSlot(p.ocrIngestSem, stop); err != nil {
-		return nil, err
+func (p *Processor) acquireOCRIngestSlot(stop func() bool, heartbeat func()) (func(), error) {
+	lastHeartbeat := time.Time{}
+	if heartbeat != nil {
+		heartbeat()
+		lastHeartbeat = time.Now()
 	}
-	p.ocrIngestActive.Add(1)
-	return func() {
-		p.ocrIngestActive.Add(-1)
-		<-p.ocrIngestSem
-	}, nil
+	for {
+		if stop != nil && stop() {
+			return nil, extractor.ErrPaused
+		}
+		select {
+		case p.ocrIngestSem <- struct{}{}:
+			p.ocrIngestActive.Add(1)
+			return func() {
+				p.ocrIngestActive.Add(-1)
+				<-p.ocrIngestSem
+			}, nil
+		default:
+			if heartbeat != nil && time.Since(lastHeartbeat) >= ocrQueueHeartbeat {
+				heartbeat()
+				lastHeartbeat = time.Now()
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
 }
 
 func (p *Processor) handleDeleted(msg amqp.Delivery) {

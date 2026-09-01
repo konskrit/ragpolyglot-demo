@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +18,8 @@ import (
 
 var (
 	errKrakenUnavailable = errors.New("kraken unavailable")
-	krakenGPUMu          sync.Mutex
+	krakenGPUSem         chan struct{}
+	krakenGPUSemOnce     sync.Once
 )
 
 func usesKraken(langs string) bool {
@@ -70,14 +72,15 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 		precision = "default"
 	}
 	log.Printf(
-		"[Extractor] OCR engine=kraken device=%s batch=%d threads=%d precision=%s line_batch=%s line_workers=%s vram_budget_mb=%d pages=%d",
+		"[Extractor] OCR engine=kraken device=%s batch=%d threads=%d precision=%s line_batch=%s line_workers=%s vram_budget_mb=%d gpu_concurrent=%d pages=%d",
 		resolveKrakenDevice(),
 		effectiveKrakenBatchSize(),
 		krakenThreads(),
 		precision,
 		lineBatchLabel,
 		lineWorkersLabel,
-		krakenVRAMBudgetMB(),
+		krakenVRAMBudgetPerJobMB(),
+		krakenGPUConcurrent(),
 		total-start+1,
 	)
 
@@ -90,25 +93,9 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 		if batchEnd > total {
 			batchEnd = total
 		}
-		pages := make([]int, 0, batchEnd-batchStart+1)
-		images := make([]string, 0, batchEnd-batchStart+1)
 
 		renderStart := time.Now()
-		err := state.Pool.RunWhile(mem, stop, func() error {
-			for page := batchStart; page <= batchEnd; page++ {
-				if stop != nil && stop() {
-					return ErrPaused
-				}
-				log.Printf("[Extractor] OCR engine=kraken page %d langs=%s", page, langs)
-				img, err := renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
-				if err != nil {
-					return err
-				}
-				pages = append(pages, page)
-				images = append(images, img)
-			}
-			return nil
-		})
+		pages, images, err := renderKrakenBatchPages(pdfPath, dir, batchStart, batchEnd, mem, stop, state)
 		if err != nil {
 			removeFiles(images)
 			if errors.Is(err, ErrPaused) || errors.Is(err, workpool.ErrStopped) {
@@ -176,6 +163,87 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 	return finishOCRText(joinPageText(prior, pageText, start, total), langs, state.Resolved, ocrLang)
 }
 
+type krakenPageRender struct {
+	page int
+	img  string
+}
+
+func renderKrakenBatchPages(pdfPath, dir string, batchStart, batchEnd int, mem int64, stop func() bool, state OCRState) ([]int, []string, error) {
+	pageCount := batchEnd - batchStart + 1
+	workers := state.Pool.Slots()
+	if state.PageWorkers != nil {
+		workers = state.PageWorkers(pageCount)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > pageCount {
+		workers = pageCount
+	}
+
+	pageCh := make(chan int, pageCount)
+	for page := batchStart; page <= batchEnd; page++ {
+		pageCh <- page
+	}
+	close(pageCh)
+
+	rendered := make([]krakenPageRender, 0, pageCount)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var firstErr error
+	var errOnce sync.Once
+
+	recordErr := func(err error) {
+		if err == nil {
+			return
+		}
+		errOnce.Do(func() { firstErr = err })
+	}
+
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for page := range pageCh {
+				if stop != nil && stop() {
+					recordErr(ErrPaused)
+					return
+				}
+				var img string
+				err := state.Pool.RunWhile(mem, stop, func() error {
+					var renderErr error
+					img, renderErr = renderPDFPage(pdfPath, page, filepath.Join(dir, fmt.Sprintf("page-%d", page)), stop)
+					return renderErr
+				})
+				if err != nil {
+					recordErr(err)
+					return
+				}
+				mu.Lock()
+				rendered = append(rendered, krakenPageRender{page: page, img: img})
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	if firstErr != nil {
+		for _, r := range rendered {
+			os.Remove(r.img)
+		}
+		return nil, nil, firstErr
+	}
+
+	sort.Slice(rendered, func(i, j int) bool { return rendered[i].page < rendered[j].page })
+	pages := make([]int, len(rendered))
+	images := make([]string, len(rendered))
+	for i, r := range rendered {
+		pages[i] = r.page
+		images[i] = r.img
+	}
+	return pages, images, nil
+}
+
 func krakenCLIArgs(device string, imagePaths []string, model string) []string {
 	args := []string{"--device", device, "--threads", strconv.Itoa(krakenThreads())}
 	if precision := krakenPrecision(); precision != "" {
@@ -230,10 +298,10 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 	args := krakenCLIArgs(device, imagePaths, model)
 
 	if strings.HasPrefix(device, "cuda") {
-		if err := lockKrakenGPU(stop); err != nil {
+		if err := acquireKrakenGPU(stop); err != nil {
 			return nil, err
 		}
-		defer krakenGPUMu.Unlock()
+		defer releaseKrakenGPU()
 	}
 	if err := runCaptureDiscard(stop, "kraken", args...); err != nil {
 		return nil, err
@@ -250,16 +318,35 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 	return texts, nil
 }
 
-func lockKrakenGPU(stop func() bool) error {
+func initKrakenGPUSem() chan struct{} {
+	krakenGPUSemOnce.Do(func() {
+		n := krakenGPUConcurrent()
+		if n < 1 {
+			n = 1
+		}
+		krakenGPUSem = make(chan struct{}, n)
+		log.Printf("[Extractor] kraken gpu concurrent=%d", n)
+	})
+	return krakenGPUSem
+}
+
+func acquireKrakenGPU(stop func() bool) error {
+	sem := initKrakenGPUSem()
 	for {
 		if err := checkPaused(stop); err != nil {
 			return err
 		}
-		if krakenGPUMu.TryLock() {
+		select {
+		case sem <- struct{}{}:
 			return nil
+		default:
+			time.Sleep(25 * time.Millisecond)
 		}
-		time.Sleep(25 * time.Millisecond)
 	}
+}
+
+func releaseKrakenGPU() {
+	<-initKrakenGPUSem()
 }
 
 func isKrakenDeviceError(err error) bool {

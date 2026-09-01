@@ -6,4 +6,5 @@ SET status = 'failed',
     progress_total = NULL,
     updated_at = NOW()
 WHERE status = 'processing'
-  AND updated_at < NOW() - (@minutes * INTERVAL '1 minute');
+  AND updated_at < NOW() - (@minutes * INTERVAL '1 minute')
+  AND COALESCE(progress_stage, '') != 'waiting_for_ocr';

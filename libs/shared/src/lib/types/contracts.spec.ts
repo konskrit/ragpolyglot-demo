@@ -183,12 +183,31 @@ describe('shared contracts', () => {
   });
 
   it('validates progress stages from the RAG worker', () => {
-    expect(DOCUMENT_PROGRESS_STAGES).toEqual(['extracting', 'embedding']);
+    expect(DOCUMENT_PROGRESS_STAGES).toEqual([
+      'waiting_for_ocr',
+      'extracting',
+      'embedding',
+    ]);
+    expect(isDocumentProgressStage('waiting_for_ocr')).toBe(true);
     expect(isDocumentProgressStage('extracting')).toBe(true);
     expect(isDocumentProgressStage('chunking')).toBe(false);
   });
 
   it('formats progress labels and embedding percent', () => {
+    expect(
+      formatDocumentProgressLabel({
+        status: 'processing',
+        progressStage: 'waiting_for_ocr',
+      }),
+    ).toBe('Waiting for OCR…');
+    expect(
+      formatDocumentProgressLabel({
+        status: 'processing',
+        progressStage: 'waiting_for_ocr',
+        progressDone: 192,
+        progressTotal: 624,
+      }),
+    ).toBe('Waiting for OCR · 192/624 done');
     expect(
       formatDocumentProgressLabel({
         status: 'processing',

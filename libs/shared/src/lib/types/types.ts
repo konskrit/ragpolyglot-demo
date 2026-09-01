@@ -5,7 +5,10 @@ export type DocumentStatus =
   | 'ready'
   | 'failed';
 
-export type DocumentProgressStage = 'extracting' | 'embedding';
+export type DocumentProgressStage =
+  | 'waiting_for_ocr'
+  | 'extracting'
+  | 'embedding';
 
 export type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
