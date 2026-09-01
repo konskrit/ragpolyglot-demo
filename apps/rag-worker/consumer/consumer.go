@@ -11,6 +11,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 
+	"apps/rag-worker/extractor"
 	"apps/rag-worker/models"
 	"apps/rag-worker/publisher"
 	rmq "apps/rag-worker/rabbitmq"
@@ -136,13 +137,29 @@ func (p *Processor) ocrWorkerCount(pages int) int {
 	return workers
 }
 
-func (p *Processor) acquireOCRIngestSlot() func() {
-	p.ocrIngestSem <- struct{}{}
+func waitChanSlot(ch chan struct{}, stop func() bool) error {
+	for {
+		if stop != nil && stop() {
+			return extractor.ErrPaused
+		}
+		select {
+		case ch <- struct{}{}:
+			return nil
+		default:
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+}
+
+func (p *Processor) acquireOCRIngestSlot(stop func() bool) (func(), error) {
+	if err := waitChanSlot(p.ocrIngestSem, stop); err != nil {
+		return nil, err
+	}
 	p.ocrIngestActive.Add(1)
 	return func() {
 		p.ocrIngestActive.Add(-1)
 		<-p.ocrIngestSem
-	}
+	}, nil
 }
 
 func (p *Processor) handleDeleted(msg amqp.Delivery) {

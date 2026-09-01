@@ -25,23 +25,26 @@ func (p *Processor) handleUploaded(msg amqp.Delivery) {
 		return
 	}
 	p.setDeleted(event.DocumentID, false)
+	p.setPause(event.DocumentID, false)
 	gen := p.nextIngestGen(event.DocumentID)
 	go func() {
 		p.ingest(msg, event, gen)
 	}()
 }
 
-func (p *Processor) withFastIngestSlot(fn func()) {
-	p.fastIngestSem <- struct{}{}
+func (p *Processor) withFastIngestSlot(stop func() bool, fn func()) error {
+	if err := waitChanSlot(p.fastIngestSem, stop); err != nil {
+		return err
+	}
 	defer func() { <-p.fastIngestSem }()
 	fn()
+	return nil
 }
 
 func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent, gen uint64) {
 	ctx := context.Background()
 	start := time.Now()
 	acker := newIngestAck(msg)
-	p.setPause(event.DocumentID, false)
 	log.Printf("[Consumer] processing upload documentId=%s", event.DocumentID)
 
 	if p.ackIfStale(acker, event.DocumentID, gen) {
@@ -49,15 +52,26 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	}
 
 	stopIngest := func() bool { return p.shouldStopIngest(event.DocumentID, gen) }
+	pause := func() {
+		if p.ackIfStale(acker, event.DocumentID, gen) {
+			return
+		}
+		p.ackPaused(acker, event.DocumentID)
+	}
+	if stopIngest() {
+		pause()
+		return
+	}
 
 	fail := func(reason string, cause error) {
 		if p.ackIfStale(acker, event.DocumentID, gen) {
 			return
 		}
+		if stopIngest() {
+			pause()
+			return
+		}
 		p.failIngest(ctx, acker, event.DocumentID, start, reason, cause)
-	}
-	pause := func() {
-		p.ackPaused(acker, event.DocumentID)
 	}
 
 	cp, err := p.store.GetCheckpoint(ctx, event.DocumentID)
@@ -112,9 +126,11 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		job.EmbedDone = embedDone
 		p.publishProgress(event.DocumentID, "embedding", embedDone, 0)
 		acker.ack()
-		p.withFastIngestSlot(func() {
+		if err := p.withFastIngestSlot(stopIngest, func() {
 			p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
-		})
+		}); err != nil {
+			pause()
+		}
 		return
 	}
 
@@ -122,9 +138,11 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		return
 	}
 
-	p.withFastIngestSlot(func() {
+	if err := p.withFastIngestSlot(stopIngest, func() {
 		p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
-	})
+	}); err != nil {
+		pause()
+	}
 }
 
 func (p *Processor) ackIfStale(acker *ingestAck, documentID string, gen uint64) bool {
@@ -302,6 +320,9 @@ func (p *Processor) ackPaused(acker *ingestAck, documentID string) {
 }
 
 func (p *Processor) publishProgress(documentID, stage string, done, total int) {
+	if p.pauseRequestedFor(documentID) {
+		return
+	}
 	if err := p.publisher.PublishProgress(documentID, stage, done, total); err != nil {
 		log.Printf("[Consumer] progress publish failed documentId=%s: %v", documentID, err)
 	}

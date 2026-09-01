@@ -15,7 +15,12 @@ import {
   type DocumentSummary,
 } from '@ragpolyglot-shared';
 import { mapApiDocument, mapApiDocuments } from '../lib/documents';
-import { subscribeDocument, useWebSocketEvent } from '../hooks/useWebSocket';
+import {
+  subscribeDocument,
+  unsubscribeDocument,
+  useWebSocketEvent,
+  useWebSocketStatus,
+} from '../hooks/useWebSocket';
 
 interface DocumentsContextValue {
   documents: DocumentSummary[];
@@ -27,6 +32,7 @@ interface DocumentsContextValue {
   changeOcrLang: (id: string, ocrLang?: string) => Promise<void>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
+  connected: boolean;
 }
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
@@ -35,6 +41,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { connected } = useWebSocketStatus();
   const subscribedRef = useRef(new Set<string>());
 
   function watchDocument(id: string) {
@@ -70,6 +77,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   async function remove(id: string) {
     await deleteJson(`/api/documents/${encodeURIComponent(id)}`);
     subscribedRef.current.delete(id);
+    unsubscribeDocument(id);
     setDocuments((prev) => prev.filter((d) => d.id !== id));
   }
 
@@ -114,13 +122,12 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   }
 
   async function pause(id: string) {
-    try {
-      await postJson(`/api/documents/${encodeURIComponent(id)}/pause`);
-      subscribeDocument(id);
-    } catch (e) {
-      await refresh();
-      throw e;
-    }
+    await applyMappedUpdate(
+      id,
+      postJson(`/api/documents/${encodeURIComponent(id)}/pause`),
+      'Invalid pause response',
+    );
+    subscribeDocument(id);
   }
 
   async function resume(id: string) {
@@ -135,6 +142,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!connected) return;
+    void refresh();
+  }, [connected]);
 
   const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
 
@@ -172,6 +184,13 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         }
         return prev.map((doc) => {
           if (doc.id !== documentId) return doc;
+          if (
+            normalized === 'processing' &&
+            doc.status !== 'processing' &&
+            doc.status !== 'uploading'
+          ) {
+            return doc;
+          }
           return {
             ...doc,
             status: normalized,
@@ -202,6 +221,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         changeOcrLang,
         pause,
         resume,
+        connected,
       }}
     >
       {children}

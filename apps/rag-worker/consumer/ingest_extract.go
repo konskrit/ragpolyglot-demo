@@ -21,9 +21,11 @@ func (p *Processor) runExtract(
 	fail func(string, error),
 	pause func(),
 ) bool {
-	// Cap extract concurrency (incl. pdftotext). Hand off to OCR sem when OCR starts
-	// so heavy OCR does not keep holding a fast slot.
-	p.fastIngestSem <- struct{}{}
+	// Release the fast slot when OCR starts so Kraken does not block pdftotext.
+	if err := waitChanSlot(p.fastIngestSem, stopIngest); err != nil {
+		pause()
+		return false
+	}
 	var releaseFastOnce sync.Once
 	releaseFast := func() {
 		releaseFastOnce.Do(func() { <-p.fastIngestSem })
@@ -36,10 +38,11 @@ func (p *Processor) runExtract(
 		PageWorkers: p.ocrWorkerCount,
 		OnOCRStart: func() func() {
 			releaseFast()
-			done := job.OcrPageDone
-			total := job.OcrTotal
-			p.publishProgress(event.DocumentID, "extracting", done, total)
-			return p.acquireOCRIngestSlot()
+			release, err := p.acquireOCRIngestSlot(stopIngest)
+			if err != nil {
+				return nil
+			}
+			return release
 		},
 	}
 	if cp != nil && cp.Stage == "ocr" {
@@ -70,11 +73,14 @@ func (p *Processor) runExtract(
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 			return err
 		}
-		if p.shouldStopIngest(event.DocumentID, gen) {
+		p.publishProgress(event.DocumentID, "extracting", done, total)
+		if stopIngest() {
 			return extractor.ErrPaused
 		}
-		p.publishProgress(event.DocumentID, "extracting", done, total)
 		return nil
+	}
+	state.OnRenderPage = func(page, total int) {
+		p.publishProgress(event.DocumentID, "extracting", page, total)
 	}
 
 	acker.ack()

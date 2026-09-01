@@ -26,15 +26,21 @@ func (p *Processor) runEmbedPhase(
 	chunkingStart time.Time,
 ) {
 	stopIngest := func() bool { return p.shouldStopIngest(event.DocumentID, gen) }
-
+	pause := func() {
+		if p.ackIfStale(acker, event.DocumentID, gen) {
+			return
+		}
+		p.ackPaused(acker, event.DocumentID)
+	}
 	fail := func(reason string, cause error) {
 		if p.ackIfStale(acker, event.DocumentID, gen) {
 			return
 		}
+		if stopIngest() {
+			pause()
+			return
+		}
 		p.failIngest(ctx, acker, event.DocumentID, start, reason, cause)
-	}
-	pause := func() {
-		p.ackPaused(acker, event.DocumentID)
 	}
 
 	if p.ackIfStale(acker, event.DocumentID, gen) {
@@ -71,19 +77,22 @@ func (p *Processor) runEmbedPhase(
 	embedStart := time.Now()
 	totalChunks := embedDone
 	p.publishProgress(event.DocumentID, "embedding", totalChunks, len(textChunks))
+	pauseEmbed := func() {
+		if p.ackIfStale(acker, event.DocumentID, gen) {
+			return
+		}
+		job.EmbedDone = totalChunks
+		job.Paused = true
+		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+			fail("storage_error", err)
+			return
+		}
+		pause()
+	}
 
 	for i := embedDone; i < len(textChunks); i += embedding.BatchSize {
 		if stopIngest() {
-			if p.ackIfStale(acker, event.DocumentID, gen) {
-				return
-			}
-			job.EmbedDone = totalChunks
-			job.Paused = true
-			if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
-				fail("storage_error", err)
-				return
-			}
-			pause()
+			pauseEmbed()
 			return
 		}
 
@@ -91,28 +100,13 @@ func (p *Processor) runEmbedPhase(
 		batch := textChunks[i:end]
 		var embedded []models.TextChunk
 		err := p.pools.Embed.RunWhile(workpool.EmbedBatchMemory(), stopIngest, func() error {
-			if stopIngest() {
-				return extractor.ErrPaused
-			}
 			var err error
 			embedded, err = embedding.GenerateAndAttach(batch, p.allowFallback)
 			return err
 		})
-		if errors.Is(err, workpool.ErrStopped) {
-			err = extractor.ErrPaused
-		}
 		if err != nil {
-			if errors.Is(err, extractor.ErrPaused) {
-				if p.ackIfStale(acker, event.DocumentID, gen) {
-					return
-				}
-				job.EmbedDone = totalChunks
-				job.Paused = true
-				if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
-					fail("storage_error", err)
-					return
-				}
-				pause()
+			if errors.Is(err, workpool.ErrStopped) {
+				pauseEmbed()
 				return
 			}
 			job.EmbedDone = totalChunks

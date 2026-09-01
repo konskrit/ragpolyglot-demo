@@ -11,13 +11,14 @@ import (
 )
 
 const (
-	defaultKrakenBatchPages   = 16
-	defaultKrakenThreads      = 4
-	defaultKrakenVRAMBudgetMB = 4096
-	defaultKrakenVRAMPageMB   = 256
-	defaultKrakenPageMemoryMB = 256
-	defaultKrakenLineBatch    = 64
-	defaultKrakenPrecisionGPU = "bf16-mixed"
+	defaultKrakenBatchPages    = 16
+	defaultKrakenBatchPagesGPU = 64
+	defaultKrakenThreads       = 4
+	defaultKrakenVRAMBudgetMB  = 16384
+	defaultKrakenVRAMPageMB    = 256
+	defaultKrakenPageMemoryMB  = 256
+	defaultKrakenLineBatch     = 128
+	defaultKrakenPrecisionGPU  = "bf16-mixed"
 )
 
 var (
@@ -112,7 +113,13 @@ func currentKrakenDevice() string {
 }
 
 func krakenBatchPages() int {
-	return envPositiveInt("KRAKEN_BATCH_PAGES", defaultKrakenBatchPages)
+	if n, ok := envOptionalPositiveInt("KRAKEN_BATCH_PAGES"); ok {
+		return n
+	}
+	if krakenOnCUDA() {
+		return defaultKrakenBatchPagesGPU
+	}
+	return defaultKrakenBatchPages
 }
 
 func krakenThreads() int {

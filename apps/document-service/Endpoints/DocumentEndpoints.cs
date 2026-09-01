@@ -181,8 +181,14 @@ public static class DocumentEndpoints
             return Results.Conflict(new { error = "Only processing documents can be paused." });
         }
 
+        if (!await repo.MarkPausedAsync(id, cancellationToken))
+        {
+            return Results.Conflict(new { error = "Only processing documents can be paused." });
+        }
+
         await messageBroker.PublishDocumentPauseAsync(id, cancellationToken);
-        return Results.Accepted($"/api/documents/{id}", existing);
+        var paused = await repo.GetByIdAsync(id, cancellationToken);
+        return Results.Ok(paused ?? existing with { Status = DocumentStatus.Paused });
     }
 
     private static async Task<IResult> ResumeDocument(

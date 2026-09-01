@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -79,6 +80,15 @@ func checkPaused(stop func() bool) error {
 }
 
 func runCapture(stop func() bool, name string, args ...string) (stdout string, err error) {
+	return runCaptureOutput(stop, true, name, args...)
+}
+
+func runCaptureDiscard(stop func() bool, name string, args ...string) error {
+	_, err := runCaptureOutput(stop, false, name, args...)
+	return err
+}
+
+func runCaptureOutput(stop func() bool, capture bool, name string, args ...string) (stdout string, err error) {
 	if err := checkPaused(stop); err != nil {
 		return "", err
 	}
@@ -90,8 +100,13 @@ func runCapture(stop func() bool, name string, args ...string) (stdout string, e
 	configureKillGroup(cmd)
 	cmd.WaitDelay = 200 * time.Millisecond
 	var out, stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
+	if capture {
+		cmd.Stdout = &out
+		cmd.Stderr = &stderr
+	} else {
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+	}
 
 	if stop != nil {
 		done := make(chan struct{})
@@ -105,6 +120,7 @@ func runCapture(stop func() bool, name string, args ...string) (stdout string, e
 					return
 				case <-ticker.C:
 					if stop() {
+						log.Printf("[Extractor] cancelling %s", name)
 						cancel()
 						return
 					}
@@ -117,7 +133,11 @@ func runCapture(stop func() bool, name string, args ...string) (stdout string, e
 		if stop != nil && stop() {
 			return "", ErrPaused
 		}
-		return "", fmt.Errorf("%s failed: %w (stderr: %s)", name, err, stderr.String())
+		errText := stderr.String()
+		if !capture {
+			errText = "output discarded"
+		}
+		return "", fmt.Errorf("%s failed: %w (stderr: %s)", name, err, errText)
 	}
 	return out.String(), nil
 }

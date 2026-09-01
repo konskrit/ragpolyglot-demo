@@ -181,11 +181,17 @@ func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 }
 
 func runPDFWithOCR(path, ocrLang string, state OCRState) (string, string, error) {
+	if state.ShouldPause != nil && state.ShouldPause() {
+		return "", "", ErrPaused
+	}
 	if state.OnOCRStart != nil {
 		release := state.OnOCRStart()
 		if release != nil {
 			defer release()
 		}
+	}
+	if state.ShouldPause != nil && state.ShouldPause() {
+		return "", "", ErrPaused
 	}
 	return extractPDFWithOCR(path, ocrLang, state)
 }

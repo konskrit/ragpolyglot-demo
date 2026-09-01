@@ -18,12 +18,14 @@ export function DocumentActions({
   doc: DocumentSummary;
   onDeleted?: () => void;
 }) {
-  const { remove, retry, changeOcrLang, pause, resume } = useDocuments();
+  const { remove, retry, changeOcrLang, pause, resume, connected } =
+    useDocuments();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [draftLang, setDraftLang] = useState<string | null>(null);
   const [ocrLanguages, setOcrLanguages] = useState<OcrLanguageOption[]>([]);
 
+  const offline = !connected;
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
   const canPause = doc.status === 'processing';
   const canResume = doc.status === 'paused';
@@ -101,7 +103,9 @@ export function DocumentActions({
             value={selectLang}
             onChange={(e) => onOcrLangChange(e.target.value)}
             disabled={
-              pending || (doc.status === 'processing' && !liveOcrLangChange)
+              pending ||
+              offline ||
+              (doc.status === 'processing' && !liveOcrLangChange)
             }
             aria-label={`OCR language for ${doc.title}`}
             className="max-w-[11rem] rounded-lg border border-gray-700 bg-gray-950 px-2 py-1.5 text-xs text-gray-200"
@@ -124,10 +128,10 @@ export function DocumentActions({
             variant="secondary"
             size="sm"
             onClick={() => void runAction(() => pause(doc.id), 'Pause failed')}
-            disabled={pending}
+            disabled={pending || offline}
             aria-label={`Pause ${doc.title}`}
           >
-            {pending ? '…' : 'Pause'}
+            {pending ? 'Pausing…' : 'Pause'}
           </Button>
         )}
         {canResume && (
@@ -137,7 +141,7 @@ export function DocumentActions({
             onClick={() =>
               void runAction(() => resume(doc.id), 'Resume failed')
             }
-            disabled={pending}
+            disabled={pending || offline}
             aria-label={`Resume ${doc.title}`}
           >
             {pending ? '…' : 'Resume'}
@@ -157,7 +161,7 @@ export function DocumentActions({
                 'Retry failed',
               )
             }
-            disabled={pending || (needsOcrLanguage && !selectLang)}
+            disabled={pending || offline || (needsOcrLanguage && !selectLang)}
             aria-label={`Retry ${doc.title}`}
           >
             {pending ? '…' : 'Retry'}
@@ -173,7 +177,7 @@ export function DocumentActions({
                 onDeleted?.();
               }, 'Delete failed')
             }
-            disabled={pending}
+            disabled={pending || offline}
             aria-label={`Delete ${doc.title}`}
           >
             {pending ? '…' : 'Delete'}

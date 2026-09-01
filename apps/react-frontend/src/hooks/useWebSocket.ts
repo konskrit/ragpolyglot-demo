@@ -3,6 +3,13 @@ import { io, type Socket } from 'socket.io-client';
 import { WS_URL } from '../config';
 
 let sharedSocket: Socket | null = null;
+const subscribedDocumentIds = new Set<string>();
+
+function resubscribeDocuments(socket: Socket): void {
+  for (const documentId of subscribedDocumentIds) {
+    socket.emit('subscribe:document', { documentId });
+  }
+}
 
 function getSharedSocket(): Socket {
   if (!sharedSocket) {
@@ -12,6 +19,9 @@ function getSharedSocket(): Socket {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10_000,
+    });
+    sharedSocket.on('connect', () => {
+      resubscribeDocuments(sharedSocket!);
     });
   }
   return sharedSocket;
@@ -72,5 +82,11 @@ export function emitWebSocket<T>(event: string, payload?: T): void {
 }
 
 export function subscribeDocument(documentId: string): void {
+  if (!documentId) return;
+  subscribedDocumentIds.add(documentId);
   emitWebSocket('subscribe:document', { documentId });
+}
+
+export function unsubscribeDocument(documentId: string): void {
+  subscribedDocumentIds.delete(documentId);
 }

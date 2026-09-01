@@ -18,8 +18,18 @@ func TestKrakenBatchPages(t *testing.T) {
 		t.Fatalf("got %d", got)
 	}
 	t.Setenv("KRAKEN_BATCH_PAGES", "")
+	resetKrakenDeviceForTest(t)
+	t.Setenv("KRAKEN_DEVICE", "cpu")
 	if got := krakenBatchPages(); got != defaultKrakenBatchPages {
-		t.Fatalf("default batch size got %d", got)
+		t.Fatalf("cpu default batch size got %d", got)
+	}
+	resetKrakenDeviceForTest(t)
+	krakenDeviceMu.Lock()
+	krakenDevice = "cuda:0"
+	krakenDeviceInit = true
+	krakenDeviceMu.Unlock()
+	if got := krakenBatchPages(); got != defaultKrakenBatchPagesGPU {
+		t.Fatalf("cuda default batch size got %d", got)
 	}
 }
 

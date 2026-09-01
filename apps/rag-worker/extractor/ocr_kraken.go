@@ -92,9 +92,9 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 		}
 		pages := make([]int, 0, batchEnd-batchStart+1)
 		images := make([]string, 0, batchEnd-batchStart+1)
-		pageCount := batchEnd - batchStart + 1
 
-		err := state.Pool.RunWhile(mem*int64(pageCount), stop, func() error {
+		renderStart := time.Now()
+		err := state.Pool.RunWhile(mem, stop, func() error {
 			for page := batchStart; page <= batchEnd; page++ {
 				if stop != nil && stop() {
 					return ErrPaused
@@ -106,6 +106,9 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 				}
 				pages = append(pages, page)
 				images = append(images, img)
+				if state.OnRenderPage != nil {
+					state.OnRenderPage(page, total)
+				}
 			}
 			return nil
 		})
@@ -116,7 +119,12 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 			}
 			return "", langs, err
 		}
+		log.Printf(
+			"[Extractor] OCR engine=kraken rendered pages %d-%d in %s",
+			batchStart, batchEnd, time.Since(renderStart).Round(time.Millisecond),
+		)
 
+		ocrStart := time.Now()
 		texts, err := krakenPages(images, stop)
 		if err != nil {
 			if errors.Is(err, ErrPaused) {
@@ -148,6 +156,10 @@ func ocrPagesKraken(pdfPath, dir string, start, total int, langs, prior, ocrLang
 			removeFiles(images)
 			return "", langs, err
 		}
+		log.Printf(
+			"[Extractor] OCR engine=kraken ocr pages %d-%d device=%s duration=%s",
+			batchStart, batchEnd, resolveKrakenDevice(), time.Since(ocrStart).Round(time.Millisecond),
+		)
 		removeFiles(images)
 
 		for i, page := range pages {
@@ -226,7 +238,7 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 		}
 		defer krakenGPUMu.Unlock()
 	}
-	if _, err := runCapture(stop, "kraken", args...); err != nil {
+	if err := runCaptureDiscard(stop, "kraken", args...); err != nil {
 		return nil, err
 	}
 

@@ -11,7 +11,7 @@ const (
 	defaultOCRPageMB          = 64
 	defaultEmbedBatchMB       = 32
 	defaultFastIngestPrefetch = 4
-	defaultOCRIngestPrefetch  = 2
+	defaultOCRIngestPrefetch  = 1
 	defaultEmbedPoolSlots     = 2
 	fallbackMemoryMB          = 2048
 )

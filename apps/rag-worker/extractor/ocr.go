@@ -27,14 +27,15 @@ var (
 type OCRProgressFunc func(done, total int, textSoFar, langs string) error
 
 type OCRState struct {
-	StartPage   int
-	PriorText   string
-	Resolved    string
-	ShouldPause func() bool
-	OnProgress  OCRProgressFunc
-	Pool        *workpool.Pool
-	PageWorkers func(pageCount int) int
-	OnOCRStart  func() func()
+	StartPage    int
+	PriorText    string
+	Resolved     string
+	ShouldPause  func() bool
+	OnProgress   OCRProgressFunc
+	OnRenderPage func(page, total int)
+	Pool         *workpool.Pool
+	PageWorkers  func(pageCount int) int
+	OnOCRStart   func() func()
 }
 
 func hasEnoughText(s string) bool {

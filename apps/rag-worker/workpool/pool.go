@@ -86,5 +86,8 @@ func (p *Pool) RunWhile(mem int64, stop func() bool, fn func() error) error {
 		p.mu.Unlock()
 	}()
 
+	if stop != nil && stop() {
+		return ErrStopped
+	}
 	return fn()
 }
