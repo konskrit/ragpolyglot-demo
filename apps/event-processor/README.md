@@ -10,3 +10,16 @@ npx nx test event-processor
 ```
 
 Docker: port `8082`.
+
+## SQL
+
+Queries live in `sql/*.sql`, embedded at build time via `//go:embed` (`sql/load.go` → `Must(name)`). `storage/store.go` loads them — no inline SQL in Go.
+
+| File                                                             | Used by             |
+| ---------------------------------------------------------------- | ------------------- |
+| `schema.sql`                                                     | `EnsureSchema`      |
+| `log_system.sql`                                                 | `LogSystem`         |
+| `archive_system_logs.sql` / `archive_query_logs.sql`             | `ArchiveOldLogs`    |
+| `purge_system_logs_archive.sql` / `purge_query_logs_archive.sql` | `PurgeArchivedLogs` |
+
+Same pattern as document-service (`Sql/`) and api-gateway (`src/assets/sql/`).

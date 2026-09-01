@@ -34,6 +34,8 @@ When you change a public response shape in `libs/shared`:
 
 Enums (`DOCUMENT_STATUSES`, `DOCUMENT_PROGRESS_STAGES`) are imported from shared so OpenAPI stays aligned.
 
+Postgres queries: `src/assets/sql/*.sql` via `loadSql()` (same idea as Go `sql.Must` / document-service `SqlScripts`).
+
 ```bash
 npx nx serve api-gateway   # needs Postgres, Redis, RabbitMQ, workers
 npx nx test api-gateway

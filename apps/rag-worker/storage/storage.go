@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"apps/rag-worker/models"
+	ragsql "apps/rag-worker/sql"
 )
 
 type Store struct {
@@ -26,42 +27,7 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 func (s *Store) EnsureSchema(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
-CREATE TABLE IF NOT EXISTS system_logs (
-    id BIGSERIAL PRIMARY KEY,
-    service TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    document_id UUID,
-    metadata JSONB,
-    duration_ms DOUBLE PRECISION,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS query_logs (
-    id BIGSERIAL PRIMARY KEY,
-    query TEXT NOT NULL,
-    top_k INT NOT NULL,
-    result_count INT NOT NULL,
-    duration_ms DOUBLE PRECISION NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS document_ingest_checkpoints (
-    document_id UUID PRIMARY KEY,
-    stage TEXT NOT NULL,
-    ocr_page_done INT NOT NULL DEFAULT 0,
-    ocr_total INT NOT NULL DEFAULT 0,
-    ocr_langs TEXT NOT NULL DEFAULT '',
-    ocr_lang_hint TEXT NOT NULL DEFAULT '',
-    partial_text TEXT NOT NULL DEFAULT '',
-    embed_done INT NOT NULL DEFAULT 0,
-    file_path TEXT NOT NULL DEFAULT '',
-    paused BOOLEAN NOT NULL DEFAULT FALSE,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-ALTER TABLE document_ingest_checkpoints
-    ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE;
-`)
+	_, err := s.pool.Exec(ctx, ragsql.Must("schema.sql"))
 	return err
 }
 
@@ -76,10 +42,9 @@ func (s *Store) InsertChunks(ctx context.Context, chunks []models.DocumentChunk)
 	}
 	defer tx.Rollback(ctx)
 
+	insertChunk := ragsql.Must("insert_chunk.sql")
 	for _, chunk := range chunks {
-		_, err := tx.Exec(ctx, `
-INSERT INTO document_chunks (document_id, chunk_index, content, embedding)
-VALUES ($1, $2, $3, $4::vector)`,
+		_, err := tx.Exec(ctx, insertChunk,
 			chunk.DocumentID,
 			chunk.ChunkIndex,
 			chunk.Content,
@@ -97,7 +62,7 @@ VALUES ($1, $2, $3, $4::vector)`,
 }
 
 func (s *Store) DeleteChunks(ctx context.Context, documentID string) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM document_chunks WHERE document_id = $1`, documentID)
+	tag, err := s.pool.Exec(ctx, ragsql.Must("delete_chunks.sql"), documentID)
 	if err != nil {
 		return 0, err
 	}
@@ -106,17 +71,12 @@ func (s *Store) DeleteChunks(ctx context.Context, documentID string) (int64, err
 
 func (s *Store) CountChunks(ctx context.Context, documentID string) (int64, error) {
 	var n int64
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM document_chunks WHERE document_id = $1`, documentID).Scan(&n)
+	err := s.pool.QueryRow(ctx, ragsql.Must("count_chunks.sql"), documentID).Scan(&n)
 	return n, err
 }
 
 func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int) ([]models.SearchHit, error) {
-	rows, err := s.pool.Query(ctx, `
-SELECT document_id::text, chunk_index, content, 1 - (embedding <=> $1::vector) AS similarity
-FROM document_chunks
-WHERE embedding IS NOT NULL
-ORDER BY embedding <=> $1::vector
-LIMIT $2`,
+	rows, err := s.pool.Query(ctx, ragsql.Must("search_similar.sql"),
 		vectorLiteral(embedding),
 		topK,
 	)
@@ -147,17 +107,13 @@ func (s *Store) LogSystem(ctx context.Context, eventType, documentID string, dur
 		docID = documentID
 	}
 
-	_, _ = s.pool.Exec(ctx, `
-INSERT INTO system_logs (service, event_type, document_id, metadata, duration_ms)
-VALUES ('rag-worker', $1, $2, $3, $4)`,
+	_, _ = s.pool.Exec(ctx, ragsql.Must("log_system.sql"),
 		eventType, docID, metaJSON, float64(duration.Milliseconds()),
 	)
 }
 
 func (s *Store) LogQuery(ctx context.Context, query string, topK, resultCount int, duration time.Duration) {
-	_, _ = s.pool.Exec(ctx, `
-INSERT INTO query_logs (query, top_k, result_count, duration_ms)
-VALUES ($1, $2, $3, $4)`,
+	_, _ = s.pool.Exec(ctx, ragsql.Must("log_query.sql"),
 		query, topK, resultCount, float64(duration.Milliseconds()),
 	)
 }

@@ -126,8 +126,8 @@ apps/
   api-gateway/        Nest BFF — REST, WebSocket, Scalar `/docs`, Redis cache
   api-gateway-e2e/    Integration tests (--profile test + llm-stub)
   document-service/   .NET metadata + events
-  rag-worker/         Go RAG pipeline + OCR + /api/chat
-  event-processor/    Go job runner + in-process scheduler
+  rag-worker/         Go RAG pipeline + OCR + /api/chat (`sql/*.sql` embedded)
+  event-processor/    Go job runner + in-process scheduler (`sql/*.sql` embedded)
   react-frontend/     UI (dashboard, upload, agent chat)
 libs/
   shared/             TS contracts

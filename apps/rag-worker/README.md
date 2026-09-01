@@ -20,3 +20,19 @@ npx nx test rag-worker
 ```
 
 Docker: port `8081`. Shares `/uploads` with the gateway.
+
+## SQL
+
+Queries live in `sql/*.sql`, embedded at build time via `//go:embed` (`sql/load.go` → `Must(name)`). `storage/` loads them — no inline SQL in Go.
+
+| File                                                                     | Used by             |
+| ------------------------------------------------------------------------ | ------------------- |
+| `schema.sql`                                                             | `EnsureSchema`      |
+| `insert_chunk.sql`                                                       | `InsertChunks`      |
+| `delete_chunks.sql`                                                      | `DeleteChunks`      |
+| `count_chunks.sql`                                                       | `CountChunks`       |
+| `search_similar.sql`                                                     | `SearchSimilar`     |
+| `log_system.sql` / `log_query.sql`                                       | metrics             |
+| `get_checkpoint.sql` / `upsert_checkpoint.sql` / `delete_checkpoint.sql` | ingest pause/resume |
+
+Same pattern as document-service (`Sql/`) and api-gateway (`src/assets/sql/`).
