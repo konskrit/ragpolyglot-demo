@@ -9,4 +9,4 @@ npx nx serve react-frontend   # http://localhost:4200
 npx nx test react-frontend
 ```
 
-Leave `VITE_API_URL` / `VITE_WS_URL` empty so Vite proxies `/api` and `/socket.io` to the gateway.
+Leave `VITE_API_URL` / `VITE_WS_URL` empty so Vite proxies `/api` and `/socket.io` to the gateway. `vite.config.ts` aliases engine.io Node files to the browser builds so Socket.IO does not load Node `global`.

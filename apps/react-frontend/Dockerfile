@@ -11,7 +11,8 @@ ARG VITE_WS_URL=
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_WS_URL=$VITE_WS_URL
 
-RUN npm ci --legacy-peer-deps \
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --legacy-peer-deps \
     && npx nx build react-frontend --configuration=production
 
 FROM nginx:1.27-alpine

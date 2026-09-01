@@ -2,7 +2,7 @@
 
 Go RAG pipeline. Consumes `document.uploaded` / `document.deleted` / `document.pause`, extracts text (native PDF or OCR), chunks (~750 tokens, 10% overlap), embeds (API; hash fallback only when `EMBEDDING_FALLBACK=true`), writes pgvector chunks, publishes `document.processed` / `document.failed` / `document.paused` / `document.progress`.
 
-OCR: Tesseract for most languages; Kraken for Ancient Greek (`grc`). No CUDA: Kraken retries on CPU. Kraken missing or still failing: Tesseract. Compose sets `gpus: all` (see root README).
+OCR: Tesseract for most languages; Kraken for Ancient Greek (`grc`). Pause kills the Kraken/Python process group on Linux so OCR stops without waiting out the current CLI batch. No CUDA: Kraken retries on CPU. Kraken missing or still failing: Tesseract. Compose sets `gpus: all` (see root README / [docs/docker](../../docs/docker/README.md)).
 
 HTTP:
 

@@ -6,7 +6,8 @@ COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/api-gateway ./apps/api-gateway
 COPY libs/shared ./libs/shared
 
-RUN npm ci --legacy-peer-deps \
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --legacy-peer-deps \
     && npx nx build api-gateway --configuration=production \
     && cd dist/apps/api-gateway \
     && npm install --omit=dev --legacy-peer-deps

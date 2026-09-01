@@ -3,10 +3,13 @@ FROM golang:1.26-alpine AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux \
     go build -trimpath -ldflags="-s -w" -o /out/rag-worker .
 
 FROM alpine:3.21 AS tessdata
@@ -31,6 +34,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /models
 RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/modelcache \
     if [ "$INSTALL_KRAKEN" = "1" ]; then \
       if [ "$KRAKEN_TORCH" = "cpu" ]; then \
         TORCH_INDEX="https://download.pytorch.org/whl/cpu"; \
@@ -42,8 +46,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       && pip install --force-reinstall --no-deps \
            --index-url "$TORCH_INDEX" torch torchvision \
       && python3 -c "import torch; import torchvision; from torchvision.transforms import v2; import kraken" \
-      && curl -fsSL --retry 5 -o /models/grc.mlmodel \
-           "https://zenodo.org/api/records/21295925/files/cllg_recognition_v1.mlmodel/content"; \
+      && if [ ! -s /modelcache/grc.mlmodel ]; then \
+           curl -fsSL --retry 5 -o /modelcache/grc.mlmodel \
+             "https://zenodo.org/api/records/21295925/files/cllg_recognition_v1.mlmodel/content"; \
+         fi \
+      && cp /modelcache/grc.mlmodel /models/grc.mlmodel; \
     fi
 
 FROM python:3.12-slim-bookworm

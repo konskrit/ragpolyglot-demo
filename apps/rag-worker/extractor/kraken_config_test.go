@@ -23,6 +23,40 @@ func TestKrakenBatchPages(t *testing.T) {
 	}
 }
 
+func TestKrakenGPUDefaults(t *testing.T) {
+	resetKrakenDeviceForTest(t)
+	krakenDeviceMu.Lock()
+	krakenDevice = "cuda:0"
+	krakenDeviceInit = true
+	krakenDeviceMu.Unlock()
+
+	t.Setenv("KRAKEN_PRECISION", "")
+	t.Setenv("KRAKEN_LINE_BATCH", "")
+	t.Setenv("KRAKEN_LINE_WORKERS", "")
+	if got := krakenPrecision(); got != defaultKrakenPrecisionGPU {
+		t.Fatalf("precision: got %q", got)
+	}
+	if n, ok := krakenLineBatch(); !ok || n != defaultKrakenLineBatch {
+		t.Fatalf("line batch: got %d ok=%v", n, ok)
+	}
+	if n, ok := krakenLineWorkers(); !ok || n < 1 {
+		t.Fatalf("line workers: got %d ok=%v", n, ok)
+	}
+}
+
+func TestKrakenCPUSkipsGPUDefaults(t *testing.T) {
+	resetKrakenDeviceForTest(t)
+	t.Setenv("KRAKEN_DEVICE", "cpu")
+	t.Setenv("KRAKEN_PRECISION", "")
+	t.Setenv("KRAKEN_LINE_BATCH", "")
+	if got := krakenPrecision(); got != "" {
+		t.Fatalf("cpu precision should be empty, got %q", got)
+	}
+	if _, ok := krakenLineBatch(); ok {
+		t.Fatal("cpu should not set line batch")
+	}
+}
+
 func TestEffectiveKrakenBatchSizeVRAMCap(t *testing.T) {
 	resetKrakenDeviceForTest(t)
 	krakenDeviceMu.Lock()

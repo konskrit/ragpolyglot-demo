@@ -11,11 +11,13 @@ import (
 )
 
 const (
-	defaultKrakenBatchPages   = 4
+	defaultKrakenBatchPages   = 16
 	defaultKrakenThreads      = 4
 	defaultKrakenVRAMBudgetMB = 4096
-	defaultKrakenVRAMPageMB   = 512
+	defaultKrakenVRAMPageMB   = 256
 	defaultKrakenPageMemoryMB = 256
+	defaultKrakenLineBatch    = 64
+	defaultKrakenPrecisionGPU = "bf16-mixed"
 )
 
 var (
@@ -58,15 +60,55 @@ func envOptionalNonNegInt(key string) (int, bool) {
 }
 
 func krakenPrecision() string {
-	return strings.TrimSpace(os.Getenv("KRAKEN_PRECISION"))
+	if v := strings.TrimSpace(os.Getenv("KRAKEN_PRECISION")); v != "" {
+		return v
+	}
+	if krakenOnCUDA() {
+		return defaultKrakenPrecisionGPU
+	}
+	return ""
 }
 
 func krakenLineBatch() (int, bool) {
-	return envOptionalPositiveInt("KRAKEN_LINE_BATCH")
+	if n, ok := envOptionalPositiveInt("KRAKEN_LINE_BATCH"); ok {
+		return n, true
+	}
+	if krakenOnCUDA() {
+		return defaultKrakenLineBatch, true
+	}
+	return 0, false
 }
 
 func krakenLineWorkers() (int, bool) {
-	return envOptionalNonNegInt("KRAKEN_LINE_WORKERS")
+	if n, ok := envOptionalNonNegInt("KRAKEN_LINE_WORKERS"); ok {
+		return n, true
+	}
+	if krakenOnCUDA() {
+		n := runtime.NumCPU()
+		if n > 8 {
+			n = 8
+		}
+		if n < 1 {
+			n = 1
+		}
+		return n, true
+	}
+	return 0, false
+}
+
+func krakenOnCUDA() bool {
+	return strings.HasPrefix(currentKrakenDevice(), "cuda")
+}
+
+func currentKrakenDevice() string {
+	krakenDeviceMu.Lock()
+	ready := krakenDeviceInit
+	dev := krakenDevice
+	krakenDeviceMu.Unlock()
+	if ready {
+		return dev
+	}
+	return resolveKrakenDevice()
 }
 
 func krakenBatchPages() int {

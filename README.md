@@ -82,6 +82,8 @@ Start the LLM before using Agent mode.
 
 `rag-worker` is composed with `gpus: all` so Kraken can use CUDA. That needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If the daemon has no NVIDIA runtime, `docker compose up` can fail — comment out `gpus: all` in `docker-compose.yml`. CI uses `docker-compose.ci.yml` to drop GPUs (GitHub-hosted runners have no NVIDIA runtime).
 
+Kraken/torch live in their own Docker stage with a pip cache, so a Go-only rebuild does not re-download CUDA wheels. Compose files, Dockerfiles, and env overlays: [docs/docker/README.md](docs/docker/README.md).
+
 ## Tests
 
 **Unit** (no Docker stack):
