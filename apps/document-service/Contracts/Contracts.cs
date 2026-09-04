@@ -43,6 +43,7 @@ public record DocumentUploadedEvent
     public string UserId { get; init; } = string.Empty;
     public string? OcrLang { get; init; }
     public bool Retry { get; init; }
+    public bool ResetIngest { get; init; }
     public DateTime Timestamp { get; init; }
 }
 

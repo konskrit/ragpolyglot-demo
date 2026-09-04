@@ -7,8 +7,10 @@ RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet restore
 
 COPY . .
+# Restore again in this layer: --no-restore + a stale BuildKit NuGet cache
+# often yields NETSDK1064 (packages missing after a cached restore).
 RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet publish -c Release -o /app/publish --no-restore
+    dotnet publish -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 

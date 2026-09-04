@@ -67,6 +67,8 @@ export interface DocumentUploadedEvent {
   userId: string;
   ocrLang?: OcrLanguageCode;
   retry?: boolean;
+  /** When true, rag-worker wipes checkpoint/chunks and re-runs OCR from page 1. */
+  resetIngest?: boolean;
   timestamp: string;
 }
 

@@ -3,13 +3,14 @@ package models
 import "time"
 
 type DocumentUploadedEvent struct {
-	Type       string    `json:"type"`
-	DocumentID string    `json:"documentId"`
-	FilePath   string    `json:"filePath"`
-	UserID     string    `json:"userId"`
-	OcrLang    string    `json:"ocrLang,omitempty"`
-	Retry      bool      `json:"retry,omitempty"`
-	Timestamp  time.Time `json:"timestamp"`
+	Type        string    `json:"type"`
+	DocumentID  string    `json:"documentId"`
+	FilePath    string    `json:"filePath"`
+	UserID      string    `json:"userId"`
+	OcrLang     string    `json:"ocrLang,omitempty"`
+	Retry       bool      `json:"retry,omitempty"`
+	ResetIngest bool      `json:"resetIngest,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 type DocumentDeletedEvent struct {

@@ -276,6 +276,28 @@ services:
     networks:
       - rag-network
 
+  react-frontend:
+    build:
+      context: .
+      dockerfile: ./apps/react-frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_WS_URL: ${VITE_WS_URL:-}
+    restart: unless-stopped
+    ports:
+      - '${FRONTEND_PORT:-4200}:80'
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/ >/dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - rag-network
+
   pgadmin:
     profiles: ['tools']
     image: dpage/pgadmin4:8

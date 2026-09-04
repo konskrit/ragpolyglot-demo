@@ -99,6 +99,8 @@ public static class DocumentEndpoints
             return Results.BadRequest(new { error = "Choose an OCR language to retry." });
         }
 
+        var resetIngest = IngestRetryPolicy.OcrLangChanged(existing.OcrLang, ocrLang);
+
         var doc = await repo.ClaimRetryAsync(id, ocrLang, updateOcrLang: true, cancellationToken);
         if (doc is null)
         {
@@ -106,7 +108,14 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
+        if (!await PublishUploadedOrMarkFailedAsync(
+                doc,
+                repo,
+                messageBroker,
+                logger,
+                cancellationToken,
+                retry: true,
+                resetIngest: resetIngest))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -142,6 +151,8 @@ public static class DocumentEndpoints
             return Results.BadRequest(new { error = "Choose an OCR language." });
         }
 
+        var resetIngest = IngestRetryPolicy.OcrLangChanged(existing.OcrLang, ocrLang);
+
         var doc = await repo.ClaimOcrLangAsync(id, ocrLang, cancellationToken);
         if (doc is null)
         {
@@ -152,7 +163,14 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken, retry: true))
+        if (!await PublishUploadedOrMarkFailedAsync(
+                doc,
+                repo,
+                messageBroker,
+                logger,
+                cancellationToken,
+                retry: true,
+                resetIngest: resetIngest))
         {
             return Results.Problem(
                 detail: "OCR language change could not be queued.",
@@ -334,11 +352,18 @@ public static class DocumentEndpoints
         MessageBroker messageBroker,
         ILogger logger,
         CancellationToken cancellationToken,
-        bool retry = false)
+        bool retry = false,
+        bool resetIngest = false)
     {
         try
         {
-            await messageBroker.PublishDocumentUploadedAsync(doc.Id, doc.FilePath, doc.OcrLang, retry, cancellationToken);
+            await messageBroker.PublishDocumentUploadedAsync(
+                doc.Id,
+                doc.FilePath,
+                doc.OcrLang,
+                retry,
+                resetIngest,
+                cancellationToken);
             return true;
         }
         catch (Exception ex)

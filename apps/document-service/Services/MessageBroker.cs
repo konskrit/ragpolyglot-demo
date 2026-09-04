@@ -120,7 +120,13 @@ public sealed partial class MessageBroker(
         }
     }
 
-    public Task PublishDocumentUploadedAsync(Guid documentId, string filePath, string? ocrLang, bool retry = false, CancellationToken cancellationToken = default)
+    public Task PublishDocumentUploadedAsync(
+        Guid documentId,
+        string filePath,
+        string? ocrLang,
+        bool retry = false,
+        bool resetIngest = false,
+        CancellationToken cancellationToken = default)
     {
         var message = new DocumentUploadedEvent
         {
@@ -128,6 +134,7 @@ public sealed partial class MessageBroker(
             FilePath = filePath,
             OcrLang = ocrLang,
             Retry = retry,
+            ResetIngest = resetIngest,
             Timestamp = DateTime.UtcNow
         };
 

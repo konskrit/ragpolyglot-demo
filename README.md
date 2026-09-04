@@ -67,21 +67,21 @@ Vite proxies `/api` and `/socket.io` only — open `/docs` on port **3000**, not
 
 ```bash
 cp .env.example .env
-npm install
 docker compose up --build   # first time or after image/Dockerfile changes
-npx nx serve react-frontend
 ```
 
 Day-to-day: `docker compose up -d` (no `--build`). Rebuild one service when needed, e.g. `docker compose up -d --build rag-worker`.
+
+UI is served by the `react-frontend` container (nginx on `${FRONTEND_PORT:-4200}`), proxying `/api` and `/socket.io` to the gateway. For hot-reload UI work: `npx nx serve react-frontend` (still needs the stack up).
 
 Infra only (Postgres on `5433`, Redis, RabbitMQ): `docker compose -f docker-compose.debug.yml up` — use when the apps run on the host.
 
 | Service           | URL                                    |
 | ----------------- | -------------------------------------- |
+| UI                | http://localhost:4200                  |
 | Gateway           | http://localhost:3000                  |
 | API docs (Scalar) | http://localhost:3000/docs             |
 | OpenAPI JSON      | http://localhost:3000/api/openapi-json |
-| UI                | http://localhost:4200                  |
 | RabbitMQ UI       | http://localhost:15672 (guest/guest)   |
 | Document service  | http://localhost:5000                  |
 | RAG worker        | http://localhost:8081                  |

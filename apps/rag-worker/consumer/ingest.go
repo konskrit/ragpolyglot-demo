@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -78,6 +79,14 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	if err != nil {
 		fail("storage_error", err)
 		return
+	}
+	if shouldResetIngest(event, cp) {
+		log.Printf("[Consumer] resetting ingest (OCR language change) documentId=%s", event.DocumentID)
+		if err := wipeIngestDataWithRetry(ctx, p.store, event.DocumentID); err != nil {
+			fail("storage_error", err)
+			return
+		}
+		cp = nil
 	}
 	if cp == nil {
 		n, err := p.store.CountChunks(ctx, event.DocumentID)
@@ -224,6 +233,20 @@ func fillCheckpointFromEvent(job *storage.IngestCheckpoint, event models.Documen
 	if job.OcrLangHint == "" {
 		job.OcrLangHint = event.OcrLang
 	}
+}
+
+func shouldResetIngest(event models.DocumentUploadedEvent, cp *storage.IngestCheckpoint) bool {
+	if event.ResetIngest {
+		return true
+	}
+	if !event.Retry || cp == nil {
+		return false
+	}
+	return normalizeOcrLang(event.OcrLang) != normalizeOcrLang(cp.OcrLangHint)
+}
+
+func normalizeOcrLang(value string) string {
+	return strings.TrimSpace(value)
 }
 
 func (p *Processor) completeWithoutIngest(ctx context.Context, acker *ingestAck, documentID string, chunkCount int, start time.Time) {

@@ -6,6 +6,8 @@ OCR: Tesseract for most languages; Kraken 7 for Ancient Greek (`grc`). Pause kil
 
 **Progress:** `document.progress` stages — `waiting_for_ocr` (blocked on `ocrIngestSem`, heartbeat every 30s), `extracting` (Kraken/Tesseract; counts OCR’d pages per batch, not pdftoppm), `embedding`. **Concurrency:** `OCR_INGEST_PREFETCH` + `KRAKEN_GPU_CONCURRENT` (default = prefetch) allow multiple Kraken CUDA jobs; VRAM budget is split per concurrent job. Kraken batches render PDF pages in parallel (`PageWorkers`); CUDA runs use a sized semaphore (not a single global mutex).
 
+**Retry / OCR language:** changing `ocrLang` on retry or via `/ocr-lang` sets `resetIngest` on `document.uploaded`. The worker wipes checkpoint + chunks and re-runs OCR from page 1. Same-language retry still resumes from checkpoint (e.g. embedding failure).
+
 Compose sets `gpus: all` (see root README / [docs/docker-compose.yml](../../docs/docker-compose.yml/README.md)).
 
 HTTP:
