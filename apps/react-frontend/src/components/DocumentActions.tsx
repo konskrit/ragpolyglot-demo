@@ -108,7 +108,7 @@ export function DocumentActions({
               (doc.status === 'processing' && !liveOcrLangChange)
             }
             aria-label={`OCR language for ${doc.title}`}
-            className="max-w-[11rem] rounded-lg border border-gray-700 bg-gray-950 px-2 py-1.5 text-xs text-gray-200"
+            className="max-w-44 rounded-lg border border-gray-700 bg-gray-950 px-2 py-1.5 text-xs text-gray-200"
           >
             <option value="">
               {needsOcrLanguage ? 'Select language' : 'Automatic'}

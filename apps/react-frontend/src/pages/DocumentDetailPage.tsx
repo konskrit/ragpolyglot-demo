@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   formatDocumentProgressLabel,
@@ -27,32 +27,26 @@ function DocumentDetail({ id }: { id: string }) {
   const listDoc = documents.find((d) => d.id === id);
 
   const [fetched, setFetched] = useState<DocumentSummary | null>(null);
-  const [chunks, setChunks] = useState<DocumentChunk[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [chunksLoading, setChunksLoading] = useState(false);
+  const [chunks, setChunks] = useState<DocumentChunk[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chunksError, setChunksError] = useState<string | null>(null);
   const scrolledChunkRef = useRef<number | null>(null);
 
-  const targetChunkIndex = useMemo(
-    () => parseChunkNavigationTarget(location.hash, location.state),
-    [location.hash, location.state],
+  const targetChunkIndex = parseChunkNavigationTarget(
+    location.hash,
+    location.state,
   );
 
   const doc = listDoc ?? fetched;
   const inList = listDoc !== undefined;
+  const loading = listLoading || (!inList && !fetched && !error);
+  const chunksLoading =
+    doc?.status === 'ready' && chunks === null && !chunksError;
 
   useEffect(() => {
-    if (listLoading) return;
-    if (inList) {
-      setLoading(false);
-      return;
-    }
+    if (listLoading || inList) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-
     void loadDocument(id)
       .then((result) => {
         if (cancelled) return;
@@ -63,9 +57,6 @@ function DocumentDetail({ id }: { id: string }) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Failed to load document');
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
 
     return () => {
@@ -74,18 +65,14 @@ function DocumentDetail({ id }: { id: string }) {
   }, [id, inList, listLoading]);
 
   useEffect(() => {
-    if (doc?.status !== 'ready') {
-      setChunks([]);
-      return;
-    }
+    if (doc?.status !== 'ready') return;
 
     let cancelled = false;
-    setChunksLoading(true);
-    setChunksError(null);
-
     void loadDocumentChunks(id)
       .then((data) => {
-        if (!cancelled) setChunks(data);
+        if (cancelled) return;
+        setChunksError(null);
+        setChunks(data);
       })
       .catch((e) => {
         if (!cancelled) {
@@ -93,9 +80,6 @@ function DocumentDetail({ id }: { id: string }) {
             e instanceof Error ? e.message : 'Failed to load document chunks',
           );
         }
-      })
-      .finally(() => {
-        if (!cancelled) setChunksLoading(false);
       });
 
     return () => {
@@ -138,6 +122,7 @@ function DocumentDetail({ id }: { id: string }) {
   }
 
   const progressLabel = formatDocumentProgressLabel(doc);
+  const readyChunks = doc.status === 'ready' ? chunks : null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 min-w-0">
@@ -174,18 +159,18 @@ function DocumentDetail({ id }: { id: string }) {
         <PageSpinner />
       ) : chunksError ? (
         <p className="text-sm text-red-400">{chunksError}</p>
-      ) : chunks.length === 0 ? (
+      ) : !readyChunks || readyChunks.length === 0 ? (
         <p className="text-gray-400 text-sm">
           No chunks stored for this document.
         </p>
       ) : (
         <section className="space-y-3">
           <p className="text-sm text-gray-400">
-            {chunks.length} chunk{chunks.length === 1 ? '' : 's'} (indexed text
-            used for search)
+            {readyChunks.length} chunk{readyChunks.length === 1 ? '' : 's'}{' '}
+            (indexed text used for search)
           </p>
           <ul className="space-y-3 min-w-0">
-            {chunks.map((chunk) => (
+            {readyChunks.map((chunk) => (
               <li
                 key={chunk.chunkIndex}
                 id={chunkAnchorId(chunk.chunkIndex)}
@@ -208,7 +193,7 @@ function DocumentDetail({ id }: { id: string }) {
                   Chunk {chunk.chunkIndex + 1}
                 </p>
                 <div className="min-w-0 max-w-full overflow-x-auto">
-                  <p className="text-sm text-gray-200 whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed">
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap wrap-anywhere leading-relaxed">
                     {chunk.content}
                   </p>
                 </div>

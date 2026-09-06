@@ -6,14 +6,15 @@ import { resolve } from 'path';
 // Large uploads need a longer proxy timeout than the default 15s API calls.
 const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 
+const rootDir = import.meta.dirname;
 const engineIoEsm = resolve(
-  __dirname,
+  rootDir,
   '../../node_modules/engine.io-client/build/esm',
 );
 
 export default defineConfig({
-  root: __dirname,
-  envDir: resolve(__dirname, '../..'),
+  root: rootDir,
+  envDir: resolve(rootDir, '../..'),
   cacheDir: '../../node_modules/.vite/apps/react-frontend',
   server: {
     port: Number(process.env.FRONTEND_PORT) || 4200,
@@ -40,7 +41,7 @@ export default defineConfig({
     conditions: ['browser', 'import', 'module', 'default'],
     alias: {
       'socket.io-client': resolve(
-        __dirname,
+        rootDir,
         '../../node_modules/socket.io-client/build/esm/index.js',
       ),
       'engine.io-client': resolve(engineIoEsm, 'index.js'),

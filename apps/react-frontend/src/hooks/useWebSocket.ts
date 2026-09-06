@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { WS_URL } from '../config';
 
@@ -13,16 +13,17 @@ function resubscribeDocuments(socket: Socket): void {
 
 function getSharedSocket(): Socket {
   if (!sharedSocket) {
-    sharedSocket = io(WS_URL, {
+    const socket = io(WS_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10_000,
     });
-    sharedSocket.on('connect', () => {
-      resubscribeDocuments(sharedSocket!);
+    socket.on('connect', () => {
+      resubscribeDocuments(socket);
     });
+    sharedSocket = socket;
   }
   return sharedSocket;
 }
@@ -31,12 +32,13 @@ export function useWebSocketEvent<T>(
   event: string,
   handler: (payload: T) => void,
 ): void {
-  const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+  const onEvent = useEffectEvent(handler);
 
   useEffect(() => {
     const socket = getSharedSocket();
-    const listener = (payload: T) => handlerRef.current(payload);
+    const listener = (payload: T) => {
+      onEvent(payload);
+    };
     socket.on(event, listener as (...args: unknown[]) => void);
 
     return () => {
@@ -57,7 +59,6 @@ export function useWebSocketStatus(): {
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
-    setConnected(socket.connected);
 
     return () => {
       socket.off('connect', onConnect);

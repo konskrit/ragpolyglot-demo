@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { AgentChat } from '../components/AgentChat';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { useConversations } from '../hooks/useConversations';
@@ -25,10 +25,14 @@ export function AgentPage() {
 
   const latestId = conversations[0]?.id;
 
+  const restoreLatest = useEffectEvent((id: string) => {
+    void openConversation(id);
+  });
+
   useEffect(() => {
     if (restoredRef.current || loading || !latestId) return;
     restoredRef.current = true;
-    void openConversation(latestId);
+    restoreLatest(latestId);
   }, [loading, latestId]);
 
   const startNew = () => {

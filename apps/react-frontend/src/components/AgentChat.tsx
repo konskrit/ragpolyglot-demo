@@ -36,6 +36,23 @@ function sourceLink(source: Source): {
   };
 }
 
+function finishAssistantMessage(
+  prev: Message[],
+  fallbackText: string,
+  sources?: Source[],
+): Message[] {
+  const last = prev[prev.length - 1];
+  if (!last || last.role !== 'assistant') return prev;
+  return [
+    ...prev.slice(0, -1),
+    {
+      ...last,
+      text: last.text.trim() || fallbackText,
+      ...(sources ? { sources } : {}),
+    },
+  ];
+}
+
 export function AgentChat({
   conversationId,
   initialMessages,
@@ -53,23 +70,6 @@ export function AgentChat({
   const [loading, setLoading] = useState(false);
   const activeConversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const finishAssistant = (fallbackText: string, sources?: Source[]) => {
-    setLoading(false);
-    activeConversationIdRef.current = null;
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (!last || last.role !== 'assistant') return prev;
-      return [
-        ...prev.slice(0, -1),
-        {
-          ...last,
-          text: last.text.trim() || fallbackText,
-          ...(sources ? { sources } : {}),
-        },
-      ];
-    });
-  };
 
   useWebSocketEvent<{ token: string; conversationId: string }>(
     'chat:token',
@@ -125,11 +125,12 @@ export function AgentChat({
   useEffect(() => {
     if (!loading) return;
     const timer = window.setTimeout(() => {
-      if (!activeConversationIdRef.current) return;
-      emitWebSocket('chat:interrupt', {
-        conversationId: activeConversationIdRef.current,
-      });
-      finishAssistant('Request timed out.');
+      const id = activeConversationIdRef.current;
+      if (!id) return;
+      emitWebSocket('chat:interrupt', { conversationId: id });
+      activeConversationIdRef.current = null;
+      setLoading(false);
+      setMessages((prev) => finishAssistantMessage(prev, 'Request timed out.'));
     }, 120_000);
     return () => window.clearTimeout(timer);
   }, [loading]);
@@ -138,7 +139,9 @@ export function AgentChat({
     const id = activeConversationIdRef.current;
     if (!id) return;
     emitWebSocket('chat:interrupt', { conversationId: id });
-    finishAssistant('(interrupted)');
+    activeConversationIdRef.current = null;
+    setLoading(false);
+    setMessages((prev) => finishAssistantMessage(prev, '(interrupted)'));
   };
 
   const send = () => {
@@ -161,7 +164,7 @@ export function AgentChat({
   if (!hasDocuments && messages.length === 0) {
     return (
       <div
-        className="flex flex-col h-[600px] bg-gray-900 rounded-xl border border-gray-800 items-center justify-center text-center p-8"
+        className="flex flex-col h-150 bg-gray-900 rounded-xl border border-gray-800 items-center justify-center text-center p-8"
         role="status"
       >
         <p className="text-gray-300 mb-2">No documents available yet.</p>
@@ -175,7 +178,7 @@ export function AgentChat({
 
   return (
     <div
-      className="flex flex-col h-[600px] bg-gray-900 rounded-xl border border-gray-800"
+      className="flex flex-col h-150 bg-gray-900 rounded-xl border border-gray-800"
       aria-label="Document chat"
     >
       <div

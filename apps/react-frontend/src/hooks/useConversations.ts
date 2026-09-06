@@ -7,6 +7,11 @@ import {
 } from '../lib/conversations';
 import type { ConversationSummary, Message } from '@ragpolyglot-shared';
 
+async function fetchConversations(): Promise<ConversationSummary[]> {
+  const data = await getJson<unknown>('/api/conversations');
+  return mapConversations(data);
+}
+
 export function useConversations() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,9 +19,9 @@ export function useConversations() {
 
   async function refresh() {
     try {
+      const next = await fetchConversations();
       setError(null);
-      const data = await getJson<unknown>('/api/conversations');
-      setConversations(mapConversations(data));
+      setConversations(next);
     } catch (e) {
       const message =
         e instanceof Error ? e.message : 'Failed to load conversations';
@@ -40,7 +45,28 @@ export function useConversations() {
   }
 
   useEffect(() => {
-    void refresh();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const next = await fetchConversations();
+        if (cancelled) return;
+        setError(null);
+        setConversations(next);
+      } catch (e) {
+        if (cancelled) return;
+        const message =
+          e instanceof Error ? e.message : 'Failed to load conversations';
+        setError(message);
+        console.error('Failed to load conversations', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return { conversations, loading, error, refresh, loadMessages, remove };

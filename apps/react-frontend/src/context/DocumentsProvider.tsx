@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type ReactNode,
@@ -37,6 +38,23 @@ interface DocumentsContextValue {
 
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
 
+async function fetchDocuments(): Promise<DocumentSummary[]> {
+  const data = await getJson<unknown>('/api/documents');
+  return mapApiDocuments(data);
+}
+
+function subscribeActiveDocuments(
+  docs: DocumentSummary[],
+  subscribed: Set<string>,
+): void {
+  for (const doc of docs) {
+    if (!isActiveDocumentStatus(doc.status)) continue;
+    if (subscribed.has(doc.id)) continue;
+    subscribed.add(doc.id);
+    subscribeDocument(doc.id);
+  }
+}
+
 export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,26 +62,12 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const { connected } = useWebSocketStatus();
   const subscribedRef = useRef(new Set<string>());
 
-  function watchDocument(id: string) {
-    if (subscribedRef.current.has(id)) return;
-    subscribedRef.current.add(id);
-    subscribeDocument(id);
-  }
-
-  function subscribeActiveDocuments(docs: DocumentSummary[]) {
-    for (const doc of docs) {
-      if (!isActiveDocumentStatus(doc.status)) continue;
-      watchDocument(doc.id);
-    }
-  }
-
   async function refresh() {
     try {
+      const mapped = await fetchDocuments();
       setError(null);
-      const data = await getJson<unknown>('/api/documents');
-      const mapped = mapApiDocuments(data);
       setDocuments(mapped);
-      subscribeActiveDocuments(mapped);
+      subscribeActiveDocuments(mapped, subscribedRef.current);
     } catch (e) {
       const message =
         e instanceof Error ? e.message : 'Failed to load documents';
@@ -118,7 +122,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       }),
       'Invalid OCR language response',
     );
-    subscribeActiveDocuments([mapped]);
+    subscribeActiveDocuments([mapped], subscribedRef.current);
   }
 
   async function pause(id: string) {
@@ -139,13 +143,61 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     subscribeDocument(id);
   }
 
-  useEffect(() => {
+  const refreshFromEffect = useEffectEvent(() => {
     void refresh();
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const mapped = await fetchDocuments();
+        if (cancelled) return;
+        setError(null);
+        setDocuments(mapped);
+        subscribeActiveDocuments(mapped, subscribedRef.current);
+      } catch (e) {
+        if (cancelled) return;
+        const message =
+          e instanceof Error ? e.message : 'Failed to load documents';
+        setError(message);
+        console.error('Failed to load documents', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!connected) return;
-    void refresh();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const mapped = await fetchDocuments();
+        if (cancelled) return;
+        setError(null);
+        setDocuments(mapped);
+        subscribeActiveDocuments(mapped, subscribedRef.current);
+      } catch (e) {
+        if (cancelled) return;
+        const message =
+          e instanceof Error ? e.message : 'Failed to load documents';
+        setError(message);
+        console.error('Failed to load documents', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [connected]);
 
   const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
@@ -154,7 +206,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     if (!hasActive) return;
 
     const timer = window.setInterval(() => {
-      void refresh();
+      refreshFromEffect();
     }, 3000);
 
     return () => window.clearInterval(timer);

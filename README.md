@@ -139,6 +139,8 @@ tools/
   llm-stub/           OpenAI-compatible stub for CI
 ```
 
+Deep file→function call trees (upload, OCR, chat, pause/retry, jobs): [docs/flows.md](docs/flows.md) (local `/docs` tree).
+
 ## Scope
 
 Local/dev only: no auth, no multi-user isolation.
