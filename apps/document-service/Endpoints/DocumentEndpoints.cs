@@ -158,7 +158,7 @@ public static class DocumentEndpoints
         {
             return Results.Conflict(new
             {
-                error = "OCR language can only be changed while extracting, paused, or after language detection failed.",
+                error = "OCR language can only be changed while OCR is queued/running, paused, or after language detection failed.",
             });
         }
 

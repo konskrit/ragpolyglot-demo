@@ -303,6 +303,10 @@ func runKrakenPages(imagePaths []string, device string, stop func() bool) ([]str
 		}
 		defer releaseKrakenGPU()
 	}
+	log.Printf(
+		"[Extractor] OCR engine=kraken recognizing %d pages device=%s",
+		len(imagePaths), device,
+	)
 	if err := runCaptureDiscard(stop, "kraken", args...); err != nil {
 		return nil, err
 	}

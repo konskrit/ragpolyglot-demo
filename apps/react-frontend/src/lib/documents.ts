@@ -1,10 +1,12 @@
 import type {
   DocumentChunk,
   DocumentSummary,
+  OcrEngine,
   OcrLanguageOption,
 } from '@ragpolyglot-shared';
 import {
   isDocumentProgressStage,
+  isOcrEngine,
   normalizeDocumentStatus,
 } from '@ragpolyglot-shared';
 import { getJson } from '../api/client';
@@ -30,6 +32,7 @@ function mapDocumentSummary(item: unknown): DocumentSummary | null {
     progressTotal:
       typeof row.progressTotal === 'number' ? row.progressTotal : undefined,
     ocrLang: typeof row.ocrLang === 'string' ? row.ocrLang : undefined,
+    ocrEngine: isOcrEngine(row.ocrEngine) ? row.ocrEngine : undefined,
     createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
   };
 }
@@ -80,24 +83,29 @@ export function loadDocumentChunks(id: string): Promise<DocumentChunk[]> {
   ).then(mapApiChunks);
 }
 
-let ocrLanguagesPromise: Promise<OcrLanguageOption[]> | null = null;
+const ocrLanguagesCache = new Map<string, Promise<OcrLanguageOption[]>>();
 
-export function loadOcrLanguages(): Promise<OcrLanguageOption[]> {
-  if (!ocrLanguagesPromise) {
-    ocrLanguagesPromise = getJson<OcrLanguageOption[]>(
-      '/api/documents/ocr-languages',
-    )
-      .then((langs) => {
-        if (!Array.isArray(langs) || langs.length === 0) {
-          ocrLanguagesPromise = null;
-          return [];
-        }
-        return langs;
-      })
-      .catch(() => {
-        ocrLanguagesPromise = null;
+export function loadOcrLanguages(
+  engine: OcrEngine = 'tesseract',
+): Promise<OcrLanguageOption[]> {
+  const cached = ocrLanguagesCache.get(engine);
+  if (cached) return cached;
+
+  const promise = getJson<OcrLanguageOption[]>(
+    `/api/documents/ocr-languages?engine=${encodeURIComponent(engine)}`,
+  )
+    .then((langs) => {
+      if (!Array.isArray(langs) || langs.length === 0) {
+        ocrLanguagesCache.delete(engine);
         return [];
-      });
-  }
-  return ocrLanguagesPromise;
+      }
+      return langs;
+    })
+    .catch(() => {
+      ocrLanguagesCache.delete(engine);
+      return [];
+    });
+
+  ocrLanguagesCache.set(engine, promise);
+  return promise;
 }

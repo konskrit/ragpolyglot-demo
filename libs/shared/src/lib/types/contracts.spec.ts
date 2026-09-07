@@ -74,6 +74,13 @@ describe('shared contracts', () => {
     expect(
       showOcrLanguageMenu({
         fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'waiting_for_ocr',
+      }),
+    ).toBe(true);
+    expect(
+      showOcrLanguageMenu({
+        fileExt: 'pdf',
         status: 'paused',
         progressStage: 'extracting',
       }),
@@ -87,7 +94,7 @@ describe('shared contracts', () => {
     expect(showOcrLanguageMenu({})).toBe(false);
   });
 
-  it('allows live OCR language changes only while extracting or paused', () => {
+  it('allows live OCR language changes through the OCR phase, not embedding', () => {
     expect(
       canChangeOcrLangLive({
         fileExt: 'pdf',
@@ -98,12 +105,25 @@ describe('shared contracts', () => {
     expect(
       canChangeOcrLangLive({
         fileExt: 'pdf',
+        status: 'processing',
+        progressStage: 'waiting_for_ocr',
+      }),
+    ).toBe(true);
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
+        status: 'processing',
+      }),
+    ).toBe(true);
+    expect(
+      canChangeOcrLangLive({
+        fileExt: 'pdf',
         status: 'paused',
         progressStage: 'extracting',
       }),
     ).toBe(true);
     expect(canChangeOcrLangLive({ fileExt: 'pdf', status: 'paused' })).toBe(
-      false,
+      true,
     );
     expect(
       canChangeOcrLangLive({

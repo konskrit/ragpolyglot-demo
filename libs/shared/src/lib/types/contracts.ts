@@ -53,12 +53,16 @@ export function showOcrLanguageMenu(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (doc.progressStage === 'extracting') {
+  if (
+    doc.progressStage === 'extracting' ||
+    doc.progressStage === 'waiting_for_ocr'
+  ) {
     return true;
   }
   return Boolean(doc.ocrLang);
 }
 
+/** Live OCR lang edits while still in the OCR phase (not embedding yet). */
 export function canChangeOcrLangLive(
   doc: Partial<
     Pick<
@@ -70,13 +74,14 @@ export function canChangeOcrLangLive(
   if (doc.fileExt !== 'pdf') {
     return false;
   }
-  if (
-    doc.progressStage === 'extracting' &&
-    (doc.status === 'processing' || doc.status === 'paused')
-  ) {
+  if (doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED) {
     return true;
   }
-  return doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED;
+  if (doc.status !== 'processing' && doc.status !== 'paused') {
+    return false;
+  }
+  // After claim_ocr_lang clears the stage, then waiting_for_ocr / extracting.
+  return doc.progressStage !== 'embedding';
 }
 
 /** Menu value for stored ocrLang; auto script packs map to Automatic (''). */
