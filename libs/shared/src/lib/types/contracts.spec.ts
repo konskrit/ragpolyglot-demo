@@ -7,8 +7,10 @@ import {
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
   formatErrorReason,
+  OCR_ENGINES,
   OCR_LANGUAGE_NEEDED,
   conversationTitleFromQuery,
+  isOcrEngine,
   isOcrLanguageCode,
   showOcrLanguageMenu,
   canChangeOcrLangLive,
@@ -45,6 +47,12 @@ describe('shared contracts', () => {
     expect(isOcrLanguageCode('ancient_greek')).toBe(true);
     expect(isOcrLanguageCode('')).toBe(false);
     expect(isOcrLanguageCode('AUTO')).toBe(false);
+  });
+
+  it('accepts known OCR engines', () => {
+    expect(OCR_ENGINES).toEqual(['tesseract', 'krakenCPU', 'krakenGPU']);
+    expect(isOcrEngine('tesseract')).toBe(true);
+    expect(isOcrEngine('kraken')).toBe(false);
   });
 
   it('shows the OCR language menu when language is needed or a PDF used OCR', () => {

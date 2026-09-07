@@ -2,6 +2,7 @@ import {
   ChatRole,
   DocumentProgressStage,
   DocumentStatus,
+  OcrEngine,
   OcrLanguageCode,
 } from '../types/types';
 
@@ -23,6 +24,7 @@ export interface Document {
   progressTotal?: number;
   uploadedBy?: string;
   ocrLang?: OcrLanguageCode;
+  ocrEngine?: OcrEngine;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +41,7 @@ export type DocumentSummary = Pick<
   | 'progressDone'
   | 'progressTotal'
   | 'ocrLang'
+  | 'ocrEngine'
 > & {
   createdAt?: string;
 };

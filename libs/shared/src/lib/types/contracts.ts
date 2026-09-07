@@ -2,6 +2,7 @@ import type { DocumentSummary, Source } from '../interfaces/interfaces';
 import type {
   DocumentProgressStage,
   DocumentStatus,
+  OcrEngine,
   UploadState,
   ChatRole,
 } from './types';
@@ -24,6 +25,12 @@ export const DOCUMENT_PROGRESS_STAGES = [
   'extracting',
   'embedding',
 ] as const satisfies readonly DocumentProgressStage[];
+
+export const OCR_ENGINES = [
+  'tesseract',
+  'krakenCPU',
+  'krakenGPU',
+] as const satisfies readonly OcrEngine[];
 
 export const UPLOAD_STATES = [
   'idle',
@@ -108,6 +115,13 @@ export function isOcrLanguageCode(value: unknown): value is string {
     return true;
   }
   return OCR_LANG_RE.test(value);
+}
+
+export function isOcrEngine(value: unknown): value is OcrEngine {
+  return (
+    typeof value === 'string' &&
+    (OCR_ENGINES as readonly string[]).includes(value)
+  );
 }
 
 export function isChatRole(value: unknown): value is ChatRole {

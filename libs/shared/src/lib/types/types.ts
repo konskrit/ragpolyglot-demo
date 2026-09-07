@@ -10,6 +10,9 @@ export type DocumentProgressStage =
   | 'extracting'
   | 'embedding';
 
+/** Who runs OCR for a scanned PDF. */
+export type OcrEngine = 'tesseract' | 'krakenCPU' | 'krakenGPU';
+
 export type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
 export type ChatRole = 'user' | 'assistant';
