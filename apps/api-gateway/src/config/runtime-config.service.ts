@@ -3,6 +3,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import type { RuntimeConfig, RuntimeConfigUpdate } from '@ragpolyglot-shared';
 import {
   CONFIG_SETTING_BY_KEY,
   CONFIG_SETTINGS,
@@ -17,29 +18,9 @@ import {
   writeEnvFile,
 } from './env-file';
 
-export type ConfigSettingView = {
-  key: string;
-  kind: ConfigSetting['kind'];
-  value: string;
-  services: readonly string[];
-};
-
-export type ConfigGetResponse = {
-  envFilePath: string;
-  settings: ConfigSettingView[];
-};
-
-export type ConfigPutResponse = {
-  envFilePath: string;
-  changedKeys: string[];
-  recreateServices: string[];
-  command: string;
-  settings: ConfigSettingView[];
-};
-
 @Injectable()
 export class RuntimeConfigService {
-  getConfig(): ConfigGetResponse {
+  getConfig(): RuntimeConfig {
     const envFilePath = this.envPath();
     const fileValues = parseEnvAssignments(readEnvFile(envFilePath));
     return {
@@ -47,24 +28,30 @@ export class RuntimeConfigService {
       settings: CONFIG_SETTINGS.map((s) => ({
         key: s.key,
         kind: s.kind,
-        value: this.effectiveValue(s.key, fileValues),
-        services: s.services,
+        value: this.viewValue(s, this.effectiveValue(s.key, fileValues)),
+        services: [...s.services],
       })),
     };
   }
 
-  updateConfig(values: Record<string, unknown>): ConfigPutResponse {
+  updateConfig(values: Record<string, unknown>): RuntimeConfigUpdate {
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
       throw new BadRequestException('Body must be an object of key → value');
     }
 
-    const updates = new Map<string, string>();
+    const updates = new Map<
+      string,
+      { value: string; setting: ConfigSetting }
+    >();
     for (const [key, raw] of Object.entries(values)) {
       const setting = CONFIG_SETTING_BY_KEY.get(key);
       if (!setting) {
         throw new BadRequestException(`Key not allowed: ${key}`);
       }
-      updates.set(key, this.normalizeValue(setting, raw));
+      updates.set(key, {
+        value: this.normalizeValue(setting, raw),
+        setting,
+      });
     }
 
     if (updates.size === 0) {
@@ -77,10 +64,12 @@ export class RuntimeConfigService {
 
     const changed = new Map<string, string>();
     const serviceSet = new Set<string>();
-    for (const [key, value] of updates) {
-      if (this.effectiveValue(key, prevMap) === value) continue;
-      const setting = CONFIG_SETTING_BY_KEY.get(key);
-      if (!setting) continue;
+    for (const [key, { value, setting }] of updates) {
+      const current = this.viewValue(
+        setting,
+        this.effectiveValue(key, prevMap),
+      );
+      if (current === value) continue;
       changed.set(key, value);
       for (const svc of setting.services) {
         serviceSet.add(svc);
@@ -125,6 +114,15 @@ export class RuntimeConfigService {
     if (fromFile !== undefined) return fromFile;
     const fromProcess = process.env[key];
     return fromProcess === undefined ? '' : fromProcess;
+  }
+
+  /** Normalize for UI when possible; keep raw if the file value is invalid. */
+  private viewValue(setting: ConfigSetting, raw: string): string {
+    try {
+      return this.normalizeValue(setting, raw);
+    } catch {
+      return raw;
+    }
   }
 
   private normalizeValue(setting: ConfigSetting, raw: unknown): string {

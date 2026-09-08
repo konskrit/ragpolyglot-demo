@@ -1,5 +1,6 @@
 import {
   ChatRole,
+  ConfigValueKind,
   DocumentProgressStage,
   DocumentStatus,
   OcrEngine,
@@ -214,4 +215,22 @@ export interface MetricsSnapshot {
   redis: {
     usedMemoryBytes: number | null;
   };
+}
+
+export interface RuntimeConfigSetting {
+  key: string;
+  kind: ConfigValueKind;
+  value: string;
+  services: string[];
+}
+
+export interface RuntimeConfig {
+  envFilePath: string;
+  settings: RuntimeConfigSetting[];
+}
+
+export interface RuntimeConfigUpdate extends RuntimeConfig {
+  changedKeys: string[];
+  recreateServices: string[];
+  command: string;
 }

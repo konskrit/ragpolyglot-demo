@@ -84,8 +84,20 @@ export async function postFormData<T>(
 }
 
 export async function postJson<T>(path: string, body?: unknown): Promise<T> {
+  return sendJson<T>('POST', path, body);
+}
+
+export async function putJson<T>(path: string, body?: unknown): Promise<T> {
+  return sendJson<T>('PUT', path, body);
+}
+
+async function sendJson<T>(
+  method: 'POST' | 'PUT',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
-    method: 'POST',
+    method,
     headers:
       body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),

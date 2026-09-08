@@ -7,6 +7,7 @@ import { AgentPage } from './pages/AgentPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { DocumentDetailPage } from './pages/DocumentDetailPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ConfigPage } from './pages/ConfigPage';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/documents/:id" element={<DocumentDetailPage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/agent" element={<AgentPage />} />
+            <Route path="/config" element={<ConfigPage />} />
           </Routes>
         </ErrorBoundary>
       </Layout>

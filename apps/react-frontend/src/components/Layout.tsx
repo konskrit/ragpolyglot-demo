@@ -6,6 +6,7 @@ const nav = [
   { to: '/documents', label: 'Documents' },
   { to: '/upload', label: 'Upload' },
   { to: '/agent', label: 'Agent Mode' },
+  { to: '/config', label: 'Config' },
 ] as const;
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -15,11 +16,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-xl font-semibold tracking-tight">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+          <Link
+            to="/"
+            className="text-xl font-semibold tracking-tight shrink-0"
+          >
             RAGPolyglot
           </Link>
-          <nav className="flex items-center gap-6" aria-label="Primary">
+          <nav
+            className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2"
+            aria-label="Primary"
+          >
             {nav.map(({ to, label }) => {
               const active =
                 to === '/'

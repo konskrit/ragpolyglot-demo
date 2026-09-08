@@ -17,6 +17,9 @@ export type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
 export type ChatRole = 'user' | 'assistant';
 
+/** Allowlisted .env knobs exposed by GET/PUT /api/config. */
+export type ConfigValueKind = 'string' | 'int' | 'bool';
+
 export type OcrLanguageCode = string;
 
 export type ConsumerRegistration<TMessage = unknown> = {

@@ -1,4 +1,4 @@
-export type ConfigValueKind = 'string' | 'int' | 'bool';
+import type { ConfigValueKind } from '@ragpolyglot-shared';
 
 export type ConfigSetting = {
   key: string;
