@@ -1,6 +1,9 @@
 package consumer
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestShouldStopIngest_pause(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, false, nil)
@@ -28,6 +31,28 @@ func TestShouldStopIngest_deleted(t *testing.T) {
 	if !p.shouldStopIngest("doc-1", 1) {
 		t.Fatal("expected delete to stop ingest")
 	}
+}
+
+func TestAcquireOCRIngestSlot(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, false, nil)
+	p.ocrIngestSem = make(chan struct{}, 1)
+
+	release, err := p.acquireOCRIngestSlot(nil, nil)
+	if err != nil || release == nil {
+		t.Fatalf("expected slot, err=%v", err)
+	}
+	stopped := false
+	done := make(chan error, 1)
+	go func() {
+		_, err := p.acquireOCRIngestSlot(func() bool { return stopped }, nil)
+		done <- err
+	}()
+	time.Sleep(slotWaitPoll * 2)
+	stopped = true
+	if err := <-done; err == nil {
+		t.Fatal("expected pause while waiting")
+	}
+	release()
 }
 
 func TestIsIngestStale_localGen(t *testing.T) {

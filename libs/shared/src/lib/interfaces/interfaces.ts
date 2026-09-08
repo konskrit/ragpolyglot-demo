@@ -215,6 +215,8 @@ export interface MetricsSnapshot {
   redis: {
     usedMemoryBytes: number | null;
   };
+  /** Latest RabbitMQ depths from event-processor redis.stats snapshot. */
+  queues: Record<string, number>;
 }
 
 export interface RuntimeConfigSetting {

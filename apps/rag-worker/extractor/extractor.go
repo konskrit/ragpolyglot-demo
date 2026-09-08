@@ -185,7 +185,10 @@ func runPDFWithOCR(path, ocrLang string, state OCRState) (string, string, error)
 		return "", "", ErrPaused
 	}
 	if state.OnOCRStart != nil {
-		release := state.OnOCRStart()
+		release, err := state.OnOCRStart()
+		if err != nil {
+			return "", "", err
+		}
 		if release != nil {
 			defer release()
 		}

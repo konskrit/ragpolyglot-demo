@@ -64,6 +64,8 @@ export function MetricsSection({
               embeddingMs={metrics.ingest.avgEmbeddingMs}
             />
           </div>
+
+          <QueueDepths queues={metrics.queues} />
         </>
       )}
     </section>
@@ -164,6 +166,31 @@ function IngestTiming({
                 }}
               />
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QueueDepths({ queues }: { queues: MetricsSnapshot['queues'] }) {
+  const rows = Object.entries(queues).sort(([a], [b]) => a.localeCompare(b));
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-6 p-4 rounded-lg border border-gray-800 bg-gray-900">
+      <p className="text-sm text-gray-300 mb-3">RabbitMQ queue depths</p>
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+        {rows.map(([key, depth]) => (
+          <div key={key} className="min-w-0">
+            <p className="text-[11px] text-gray-500 truncate" title={key}>
+              {key}
+            </p>
+            <p className="text-lg font-semibold tabular-nums text-white">
+              {depth}
+            </p>
           </div>
         ))}
       </div>

@@ -19,8 +19,11 @@ import (
 	"apps/rag-worker/workpool"
 )
 
-const requeueBackoff = 2 * time.Second
-const ocrQueueHeartbeat = 30 * time.Second
+const (
+	requeueBackoff    = 2 * time.Second
+	slotWaitPoll      = 100 * time.Millisecond
+	ocrQueueHeartbeat = 30 * time.Second
+)
 
 type Processor struct {
 	store            *storage.Store
@@ -71,7 +74,7 @@ func reconnectLoop(rabbitURL, queueName string, prefetch int, handler func(amqp.
 		if err != nil {
 			_ = conn.Close()
 			log.Printf("[Consumer] channel failed (%s): %v", queueName, err)
-			time.Sleep(2 * time.Second)
+			time.Sleep(requeueBackoff)
 			continue
 		}
 
@@ -79,7 +82,7 @@ func reconnectLoop(rabbitURL, queueName string, prefetch int, handler func(amqp.
 			_ = ch.Close()
 			_ = conn.Close()
 			log.Printf("[Consumer] topology failed (%s): %v", queueName, err)
-			time.Sleep(2 * time.Second)
+			time.Sleep(requeueBackoff)
 			continue
 		}
 
@@ -88,7 +91,7 @@ func reconnectLoop(rabbitURL, queueName string, prefetch int, handler func(amqp.
 			_ = ch.Close()
 			_ = conn.Close()
 			log.Printf("[Consumer] consume failed (%s): %v", queueName, err)
-			time.Sleep(2 * time.Second)
+			time.Sleep(requeueBackoff)
 			continue
 		}
 
@@ -100,7 +103,7 @@ func reconnectLoop(rabbitURL, queueName string, prefetch int, handler func(amqp.
 		_ = ch.Close()
 		_ = conn.Close()
 		log.Printf("[Consumer] disconnected queue=%s; reconnecting", queueName)
-		time.Sleep(2 * time.Second)
+		time.Sleep(requeueBackoff)
 	}
 }
 
@@ -147,17 +150,22 @@ func waitChanSlot(ch chan struct{}, stop func() bool) error {
 		case ch <- struct{}{}:
 			return nil
 		default:
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(slotWaitPoll)
 		}
 	}
 }
 
+// acquireOCRIngestSlot blocks until an OCR slot is free (or stop). The Rabbit
+// message should stay unacked while waiting so QoS bounds waiters and there is
+// no requeue churn.
 func (p *Processor) acquireOCRIngestSlot(stop func() bool, heartbeat func()) (func(), error) {
-	lastHeartbeat := time.Time{}
 	if heartbeat != nil {
 		heartbeat()
-		lastHeartbeat = time.Now()
 	}
+	lastHeartbeat := time.Now()
+	tick := time.NewTicker(slotWaitPoll)
+	defer tick.Stop()
+
 	for {
 		if stop != nil && stop() {
 			return nil, extractor.ErrPaused
@@ -169,12 +177,11 @@ func (p *Processor) acquireOCRIngestSlot(stop func() bool, heartbeat func()) (fu
 				p.ocrIngestActive.Add(-1)
 				<-p.ocrIngestSem
 			}, nil
-		default:
+		case <-tick.C:
 			if heartbeat != nil && time.Since(lastHeartbeat) >= ocrQueueHeartbeat {
 				heartbeat()
 				lastHeartbeat = time.Now()
 			}
-			time.Sleep(25 * time.Millisecond)
 		}
 	}
 }

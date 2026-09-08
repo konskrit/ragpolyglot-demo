@@ -4,6 +4,18 @@ import { RedisService } from '../core/redis.service';
 import { PostgresService } from '../core/postgres.service';
 import { loadSql } from '../core/load-sql';
 
+function parseQueues(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const n = Number(value);
+    if (Number.isFinite(n)) out[key] = n;
+  }
+  return out;
+}
+
 @Injectable()
 export class MetricsService {
   constructor(
@@ -45,9 +57,10 @@ export class MetricsService {
       this.postgres.query<{ completed: string; failed: string }>(
         loadSql('jobs-summary.sql'),
       ),
-      this.postgres.query<{ used_memory: string | null }>(
-        loadSql('redis-stats-latest.sql'),
-      ),
+      this.postgres.query<{
+        used_memory: string | null;
+        queues: unknown;
+      }>(loadSql('redis-stats-latest.sql')),
     ]);
 
     const total = hits + misses;
@@ -101,6 +114,7 @@ export class MetricsService {
       redis: {
         usedMemoryBytes: Number.isFinite(mem) ? mem : null,
       },
+      queues: parseQueues(redisStats[0]?.queues),
     };
   }
 

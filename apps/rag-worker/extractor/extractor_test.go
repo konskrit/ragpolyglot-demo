@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -75,5 +76,14 @@ func TestTrimToLimit(t *testing.T) {
 	got := trimToLimit("hello")
 	if got != "hel" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRunPDFWithOCR_OnOCRStartPause(t *testing.T) {
+	_, _, err := runPDFWithOCR("unused.pdf", "eng", OCRState{
+		OnOCRStart: func() (func(), error) { return nil, ErrPaused },
+	})
+	if !errors.Is(err, ErrPaused) {
+		t.Fatalf("got %v, want ErrPaused", err)
 	}
 }

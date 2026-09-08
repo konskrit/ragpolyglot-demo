@@ -207,6 +207,12 @@ export class MetricsSnapshotDto {
   @ApiProperty({ type: MetricsDocumentsDto }) documents!: MetricsDocumentsDto;
   @ApiProperty({ type: MetricsJobsDto }) jobs!: MetricsJobsDto;
   @ApiProperty({ type: MetricsRedisDto }) redis!: MetricsRedisDto;
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'number' },
+    description: 'RabbitMQ queue depths keyed by label',
+  })
+  queues!: Record<string, number>;
 }
 
 export class OcrLangBodyDto {

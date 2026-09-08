@@ -34,7 +34,8 @@ type OCRState struct {
 	OnProgress  OCRProgressFunc
 	Pool        *workpool.Pool
 	PageWorkers func(pageCount int) int
-	OnOCRStart  func() func()
+	// OnOCRStart runs once OCR is required. release must be called when OCR finishes.
+	OnOCRStart func() (release func(), err error)
 }
 
 func hasEnoughText(s string) bool {

@@ -12,7 +12,10 @@ import (
 	"apps/rag-worker/storage"
 )
 
-const ocrAbortRetries = 3
+const (
+	ocrAbortRetries = 3
+	ocrAbortBackoff = 500 * time.Millisecond
+)
 
 func (p *Processor) runExtract(
 	ctx context.Context,
@@ -36,23 +39,40 @@ func (p *Processor) runExtract(
 	}
 	defer releaseFast()
 
+	// OCR capacity is taken once and held across abort retries. Ack happens with
+	// that first acquire so retries never wait in-process after the message is settled.
+	var (
+		ocrRelease   func()
+		ocrStartErr  error
+		ocrStartOnce sync.Once
+	)
+	defer func() {
+		if ocrRelease != nil {
+			ocrRelease()
+		}
+	}()
+
 	state := extractor.OCRState{
 		ShouldPause: stopIngest,
 		Pool:        p.pools.OCR,
 		PageWorkers: p.ocrWorkerCount,
-		OnOCRStart: func() func() {
+		OnOCRStart: func() (func(), error) {
 			releaseFast()
-			waiting := func() {
-				p.publishProgress(event.DocumentID, "waiting_for_ocr", job.OcrPageDone, job.OcrTotal)
-			}
-			release, err := p.acquireOCRIngestSlot(stopIngest, waiting)
-			if err != nil {
-				return nil
-			}
-			if job.OcrTotal > 0 {
+			ocrStartOnce.Do(func() {
+				ocrRelease, ocrStartErr = p.acquireOCRIngestSlot(stopIngest, func() {
+					p.publishProgress(event.DocumentID, "waiting_for_ocr", job.OcrPageDone, job.OcrTotal)
+				})
+				if ocrStartErr != nil {
+					return
+				}
+				acker.ack()
 				p.publishProgress(event.DocumentID, "extracting", job.OcrPageDone, job.OcrTotal)
+			})
+			if ocrStartErr != nil {
+				return nil, ocrStartErr
 			}
-			return release
+			// Extractor defers this; real release is in runExtract's defer.
+			return func() {}, nil
 		},
 	}
 	if cp != nil && cp.Stage == "ocr" {
@@ -87,8 +107,6 @@ func (p *Processor) runExtract(
 		return nil
 	}
 
-	acker.ack()
-
 	streak := 0
 	lastDone := job.OcrPageDone
 	for {
@@ -105,6 +123,9 @@ func (p *Processor) runExtract(
 			job.PartialText = text
 			if langs != "" {
 				job.OcrLangs = langs
+			}
+			if !acker.settled() {
+				acker.ack()
 			}
 			return true
 		}
@@ -141,7 +162,6 @@ func (p *Processor) runExtract(
 			return false
 		}
 
-		// Only consecutive no-progress aborts burn the budget.
 		if job.OcrPageDone > lastDone {
 			streak = 0
 			lastDone = job.OcrPageDone
@@ -159,6 +179,6 @@ func (p *Processor) runExtract(
 			fail("storage_error", err)
 			return false
 		}
-		time.Sleep(time.Duration(streak) * 500 * time.Millisecond)
+		time.Sleep(time.Duration(streak) * ocrAbortBackoff)
 	}
 }
