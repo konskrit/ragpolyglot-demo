@@ -79,12 +79,10 @@ func checkPaused(stop func() bool) error {
 	return nil
 }
 
-func IsProcessAbort(err error) bool {
-	if err == nil {
+// IsTransientOCRAbort reports kills/timeouts that are worth retrying (not a user pause).
+func IsTransientOCRAbort(err error) bool {
+	if err == nil || errors.Is(err, ErrPaused) {
 		return false
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, ErrPaused) {
-		return true
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "signal:") ||
@@ -145,9 +143,6 @@ func runCaptureOutput(stop func() bool, capture bool, name string, args ...strin
 
 	if err := cmd.Run(); err != nil {
 		if stop != nil && stop() {
-			return "", ErrPaused
-		}
-		if IsProcessAbort(err) {
 			return "", ErrPaused
 		}
 		errText := stderr.String()

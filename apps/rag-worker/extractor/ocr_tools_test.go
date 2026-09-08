@@ -1,7 +1,6 @@
 package extractor
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"runtime"
@@ -40,15 +39,18 @@ func TestAcquireKrakenGPUHonorsPause(t *testing.T) {
 	}
 }
 
-func TestIsProcessAbort(t *testing.T) {
-	if !IsProcessAbort(context.Canceled) {
-		t.Fatal("context.Canceled should abort")
+func TestIsTransientOCRAbort(t *testing.T) {
+	if IsTransientOCRAbort(ErrPaused) {
+		t.Fatal("pause must not look like a transient abort")
 	}
-	if !IsProcessAbort(fmt.Errorf("kraken failed: signal: killed")) {
-		t.Fatal("signal killed should abort")
+	if !IsTransientOCRAbort(fmt.Errorf("kraken failed: signal: killed")) {
+		t.Fatal("signal killed should retry")
 	}
-	if IsProcessAbort(fmt.Errorf("kraken failed: ocr failed")) {
-		t.Fatal("ordinary error should not abort")
+	if !IsTransientOCRAbort(fmt.Errorf("kraken failed: exit status 137")) {
+		t.Fatal("exit 137 should retry")
+	}
+	if IsTransientOCRAbort(fmt.Errorf("kraken failed: ocr failed")) {
+		t.Fatal("ordinary error should not retry")
 	}
 }
 

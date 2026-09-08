@@ -3,12 +3,16 @@ package consumer
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
+	"time"
 
 	"apps/rag-worker/extractor"
 	"apps/rag-worker/models"
 	"apps/rag-worker/storage"
 )
+
+const ocrAbortRetries = 3
 
 func (p *Processor) runExtract(
 	ctx context.Context,
@@ -55,9 +59,6 @@ func (p *Processor) runExtract(
 		*job = *cp
 		job.Paused = false
 		fillCheckpointFromEvent(job, event)
-		state.StartPage = job.OcrPageDone + 1
-		state.PriorText = job.PartialText
-		state.Resolved = job.OcrLangs
 	} else {
 		job.Stage = "ocr"
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
@@ -88,13 +89,32 @@ func (p *Processor) runExtract(
 
 	acker.ack()
 
-	text, langs, extractErr := extractor.ExtractFromPathWithOCR(job.FilePath, job.OcrLangHint, state)
-	if extractErr != nil {
-		if errors.Is(extractErr, extractor.ErrPaused) || extractor.IsProcessAbort(extractErr) {
+	streak := 0
+	lastDone := job.OcrPageDone
+	for {
+		if stopIngest() {
+			pause()
+			return false
+		}
+		state.StartPage = job.OcrPageDone + 1
+		state.PriorText = job.PartialText
+		state.Resolved = job.OcrLangs
+
+		text, langs, extractErr := extractor.ExtractFromPathWithOCR(job.FilePath, job.OcrLangHint, state)
+		if extractErr == nil {
+			job.PartialText = text
+			if langs != "" {
+				job.OcrLangs = langs
+			}
+			return true
+		}
+		if errors.Is(extractErr, extractor.ErrPaused) {
 			if p.ackIfStale(acker, event.DocumentID, gen) {
 				return false
 			}
-			job.PartialText = text
+			if text != "" {
+				job.PartialText = text
+			}
 			job.Paused = true
 			if langs != "" {
 				job.OcrLangs = langs
@@ -110,12 +130,35 @@ func (p *Processor) runExtract(
 			fail(extractor.ErrOcrLanguageNeeded.Error(), extractErr)
 			return false
 		}
-		fail("chunking_error", extractErr)
-		return false
+		if text != "" {
+			job.PartialText = text
+		}
+		if langs != "" {
+			job.OcrLangs = langs
+		}
+		if !extractor.IsTransientOCRAbort(extractErr) {
+			fail("chunking_error", extractErr)
+			return false
+		}
+
+		// Only consecutive no-progress aborts burn the budget.
+		if job.OcrPageDone > lastDone {
+			streak = 0
+			lastDone = job.OcrPageDone
+		}
+		streak++
+		if streak >= ocrAbortRetries {
+			fail("ocr_aborted", extractErr)
+			return false
+		}
+		log.Printf(
+			"[Consumer] OCR abort documentId=%s streak=%d/%d: %v; retrying from page %d",
+			event.DocumentID, streak, ocrAbortRetries, extractErr, job.OcrPageDone+1,
+		)
+		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
+			fail("storage_error", err)
+			return false
+		}
+		time.Sleep(time.Duration(streak) * 500 * time.Millisecond)
 	}
-	job.PartialText = text
-	if langs != "" {
-		job.OcrLangs = langs
-	}
-	return true
 }
