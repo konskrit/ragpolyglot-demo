@@ -103,7 +103,7 @@ Start the LLM before using Agent mode.
 
 Kraken 7 and CUDA torch live in a **separate Docker stage** split into two layers (torch, then kraken deps). Go-only `rag-worker` rebuilds skip both; kraken-version bumps skip the torch layer. Pip and model caches speed re-runs when a layer does execute.
 
-**Concurrent OCR:** `OCR_INGEST_PREFETCH` caps how many documents can run Kraken OCR at once; `KRAKEN_GPU_CONCURRENT` (defaults to the same value) caps parallel CUDA `kraken` subprocesses and splits `KRAKEN_VRAM_BUDGET_MB` per job. Extra OCR work waits unacked on the ingest slot (`waiting_for_ocr`, heartbeat every 30s; skipped by stale maintenance). User pause → `document.paused`; unexpected OCR process kills retry from checkpoint (then `ocr_aborted` if still stuck). Advancing `document.progress` resets document `retry_count`. Compose, Dockerfiles, env: [docs/docker-compose.yml/README.md](docs/docker-compose.yml/README.md).
+**Concurrent OCR:** `OCR_INGEST_PREFETCH` caps how many documents can run Kraken OCR at once; `KRAKEN_GPU_CONCURRENT` (defaults to the same value) caps parallel CUDA `kraken` subprocesses and splits `KRAKEN_VRAM_BUDGET_MB` per job. Extra OCR work waits **unacked** on the ingest slot (`waiting_for_ocr`, heartbeat every 30s; Ack only after the slot is taken; skipped by stale maintenance). User pause → `document.paused`; unexpected OCR process kills retry from checkpoint (OCR slot held; then `ocr_aborted` if still stuck). Advancing `document.progress` resets document `retry_count`. Compose, Dockerfiles, env: [docs/docker-compose.yml/README.md](docs/docker-compose.yml/README.md).
 
 ## Tests
 
