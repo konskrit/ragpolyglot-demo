@@ -246,8 +246,10 @@ services:
       HTTP_TIMEOUT_MS: ${HTTP_TIMEOUT_MS:-10000}
       RAG_CACHE_TTL_SECONDS: ${RAG_CACHE_TTL_SECONDS:-600}
       RAG_TOP_K: ${RAG_TOP_K:-5}
+      ENV_FILE_PATH: ${ENV_FILE_PATH:-/app/.env}
     volumes:
       - uploads_data:${UPLOADS_DIR:-/uploads}
+      - ./.env:/app/.env
     ports:
       - '${GATEWAY_PORT:-3000}:3000'
     depends_on:

@@ -1,6 +1,6 @@
 # api-gateway
 
-NestJS BFF: the **only public HTTP/WebSocket surface** for clients. Proxies document CRUD to document-service, RAG chat to rag-worker, aggregates health/metrics, Redis answer cache.
+NestJS BFF: the **only public HTTP/WebSocket surface** for clients. Proxies document CRUD to document-service, RAG chat to rag-worker, aggregates health/metrics, Redis answer cache. Operator config allowlist: `GET/PUT /api/config` reads/merges the compose `.env` (path via `ENV_FILE_PATH` or walk from cwd) and returns a copyable `docker compose up -d --force-recreate --no-deps …` command for changed services.
 
 ## API documentation
 

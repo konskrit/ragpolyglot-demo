@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 
+/** How far to walk up from cwd when looking for a repo-root `.env`. */
+const ENV_FILE_SEARCH_MAX_DEPTH = 8;
+
 export function loadRootEnv(): void {
   const envPath = findRootEnv(process.cwd());
   if (!envPath) {
@@ -32,7 +35,7 @@ export function loadRootEnv(): void {
 
 function findRootEnv(startDir: string): string | null {
   let dir = resolve(startDir);
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < ENV_FILE_SEARCH_MAX_DEPTH; i++) {
     const candidate = resolve(dir, '.env');
     if (existsSync(candidate)) {
       return candidate;
