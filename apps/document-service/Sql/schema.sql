@@ -54,3 +54,9 @@ CREATE TABLE IF NOT EXISTS query_logs (
     duration_ms DOUBLE PRECISION NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_system_logs_event_type_created_at
+ON system_logs(event_type, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_query_logs_created_at
+ON query_logs(created_at DESC);

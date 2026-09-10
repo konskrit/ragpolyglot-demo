@@ -12,8 +12,9 @@ import {
   OnModuleInit,
   HttpException,
 } from '@nestjs/common';
-import { Config } from '../core/config';
+import { Config, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
 import { RabbitMQService } from '../core/rabbitmq.service';
+import { RedisService } from '../core/redis.service';
 import { RagService } from '../rag/rag.service';
 import { ConversationService } from './conversation.service';
 import {
@@ -42,6 +43,7 @@ export class ChatGateway implements OnModuleInit {
     private readonly rabbitMQ: RabbitMQService,
     private readonly ragService: RagService,
     private readonly conversations: ConversationService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit(): void {
@@ -58,6 +60,9 @@ export class ChatGateway implements OnModuleInit {
           parsed.status,
           parsed.progress,
         );
+        if (parsed.status === 'ready') {
+          void this.redis.incr(RAG_DOCUMENTS_VERSION_KEY);
+        }
       } catch (err) {
         this.logger.error(`Failed to parse RabbitMQ message: ${err}`);
       }

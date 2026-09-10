@@ -15,6 +15,8 @@ import (
 	"apps/rag-worker/storage"
 )
 
+const maxJSONBodyBytes = 1 << 20
+
 type Server struct {
 	store         *storage.Store
 	defaultTopK   int
@@ -88,7 +90,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 
 	var req models.SearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
@@ -209,7 +211,7 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 	ctx := r.Context()
 
 	var req models.ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return nil, false
 	}

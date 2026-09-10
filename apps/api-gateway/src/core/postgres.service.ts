@@ -16,7 +16,7 @@ export class PostgresService implements OnModuleDestroy {
   constructor() {
     this.pool = new Pool({
       connectionString: Config.databaseUrl,
-      max: 3,
+      max: 10,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 3_000,
     });

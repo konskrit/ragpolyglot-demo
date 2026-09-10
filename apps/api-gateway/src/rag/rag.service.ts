@@ -5,7 +5,7 @@ import {
   HttpException,
   BadGatewayException,
 } from '@nestjs/common';
-import { Config, ragCacheKey } from '../core/config';
+import { Config, ragCacheKey, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
 import { RedisService } from '../core/redis.service';
 import { RAGQueryDto, RAGResult, RagSearchHit } from '@ragpolyglot-shared';
 import { clampTopK, toSources } from './rag.helpers';
@@ -38,7 +38,12 @@ export class RagService {
 
     const query = queryDto.query.trim();
     const topK = clampTopK(queryDto.topK ?? Config.defaultTopK);
-    const cacheKey = ragCacheKey(query, queryDto.userId || 'anonymous', topK);
+    const cacheKey = ragCacheKey(
+      query,
+      queryDto.userId || 'anonymous',
+      topK,
+      await this.documentsVersion(),
+    );
 
     const cached = await this.readCache(cacheKey);
     if (cached) {
@@ -181,6 +186,12 @@ export class RagService {
     }
     this.logger.error(`RAG chat failed: ${String(err)}`);
     return new BadGatewayException('Chat service unavailable');
+  }
+
+  private async documentsVersion(): Promise<number> {
+    const raw = await this.redis.get(RAG_DOCUMENTS_VERSION_KEY);
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private async readCache(cacheKey: string): Promise<RAGResult | null> {

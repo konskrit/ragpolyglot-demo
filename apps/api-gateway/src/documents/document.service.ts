@@ -10,7 +10,8 @@ import { firstValueFrom } from 'rxjs';
 import { access, unlink } from 'fs/promises';
 import { constants } from 'fs';
 import { basename, extname, join } from 'path';
-import { Config } from '../core/config';
+import { Config, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
+import { RedisService } from '../core/redis.service';
 import {
   Document,
   DocumentChunk,
@@ -26,7 +27,10 @@ type DocumentRecord = Document & { filePath?: string };
 export class DocumentService {
   private readonly logger = new Logger(DocumentService.name);
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly redis: RedisService,
+  ) {}
 
   async getAllDocuments(): Promise<Document[]> {
     const res = await firstValueFrom(
@@ -145,6 +149,7 @@ export class DocumentService {
     const filename = this.uploadFilename(existing.data.filePath);
 
     await firstValueFrom(this.httpService.delete(this.docsUrl(id)));
+    await this.redis.incr(RAG_DOCUMENTS_VERSION_KEY);
 
     if (filename) {
       await unlink(join(Config.uploadsDir, filename)).catch(() => undefined);

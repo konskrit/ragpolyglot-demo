@@ -32,6 +32,8 @@ async function bootstrap() {
   const postgres = app.get(PostgresService);
   await postgres.connect();
 
+  app.enableShutdownHooks();
+
   await app.listen(Config.port);
 
   Logger.log(

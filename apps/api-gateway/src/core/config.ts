@@ -47,12 +47,19 @@ export const Config = {
   gatewayStatusQueue: 'gateway.document-status.queue',
 } as const;
 
+// Bumped when a document becomes searchable or is deleted, so cached answers
+// cannot outlive the documents they were grounded in. Folded into the hash
+// rather than added as a key segment because AGENTS.md fixes the key shape as
+// rag:query:{hash}:{userId}.
+export const RAG_DOCUMENTS_VERSION_KEY = 'rag:documents:version';
+
 export function ragCacheKey(
   query: string,
   userId = 'anonymous',
   topK?: number,
+  documentsVersion = 0,
 ): string {
-  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}`;
+  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}|documents=${documentsVersion}`;
   const hash = createHash('sha256').update(normalized).digest('hex');
   return `rag:query:${hash}:${userId}`;
 }
