@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { join } from 'path';
 
-const DEFAULT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
 
 function envPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -47,10 +47,6 @@ export const Config = {
   gatewayStatusQueue: 'gateway.document-status.queue',
 } as const;
 
-// Bumped when a document becomes searchable or is deleted, so cached answers
-// cannot outlive the documents they were grounded in. Folded into the hash
-// rather than added as a key segment because AGENTS.md fixes the key shape as
-// rag:query:{hash}:{userId}.
 export const RAG_DOCUMENTS_VERSION_KEY = 'rag:documents:version';
 
 export function ragCacheKey(

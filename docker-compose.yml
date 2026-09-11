@@ -166,6 +166,7 @@ services:
     ports:
       - '${RAG_WORKER_PORT:-8081}:8081'
     gpus: all
+    mem_limit: ${RAG_WORKER_MEM_LIMIT:-5g}
     depends_on:
       postgresql:
         condition: service_healthy
