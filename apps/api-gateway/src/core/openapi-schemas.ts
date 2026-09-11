@@ -226,3 +226,8 @@ export class OcrLangBodyDto {
   })
   ocrLang?: string | null;
 }
+
+export class DocumentRenameBodyDto {
+  @ApiProperty({ example: 'Aristotle Ethics' })
+  title!: string;
+}

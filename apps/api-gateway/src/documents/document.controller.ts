@@ -15,6 +15,7 @@ import { DocumentService } from './document.service';
 import { uploadInterceptorOptions } from './document-upload';
 import {
   DocumentChunkDto,
+  DocumentRenameBodyDto,
   DocumentSummaryDto,
   OcrLangBodyDto,
   OcrLanguageOptionDto,
@@ -98,6 +99,14 @@ export class DocumentController {
   @ApiOkResponse({ type: DocumentSummaryDto })
   resumeDocument(@Param('id') id: string) {
     return this.documentService.resumeDocument(id);
+  }
+
+  @Post(':id/rename')
+  @HttpCode(200)
+  @ApiBody({ type: DocumentRenameBodyDto })
+  @ApiOkResponse({ type: DocumentSummaryDto })
+  renameDocument(@Param('id') id: string, @Body() body: DocumentRenameBodyDto) {
+    return this.documentService.renameDocument(id, body?.title ?? '');
   }
 
   @Delete(':id')

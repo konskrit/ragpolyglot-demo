@@ -18,9 +18,9 @@ public static class DocumentEndpoints
         app.MapPost("/api/documents/{id:guid}/ocr-lang", SetOcrLang);
         app.MapPost("/api/documents/{id:guid}/pause", PauseDocument);
         app.MapPost("/api/documents/{id:guid}/resume", ResumeDocument);
-        app.MapPost("/api/documents/maintenance/fail-stale", FailStaleProcessing);
-        app.MapPost("/api/documents/maintenance/auto-retry", AutoRetryFailed);
+        app.MapPost("/api/documents/{id:guid}/rename", RenameDocument);
         app.MapDelete("/api/documents/{id:guid}", DeleteDocument);
+        app.MapDocumentMaintenanceEndpoints();
     }
 
     private static async Task<IResult> ListDocuments(DocumentRepository repo, CancellationToken cancellationToken)
@@ -48,17 +48,27 @@ public static class DocumentEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.FilePath))
+        if (!DocumentTitles.TryNormalize(dto.Title, out var title))
         {
-            return Results.BadRequest(new { error = "Title and FilePath are required." });
+            return Results.BadRequest(new { error = DocumentTitles.RequiredMessage });
         }
 
-        var doc = await repo.CreateAsync(dto.Title.Trim(), dto.FilePath.Trim(), cancellationToken);
-        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
+        if (string.IsNullOrWhiteSpace(dto.FilePath))
+        {
+            return Results.BadRequest(new { error = "FilePath is required." });
+        }
 
+        var doc = await repo.CreateAsync(title, dto.FilePath.Trim(), cancellationToken);
+        if (doc is null)
+        {
+            return Results.Conflict(new { error = DocumentTitles.DuplicateMessage });
+        }
+
+        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
         await repo.MarkProcessingAsync(doc.Id, cancellationToken);
 
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        if (!await DocumentUploadPublisher.TryPublishOrMarkFailedAsync(
+                doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
                 detail: "Document was created but the upload event could not be published.",
@@ -66,7 +76,6 @@ public static class DocumentEndpoints
         }
 
         doc = await repo.GetByIdAsync(doc.Id, cancellationToken) ?? doc;
-
         return Results.Created($"/api/documents/{doc.Id}", doc);
     }
 
@@ -89,7 +98,7 @@ public static class DocumentEndpoints
             return Results.Conflict(new { error = "Only failed or ready documents can be retried." });
         }
 
-        if (!TryNormalizeOcrLang(dto?.OcrLang, out var ocrLang))
+        if (!IngestRetryPolicy.TryNormalizeOcrLang(dto?.OcrLang, out var ocrLang))
         {
             return Results.BadRequest(new { error = "Invalid OCR language code." });
         }
@@ -101,7 +110,6 @@ public static class DocumentEndpoints
         }
 
         var resetIngest = IngestRetryPolicy.OcrLangChanged(existing.OcrLang, ocrLang);
-
         var doc = await repo.ClaimRetryAsync(id, ocrLang, updateOcrLang: true, cancellationToken);
         if (doc is null)
         {
@@ -109,14 +117,9 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(
-                doc,
-                repo,
-                messageBroker,
-                logger,
-                cancellationToken,
-                retry: true,
-                resetIngest: resetIngest))
+        if (!await DocumentUploadPublisher.TryPublishOrMarkFailedAsync(
+                doc, repo, messageBroker, logger, cancellationToken,
+                retry: true, resetIngest: resetIngest))
         {
             return Results.Problem(
                 detail: "Retry could not be queued.",
@@ -141,7 +144,7 @@ public static class DocumentEndpoints
             return Results.NotFound(new { error = "Document not found" });
         }
 
-        if (!TryNormalizeOcrLang(dto?.OcrLang, out var ocrLang))
+        if (!IngestRetryPolicy.TryNormalizeOcrLang(dto?.OcrLang, out var ocrLang))
         {
             return Results.BadRequest(new { error = "Invalid OCR language code." });
         }
@@ -153,7 +156,6 @@ public static class DocumentEndpoints
         }
 
         var resetIngest = IngestRetryPolicy.OcrLangChanged(existing.OcrLang, ocrLang);
-
         var doc = await repo.ClaimOcrLangAsync(id, ocrLang, cancellationToken);
         if (doc is null)
         {
@@ -164,14 +166,9 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(
-                doc,
-                repo,
-                messageBroker,
-                logger,
-                cancellationToken,
-                retry: true,
-                resetIngest: resetIngest))
+        if (!await DocumentUploadPublisher.TryPublishOrMarkFailedAsync(
+                doc, repo, messageBroker, logger, cancellationToken,
+                retry: true, resetIngest: resetIngest))
         {
             return Results.Problem(
                 detail: "OCR language change could not be queued.",
@@ -234,7 +231,8 @@ public static class DocumentEndpoints
         }
 
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
+        if (!await DocumentUploadPublisher.TryPublishOrMarkFailedAsync(
+                doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
                 detail: "Resume could not be queued.",
@@ -244,72 +242,37 @@ public static class DocumentEndpoints
         return Results.Ok(doc);
     }
 
-    private static async Task<IResult> FailStaleProcessing(
+    private static async Task<IResult> RenameDocument(
+        Guid id,
+        DocumentRenameDto? dto,
         DocumentRepository repo,
-        int minutes = 60,
-        CancellationToken cancellationToken = default)
-    {
-        if (minutes < 1)
-        {
-            return Results.BadRequest(new { error = "minutes must be >= 1" });
-        }
-
-        var failed = await repo.FailStaleProcessingAsync(minutes, cancellationToken);
-        return Results.Ok(new { failed });
-    }
-
-    private static async Task<IResult> AutoRetryFailed(
-        DocumentRepository repo,
-        MessageBroker messageBroker,
-        ILoggerFactory loggerFactory,
-        IConfiguration config,
-        int? maxRetries,
-        int? minAgeMinutes,
-        int? limit,
         CancellationToken cancellationToken)
     {
-        var retries = maxRetries ?? MaintenanceSettings.AutoRetryMaxRetries(config);
-        var age = minAgeMinutes ?? MaintenanceSettings.AutoRetryMinAgeMinutes(config);
-        var batch = limit ?? MaintenanceSettings.AutoRetryLimit(config);
-
-        if (retries < 1 || age < 0 || batch < 1)
+        if (!DocumentTitles.TryNormalize(dto?.Title, out var title))
         {
-            return Results.BadRequest(new { error = "Invalid auto-retry parameters." });
+            return Results.BadRequest(new { error = DocumentTitles.RequiredMessage });
         }
 
-        var candidates = await repo.ListAutoRetryCandidatesAsync(
-            retries,
-            age,
-            batch,
-            cancellationToken);
-
-        var logger = loggerFactory.CreateLogger("DocumentEndpoints");
-        var retried = 0;
-
-        foreach (var id in candidates)
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
         {
-            var doc = await repo.ClaimRetryAsync(id, ocrLang: null, updateOcrLang: false, cancellationToken);
-            if (doc is null)
-            {
-                continue;
-            }
-
-            if (!await PublishUploadedOrMarkFailedAsync(
-                    doc,
-                    repo,
-                    messageBroker,
-                    logger,
-                    cancellationToken,
-                    retry: true))
-            {
-                continue;
-            }
-
-            await repo.CompleteRetryAsync(doc.Id, cancellationToken);
-            retried++;
+            return Results.NotFound(new { error = "Document not found" });
         }
 
-        return Results.Ok(new { retried });
+        if (string.Equals(existing.Title, title, StringComparison.Ordinal))
+        {
+            return Results.Ok(existing);
+        }
+
+        var doc = await repo.RenameAsync(id, title, cancellationToken);
+        if (doc is null)
+        {
+            return await repo.GetByIdAsync(id, cancellationToken) is null
+                ? Results.NotFound(new { error = "Document not found" })
+                : Results.Conflict(new { error = DocumentTitles.DuplicateMessage });
+        }
+
+        return Results.Ok(doc);
     }
 
     private static async Task<IResult> DeleteDocument(
@@ -339,78 +302,6 @@ public static class DocumentEndpoints
         }
 
         await repo.DeleteAsync(id, cancellationToken);
-
-        return Results.Ok(new
-        {
-            success = true,
-            message = "Document deleted successfully"
-        });
-    }
-
-    private static async Task<bool> PublishUploadedOrMarkFailedAsync(
-        Document doc,
-        DocumentRepository repo,
-        MessageBroker messageBroker,
-        ILogger logger,
-        CancellationToken cancellationToken,
-        bool retry = false,
-        bool resetIngest = false)
-    {
-        try
-        {
-            await messageBroker.PublishDocumentUploadedAsync(
-                doc.Id,
-                doc.FilePath,
-                doc.OcrLang,
-                retry,
-                resetIngest,
-                cancellationToken);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to publish document.uploaded for {DocumentId}", doc.Id);
-            await repo.MarkFailedAsync(doc.Id, "publish_error", cancellationToken);
-            return false;
-        }
-    }
-
-    private static bool TryNormalizeOcrLang(string? ocrLang, out string? normalized)
-    {
-        normalized = null;
-        if (string.IsNullOrWhiteSpace(ocrLang))
-        {
-            return true;
-        }
-
-        var value = ocrLang.Trim();
-        if (value is "ancient_greek" or "modern_greek" or "english")
-        {
-            normalized = value;
-            return true;
-        }
-
-        if (value.Length is < 2 or > 32)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < value.Length; i++)
-        {
-            var c = value[i];
-            var ok = c is >= 'a' and <= 'z'
-                || (i > 0 && (c is >= '0' and <= '9' or '_' or '+'));
-            if (!ok)
-            {
-                return false;
-            }
-        }
-
-        normalized = value;
-        return true;
+        return Results.Ok(new { success = true, message = "Document deleted successfully" });
     }
 }
-
-public record DocumentCreateDto(string Title, string FilePath);
-
-public record DocumentRetryDto(string? OcrLang = null);

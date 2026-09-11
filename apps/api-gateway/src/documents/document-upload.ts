@@ -46,7 +46,7 @@ export function shouldDiscardUploadAfterFailure(err: unknown): boolean {
     return true;
   }
   if (err.response) {
-    return false;
+    return err.response.status < 500;
   }
   return err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND';
 }

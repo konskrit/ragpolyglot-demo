@@ -123,6 +123,10 @@ export interface DocumentCreateDto {
   filePath: string;
 }
 
+export interface DocumentRenameDto {
+  title: string;
+}
+
 export interface RAGQueryDto {
   query: string;
   topK?: number;

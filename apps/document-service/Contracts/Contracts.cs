@@ -94,3 +94,9 @@ public record DocumentDeletedEvent
     public Guid DocumentId { get; init; }
     public DateTime Timestamp { get; init; }
 }
+
+public record DocumentCreateDto(string Title, string FilePath);
+
+public record DocumentRetryDto(string? OcrLang = null);
+
+public record DocumentRenameDto(string Title);

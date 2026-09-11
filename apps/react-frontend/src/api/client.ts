@@ -14,6 +14,7 @@ export class ApiError extends Error {
 }
 
 function extractErrorMessage(body: unknown, fallback: string): string {
+  if (typeof body === 'string' && body.trim()) return body;
   if (!body || typeof body !== 'object') return fallback;
   const record = body as Record<string, unknown>;
   const message = record.message ?? record.error ?? record.detail;

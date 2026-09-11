@@ -71,7 +71,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private send(response: Response, exception: HttpException): void {
     const status = exception.getStatus();
-    const body = exception.getResponse() as Record<string, unknown>;
+    const raw = exception.getResponse();
+    const body =
+      typeof raw === 'string' ? { statusCode: status, message: raw } : raw;
     response.status(status).json(body);
   }
 

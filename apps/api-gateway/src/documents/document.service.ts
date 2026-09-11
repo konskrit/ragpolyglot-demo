@@ -16,6 +16,7 @@ import {
   Document,
   DocumentChunk,
   DocumentCreateDto,
+  DocumentRenameDto,
   OcrLanguageOption,
   isOcrLanguageCode,
 } from '@ragpolyglot-shared';
@@ -71,9 +72,14 @@ export class DocumentService {
     }
 
     try {
+      const resolvedTitle = title?.trim() || file.originalname?.trim() || '';
+      if (!resolvedTitle) {
+        throw new BadRequestException('Title is required.');
+      }
+
       const res = await firstValueFrom(
         this.httpService.post<DocumentRecord>(this.docsUrl(), {
-          title: title || file.originalname,
+          title: resolvedTitle,
           filePath: `/uploads/${file.filename}`,
         } satisfies DocumentCreateDto),
       );
@@ -139,6 +145,20 @@ export class DocumentService {
     );
 
     this.logger.log(`Document resume queued: ${id}`);
+    return this.toPublicDocument(res.data);
+  }
+
+  async renameDocument(id: string, title: string): Promise<Document> {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Title is required.');
+    }
+
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(this.docsUrl(id, '/rename'), {
+        title: trimmed,
+      } satisfies DocumentRenameDto),
+    );
     return this.toPublicDocument(res.data);
   }
 

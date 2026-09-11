@@ -14,7 +14,23 @@ describe('shouldDiscardUploadAfterFailure', () => {
     expect(shouldDiscardUploadAfterFailure(new Error('local'))).toBe(true);
   });
 
-  it('keeps file when document-service responded', () => {
+  it('discards on client/validation errors before persist', () => {
+    expect(
+      shouldDiscardUploadAfterFailure(
+        axiosError({
+          response: {
+            status: 409,
+            data: {},
+            headers: {},
+            statusText: '',
+            config: {} as never,
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps file when document-service may have persisted (5xx)', () => {
     expect(
       shouldDiscardUploadAfterFailure(
         axiosError({

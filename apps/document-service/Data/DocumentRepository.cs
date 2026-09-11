@@ -48,22 +48,21 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return chunks;
     }
 
-    public async Task<Document> CreateAsync(string title, string filePath, CancellationToken cancellationToken = default)
-    {
-        await using var cmd = await CommandAsync("documents/create.sql", cancellationToken);
-        cmd.Parameters.AddWithValue("title", title);
-        cmd.Parameters.AddWithValue("filePath", filePath);
-        cmd.Parameters.AddWithValue("status", "uploading");
-        cmd.Parameters.AddWithValue("uploadedBy", NpgsqlDbType.Uuid, DBNull.Value);
-
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+    public Task<Document?> CreateAsync(string title, string filePath, CancellationToken cancellationToken = default) =>
+        QueryDocumentAsync("documents/create.sql", cancellationToken, cmd =>
         {
-            throw new InvalidOperationException("Failed to create document.");
-        }
+            cmd.Parameters.AddWithValue("title", title);
+            cmd.Parameters.AddWithValue("filePath", filePath);
+            cmd.Parameters.AddWithValue("status", "uploading");
+            cmd.Parameters.AddWithValue("uploadedBy", NpgsqlDbType.Uuid, DBNull.Value);
+        });
 
-        return ReadDocument(reader);
-    }
+    public Task<Document?> RenameAsync(Guid id, string title, CancellationToken cancellationToken = default) =>
+        QueryDocumentAsync("documents/rename.sql", cancellationToken, cmd =>
+        {
+            cmd.Parameters.AddWithValue("id", id);
+            cmd.Parameters.AddWithValue("title", title);
+        });
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
         await ExecuteAsync("documents/delete.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id)) > 0;

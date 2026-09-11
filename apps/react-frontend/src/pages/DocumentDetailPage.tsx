@@ -6,7 +6,7 @@ import {
   type DocumentSummary,
 } from '@ragpolyglot-shared';
 import { DocumentActions } from '../components/DocumentActions';
-import { StatusBadge } from '../components/StatusBadge';
+import { DocumentTitleEditor } from '../components/DocumentTitleEditor';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
 import { loadDocument, loadDocumentChunks } from '../lib/documents';
@@ -23,7 +23,7 @@ export function DocumentDetailPage() {
 function DocumentDetail({ id }: { id: string }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { documents, loading: listLoading } = useDocuments();
+  const { documents, loading: listLoading, rename } = useDocuments();
   const listDoc = documents.find((d) => d.id === id);
 
   const [fetched, setFetched] = useState<DocumentSummary | null>(null);
@@ -135,10 +135,14 @@ function DocumentDetail({ id }: { id: string }) {
 
       <header className="space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3 min-w-0">
-            <h1 className="text-2xl font-semibold text-white">{doc.title}</h1>
-            <StatusBadge status={doc.status} />
-          </div>
+          <DocumentTitleEditor
+            doc={doc}
+            onRename={async (title) => {
+              const updated = await rename(id, title);
+              if (!listDoc) setFetched(updated);
+              return updated;
+            }}
+          />
           <DocumentActions doc={doc} onDeleted={() => navigate('/documents')} />
         </div>
         {doc.createdAt && (

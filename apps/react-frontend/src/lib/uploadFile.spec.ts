@@ -18,6 +18,13 @@ describe('validateUploadFile', () => {
     await expect(validateUploadFile(file)).resolves.toMatch(/looks like a PDF/);
   });
 
+  it('rejects empty file names', async () => {
+    const file = new File(['x'], '   ');
+    await expect(validateUploadFile(file)).resolves.toMatch(
+      /Title is required/,
+    );
+  });
+
   it('rejects unsupported extensions', async () => {
     const file = new File(['x'], 'img.png');
     await expect(validateUploadFile(file)).resolves.toMatch(/Unsupported/);

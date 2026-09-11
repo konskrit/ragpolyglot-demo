@@ -31,6 +31,10 @@ function readHead(file: File, n: number): Promise<Uint8Array> {
 }
 
 export async function validateUploadFile(file: File): Promise<string | null> {
+  if (!file.name.trim()) {
+    return 'Title is required.';
+  }
+
   const ext = fileExtension(file.name);
   if (!ALLOWED_EXTENSIONS.has(ext)) {
     return `Unsupported file type "${ext || '(none)'}". Allowed: ${[...ALLOWED_EXTENSIONS].join(', ')}`;

@@ -34,6 +34,7 @@ interface DocumentsContextValue {
   changeOcrLang: (id: string, ocrLang?: string) => Promise<void>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
+  rename: (id: string, title: string) => Promise<DocumentSummary>;
   connected: boolean;
 }
 
@@ -143,6 +144,14 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       'Invalid resume response',
     );
     subscribeDocument(id);
+  }
+
+  async function rename(id: string, title: string): Promise<DocumentSummary> {
+    return applyMappedUpdate(
+      id,
+      postJson(`/api/documents/${encodeURIComponent(id)}/rename`, { title }),
+      'Invalid rename response',
+    );
   }
 
   const refreshFromEffect = useEffectEvent(() => {
@@ -275,6 +284,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         changeOcrLang,
         pause,
         resume,
+        rename,
         connected,
       }}
     >
