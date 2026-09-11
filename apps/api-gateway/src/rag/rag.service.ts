@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { Config, ragCacheKey, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
 import { RedisService } from '../core/redis.service';
-import { RAGQueryDto, RAGResult, RagSearchHit } from '@ragpolyglot-shared';
+import {
+  RAGQueryDto,
+  RAGResult,
+  RagSearchHit,
+  DocumentSummarizeDto,
+  DocumentSummarizeResult,
+} from '@ragpolyglot-shared';
 import { clampTopK, normalizeDocumentIds, toSources } from './rag.helpers';
 
 const RAG_CHAT_TIMEOUT_MS = 120_000;
@@ -25,6 +31,57 @@ export class RagService {
 
   search(queryDto: RAGQueryDto, signal?: AbortSignal): Promise<RAGResult> {
     return this.streamSearch(queryDto, () => undefined, signal);
+  }
+
+  async summarizeDocument(
+    documentId: string,
+    body: DocumentSummarizeDto = {},
+    signal?: AbortSignal,
+  ): Promise<DocumentSummarizeResult> {
+    const id = documentId?.trim();
+    if (!id) {
+      throw new BadRequestException('documentId is required');
+    }
+
+    try {
+      const res = await fetch(`${Config.ragWorkerUrl}/api/summarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId: id,
+          maxContextChars: body.maxContextChars,
+          persist: body.persist,
+        }),
+        signal: this.withTimeout(signal, RAG_CHAT_TIMEOUT_MS * 5),
+      });
+
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => undefined)) as
+          | { error?: string }
+          | undefined;
+        if (res.status === 404) {
+          throw new BadRequestException(
+            errBody?.error ?? 'no chunks for document',
+          );
+        }
+        throw this.fromUpstreamMessage(
+          errBody?.error ?? 'Summarization unavailable',
+        );
+      }
+
+      const result = (await res.json()) as DocumentSummarizeResult;
+      if (result.persisted) {
+        void this.redis.incr(RAG_DOCUMENTS_VERSION_KEY);
+      }
+      this.logger.log(
+        `Document summarize id=${id} batches=${result.batchCount} calls=${result.llmCalls} persisted=${result.persisted}`,
+      );
+      return result;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      if (err instanceof HttpException) throw err;
+      throw this.toUpstreamError(err);
+    }
   }
 
   async streamSearch(

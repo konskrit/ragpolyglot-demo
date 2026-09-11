@@ -46,6 +46,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/search", s.search)
 	mux.HandleFunc("POST /api/chat", s.chat)
 	mux.HandleFunc("POST /api/chat/stream", s.chatStream)
+	mux.HandleFunc("POST /api/summarize", s.summarize)
 	return mux
 }
 

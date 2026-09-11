@@ -134,6 +134,21 @@ export interface RAGQueryDto {
   documentIds?: string[];
 }
 
+export interface DocumentSummarizeDto {
+  maxContextChars?: number;
+  /** Default true: embed summary as a searchable chunk. */
+  persist?: boolean;
+}
+
+export interface DocumentSummarizeResult {
+  documentId: string;
+  summary: string;
+  batchCount: number;
+  llmCalls: number;
+  persisted: boolean;
+  contextChars: number;
+}
+
 export interface RagSearchHit {
   documentId: string;
   documentTitle?: string;

@@ -77,6 +77,37 @@ func (s *Store) CountChunks(ctx context.Context, documentID string) (int64, erro
 	return n, err
 }
 
+func (s *Store) ListChunkTexts(ctx context.Context, documentID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, ragsql.Must("list_chunks_by_document.sql"), documentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var texts []string
+	for rows.Next() {
+		var index int
+		var content string
+		if err := rows.Scan(&index, &content); err != nil {
+			return nil, err
+		}
+		if t := strings.TrimSpace(content); t != "" {
+			texts = append(texts, t)
+		}
+	}
+	return texts, rows.Err()
+}
+
+func (s *Store) UpsertChunk(ctx context.Context, chunk models.DocumentChunk) error {
+	_, err := s.pool.Exec(ctx, ragsql.Must("upsert_chunk.sql"),
+		chunk.DocumentID,
+		chunk.ChunkIndex,
+		chunk.Content,
+		vectorLiteral(chunk.Embedding),
+	)
+	return err
+}
+
 func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int, documentIDs []string) ([]models.SearchHit, error) {
 	var scope any
 	if len(documentIDs) > 0 {

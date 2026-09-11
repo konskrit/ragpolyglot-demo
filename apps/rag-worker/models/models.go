@@ -93,6 +93,21 @@ type ChatRequest struct {
 	DocumentIDs []string `json:"documentIds,omitempty"`
 }
 
+type SummarizeRequest struct {
+	DocumentID      string `json:"documentId"`
+	MaxContextChars int    `json:"maxContextChars,omitempty"`
+	Persist         *bool  `json:"persist,omitempty"`
+}
+
+type SummarizeResponse struct {
+	DocumentID   string `json:"documentId"`
+	Summary      string `json:"summary"`
+	BatchCount   int    `json:"batchCount"`
+	LLMCalls     int    `json:"llmCalls"`
+	Persisted    bool   `json:"persisted"`
+	ContextChars int    `json:"contextChars"`
+}
+
 type ChatResponse struct {
 	Query   string      `json:"query"`
 	TopK    int         `json:"topK"`

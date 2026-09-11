@@ -35,7 +35,11 @@ func GenerateStream(ctx context.Context, query string, contextChunks []string, o
 		}
 		return noContextAnswer, nil
 	}
+	return Complete(ctx, systemPrompt, userPrompt(query, contextChunks), onToken)
+}
 
+// Complete runs a chat completion with an explicit system + user message.
+func Complete(ctx context.Context, system, user string, onToken func(string) error) (string, error) {
 	model, err := modelName()
 	if err != nil {
 		return "", err
@@ -55,8 +59,8 @@ func GenerateStream(ctx context.Context, query string, contextChunks []string, o
 	req := openai.ChatCompletionRequest{
 		Model: model,
 		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
-			{Role: openai.ChatMessageRoleUser, Content: userPrompt(query, contextChunks)},
+			{Role: openai.ChatMessageRoleSystem, Content: system},
+			{Role: openai.ChatMessageRoleUser, Content: user},
 		},
 		Stream: true,
 	}
@@ -78,7 +82,6 @@ func GenerateStream(ctx context.Context, query string, contextChunks []string, o
 			return "", err
 		}
 		if emitted {
-			// Do not retry after the client has already seen tokens.
 			break
 		}
 

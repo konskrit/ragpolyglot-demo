@@ -135,6 +135,11 @@ export const CONFIG_SETTINGS: readonly ConfigSetting[] = [
     services: ['rag-worker'],
   },
   {
+    key: 'RAG_SUMMARY_CONTEXT_CHARS',
+    kind: 'int',
+    services: ['rag-worker'],
+  },
+  {
     key: 'HTTP_TIMEOUT_MS',
     kind: 'int',
     services: ['api-gateway'],
