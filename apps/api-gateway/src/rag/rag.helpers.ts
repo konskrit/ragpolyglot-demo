@@ -9,7 +9,7 @@ export function clampTopK(topK: number): number {
 export function toSources(hits: RagSearchHit[]): Source[] {
   return hits.map((h) => ({
     documentId: h.documentId,
-    documentTitle: '',
+    documentTitle: h.documentTitle?.trim() || '',
     chunkContent: h.content,
     similarity: h.similarity,
     chunkIndex: h.chunkIndex,

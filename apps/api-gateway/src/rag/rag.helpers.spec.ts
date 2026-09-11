@@ -14,6 +14,7 @@ describe('toSources', () => {
     const hits: RagSearchHit[] = [
       {
         documentId: 'doc-1',
+        documentTitle: 'Ethics',
         chunkIndex: 0,
         content: 'chunk',
         similarity: 0.42,
@@ -22,7 +23,7 @@ describe('toSources', () => {
     expect(toSources(hits)).toEqual([
       {
         documentId: 'doc-1',
-        documentTitle: '',
+        documentTitle: 'Ethics',
         chunkContent: 'chunk',
         similarity: 0.42,
         chunkIndex: 0,

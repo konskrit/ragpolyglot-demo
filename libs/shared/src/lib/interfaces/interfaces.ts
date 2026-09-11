@@ -135,6 +135,7 @@ export interface RAGQueryDto {
 
 export interface RagSearchHit {
   documentId: string;
+  documentTitle?: string;
   chunkIndex: number;
   content: string;
   similarity: number;

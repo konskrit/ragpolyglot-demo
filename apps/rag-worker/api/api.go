@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"apps/rag-worker/embedding"
@@ -239,12 +238,7 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 		return nil, false
 	}
 
-	chunks := make([]string, 0, len(hits))
-	for _, h := range hits {
-		if t := strings.TrimSpace(h.Content); t != "" {
-			chunks = append(chunks, t)
-		}
-	}
+	chunks := buildContextChunks(hits)
 
 	return &chatPrep{
 		query:  req.Query,

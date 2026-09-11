@@ -90,7 +90,13 @@ func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int
 	var hits []models.SearchHit
 	for rows.Next() {
 		var hit models.SearchHit
-		if err := rows.Scan(&hit.DocumentID, &hit.ChunkIndex, &hit.Content, &hit.Similarity); err != nil {
+		if err := rows.Scan(
+			&hit.DocumentID,
+			&hit.ChunkIndex,
+			&hit.Content,
+			&hit.Similarity,
+			&hit.DocumentTitle,
+		); err != nil {
 			return nil, err
 		}
 		hits = append(hits, hit)

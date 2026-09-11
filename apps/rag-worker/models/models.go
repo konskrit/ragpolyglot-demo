@@ -73,10 +73,11 @@ type SearchRequest struct {
 }
 
 type SearchHit struct {
-	DocumentID string  `json:"documentId"`
-	ChunkIndex int     `json:"chunkIndex"`
-	Content    string  `json:"content"`
-	Similarity float64 `json:"similarity"`
+	DocumentID    string  `json:"documentId"`
+	DocumentTitle string  `json:"documentTitle,omitempty"`
+	ChunkIndex    int     `json:"chunkIndex"`
+	Content       string  `json:"content"`
+	Similarity    float64 `json:"similarity"`
 }
 
 type SearchResponse struct {
