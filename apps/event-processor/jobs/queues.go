@@ -11,15 +11,21 @@ import (
 )
 
 var queueLabels = map[string]string{
-	"document.uploaded.queue":       "documentUploaded",
-	"document.deleted.queue":        "documentDeleted",
-	"document.pause.queue":          "documentPause",
-	"document.processed.queue":      "documentProcessed",
-	"document.failed.queue":         "documentFailed",
-	"document.paused.queue":         "documentPaused",
-	"document.progress.queue":       "documentProgress",
-	"gateway.document-status.queue": "gatewayStatus",
-	rmq.JobsQueue:                   "backgroundJobs",
+	"document.uploaded.queue":            "documentUploaded",
+	"document.deleted.queue":             "documentDeleted",
+	"document.pause.queue":               "documentPause",
+	"document.processed.queue":           "documentProcessed",
+	"document.failed.queue":              "documentFailed",
+	"document.paused.queue":              "documentPaused",
+	"document.progress.queue":            "documentProgress",
+	"document.summarize.queue":           "documentSummarize",
+	"document.summarize.pause.queue":     "documentSummarizePause",
+	"document.summarize.progress.queue":  "documentSummarizeProgress",
+	"document.summarize.completed.queue": "documentSummarizeCompleted",
+	"document.summarize.failed.queue":    "documentSummarizeFailed",
+	"document.summarize.paused.queue":    "documentSummarizePaused",
+	"gateway.document-status.queue":      "gatewayStatus",
+	rmq.JobsQueue:                        "backgroundJobs",
 }
 
 type managementQueue struct {
