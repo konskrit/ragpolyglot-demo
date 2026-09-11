@@ -3,9 +3,12 @@ import {
   DOCUMENT_PROGRESS_STAGES,
   DOCUMENT_STATUSES,
   ACTIVE_DOCUMENT_STATUSES,
+  ACTIVE_SUMMARIZE_STATUSES,
+  SUMMARIZE_STATUSES,
   UPLOAD_STATES,
   documentEmbeddingProgressPercent,
   formatDocumentProgressLabel,
+  formatSummarizeProgressLabel,
   formatErrorReason,
   OCR_ENGINES,
   OCR_LANGUAGE_NEEDED,
@@ -20,6 +23,8 @@ import {
   isDocumentProgressStage,
   isDocumentStatus,
   isActiveDocumentStatus,
+  isActiveSummarizeStatus,
+  isSummarizeStatus,
   normalizeDocumentStatus,
 } from './contracts';
 
@@ -210,6 +215,17 @@ describe('shared contracts', () => {
     expect(isActiveDocumentStatus('ready')).toBe(false);
   });
 
+  it('tracks summarize statuses and active jobs', () => {
+    expect(SUMMARIZE_STATUSES).toEqual(['running', 'paused', 'failed']);
+    expect(ACTIVE_SUMMARIZE_STATUSES).toEqual(['running', 'paused']);
+    expect(isSummarizeStatus('running')).toBe(true);
+    expect(isSummarizeStatus('ready')).toBe(false);
+    expect(isActiveSummarizeStatus('running')).toBe(true);
+    expect(isActiveSummarizeStatus('paused')).toBe(true);
+    expect(isActiveSummarizeStatus('failed')).toBe(false);
+    expect(isActiveSummarizeStatus(null)).toBe(false);
+  });
+
   it('validates progress stages from the RAG worker', () => {
     expect(DOCUMENT_PROGRESS_STAGES).toEqual([
       'waiting_for_ocr',
@@ -274,6 +290,27 @@ describe('shared contracts', () => {
         progressTotal: 4,
       }),
     ).toBe(25);
+  });
+
+  it('formats summarize progress labels', () => {
+    expect(formatSummarizeProgressLabel({ summarizeStatus: null })).toBeNull();
+    expect(
+      formatSummarizeProgressLabel({
+        summarizeStatus: 'running',
+        summarizeDone: 2,
+        summarizeTotal: 5,
+      }),
+    ).toBe('Summarizing 2/5');
+    expect(
+      formatSummarizeProgressLabel({
+        summarizeStatus: 'paused',
+        summarizeDone: 1,
+        summarizeTotal: 3,
+      }),
+    ).toBe('Paused · Summarizing 1/3');
+    expect(formatSummarizeProgressLabel({ summarizeStatus: 'failed' })).toBe(
+      'Summarization failed',
+    );
   });
 
   it('formats snake_case error reasons for display', () => {

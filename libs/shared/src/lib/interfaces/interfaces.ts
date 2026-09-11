@@ -5,6 +5,7 @@ import {
   DocumentStatus,
   OcrEngine,
   OcrLanguageCode,
+  SummarizeStatus,
 } from '../types/types';
 
 export interface OcrLanguageOption {
@@ -23,6 +24,10 @@ export interface Document {
   progressStage?: DocumentProgressStage;
   progressDone?: number;
   progressTotal?: number;
+  summarizeStatus?: SummarizeStatus | null;
+  summarizeDone?: number;
+  summarizeTotal?: number;
+  summarizeError?: string;
   uploadedBy?: string;
   ocrLang?: OcrLanguageCode;
   ocrEngine?: OcrEngine;
@@ -41,6 +46,10 @@ export type DocumentSummary = Pick<
   | 'progressStage'
   | 'progressDone'
   | 'progressTotal'
+  | 'summarizeStatus'
+  | 'summarizeDone'
+  | 'summarizeTotal'
+  | 'summarizeError'
   | 'ocrLang'
   | 'ocrEngine'
 > & {
@@ -49,13 +58,17 @@ export type DocumentSummary = Pick<
 
 export interface DocumentStatusUpdate {
   documentId: string;
-  status: DocumentStatus;
+  /** Omitted for summarize-only progress updates. */
+  status?: DocumentStatus;
   timestamp?: string;
   progressStage?: DocumentProgressStage;
   progressDone?: number;
   progressTotal?: number;
+  summarizeStatus?: SummarizeStatus | null;
+  summarizeDone?: number;
+  summarizeTotal?: number;
+  summarizeError?: string;
 }
-
 export interface DocumentChunk {
   id?: number;
   documentId: string;
@@ -136,17 +149,6 @@ export interface RAGQueryDto {
 
 export interface DocumentSummarizeDto {
   maxContextChars?: number;
-  /** Default true: embed summary as a searchable chunk. */
-  persist?: boolean;
-}
-
-export interface DocumentSummarizeResult {
-  documentId: string;
-  summary: string;
-  batchCount: number;
-  llmCalls: number;
-  persisted: boolean;
-  contextChars: number;
 }
 
 export interface RagSearchHit {

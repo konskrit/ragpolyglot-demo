@@ -3,10 +3,10 @@ import type {
   DocumentProgressStage,
   DocumentStatus,
   OcrEngine,
+  SummarizeStatus,
   UploadState,
   ChatRole,
 } from './types';
-
 export const DOCUMENT_STATUSES = [
   'uploading',
   'processing',
@@ -20,12 +20,22 @@ export const ACTIVE_DOCUMENT_STATUSES = [
   'processing',
 ] as const satisfies readonly DocumentStatus[];
 
+export const SUMMARIZE_STATUSES = [
+  'running',
+  'paused',
+  'failed',
+] as const satisfies readonly SummarizeStatus[];
+
+export const ACTIVE_SUMMARIZE_STATUSES = [
+  'running',
+  'paused',
+] as const satisfies readonly SummarizeStatus[];
+
 export const DOCUMENT_PROGRESS_STAGES = [
   'waiting_for_ocr',
   'extracting',
   'embedding',
 ] as const satisfies readonly DocumentProgressStage[];
-
 export const OCR_ENGINES = [
   'tesseract',
   'krakenCPU',
@@ -182,6 +192,22 @@ export function isActiveDocumentStatus(status: DocumentStatus): boolean {
   return (ACTIVE_DOCUMENT_STATUSES as readonly string[]).includes(status);
 }
 
+export function isSummarizeStatus(value: unknown): value is SummarizeStatus {
+  return (
+    typeof value === 'string' &&
+    (SUMMARIZE_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+export function isActiveSummarizeStatus(
+  status: SummarizeStatus | null | undefined,
+): boolean {
+  return (
+    status != null &&
+    (ACTIVE_SUMMARIZE_STATUSES as readonly string[]).includes(status)
+  );
+}
+
 export function isDocumentProgressStage(
   value: unknown,
 ): value is DocumentProgressStage {
@@ -190,7 +216,6 @@ export function isDocumentProgressStage(
     (DOCUMENT_PROGRESS_STAGES as readonly string[]).includes(value)
   );
 }
-
 export function formatErrorReason(reason: string): string {
   if (reason === OCR_LANGUAGE_NEEDED) {
     return 'Could not detect the OCR language. Choose a language and retry.';
@@ -232,6 +257,31 @@ export function formatDocumentProgressLabel(
   return paused ? 'Paused' : null;
 }
 
+type SummarizeProgressView = Pick<
+  DocumentSummary,
+  'summarizeStatus' | 'summarizeDone' | 'summarizeTotal'
+>;
+
+export function formatSummarizeProgressLabel(
+  doc: SummarizeProgressView,
+): string | null {
+  if (!doc.summarizeStatus) return null;
+  const total = doc.summarizeTotal ?? 0;
+  const done = doc.summarizeDone ?? 0;
+  const progress = total > 0 ? `${done}/${total}` : null;
+  if (doc.summarizeStatus === 'running') {
+    return progress ? `Summarizing ${progress}` : 'Summarizing…';
+  }
+  if (doc.summarizeStatus === 'paused') {
+    return progress
+      ? `Paused · Summarizing ${progress}`
+      : 'Paused · Summarizing';
+  }
+  if (doc.summarizeStatus === 'failed') {
+    return 'Summarization failed';
+  }
+  return null;
+}
 export function documentEmbeddingProgressPercent(
   doc: DocumentProgressView,
 ): number | null {

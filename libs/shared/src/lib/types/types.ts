@@ -5,6 +5,8 @@ export type DocumentStatus =
   | 'ready'
   | 'failed';
 
+export type SummarizeStatus = 'running' | 'paused' | 'failed';
+
 export type DocumentProgressStage =
   | 'waiting_for_ocr'
   | 'extracting'
