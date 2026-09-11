@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import { deleteJson, getJson, postJson } from '../api/client';
 import {
   isDocumentProgressStage,
@@ -61,6 +62,7 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { connected } = useWebSocketStatus();
   const subscribedRef = useRef(new Set<string>());
+  const onAgentPage = useLocation().pathname.startsWith('/agent');
 
   async function refresh() {
     try {
@@ -203,14 +205,14 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
   const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
 
   useEffect(() => {
-    if (!hasActive) return;
+    if (!hasActive || onAgentPage) return;
 
     const timer = window.setInterval(() => {
       refreshFromEffect();
     }, 3000);
 
     return () => window.clearInterval(timer);
-  }, [hasActive]);
+  }, [hasActive, onAgentPage]);
 
   useWebSocketEvent<DocumentStatusUpdate>(
     'document:status-update',

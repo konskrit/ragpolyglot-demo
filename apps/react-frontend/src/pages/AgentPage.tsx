@@ -12,13 +12,17 @@ export function AgentPage() {
   );
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const restoredRef = useRef(false);
+  const openSeqRef = useRef(0);
 
   const openConversation = async (id: string) => {
+    const seq = ++openSeqRef.current;
     try {
       const messages = await loadMessages(id);
+      if (seq !== openSeqRef.current) return;
       setConversationId(id);
       setInitialMessages(messages);
     } catch (e) {
+      if (seq !== openSeqRef.current) return;
       console.error('Failed to load conversation', e);
     }
   };
@@ -36,6 +40,7 @@ export function AgentPage() {
   }, [loading, latestId]);
 
   const startNew = () => {
+    openSeqRef.current++;
     restoredRef.current = true;
     setConversationId(crypto.randomUUID());
     setInitialMessages([]);

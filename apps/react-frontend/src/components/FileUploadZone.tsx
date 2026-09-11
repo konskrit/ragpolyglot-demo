@@ -3,6 +3,7 @@ import { ApiError, postFormData } from '../api/client';
 import { subscribeDocument } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
 import { Button } from './Button';
+import { validateUploadFile } from '../lib/uploadFile';
 import type { UploadState } from '@ragpolyglot-shared';
 
 export function FileUploadZone() {
@@ -19,23 +20,31 @@ export function FileUploadZone() {
     return () => window.clearTimeout(timer);
   }, [uploadState]);
 
+  const addFiles = async (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+    for (const file of incoming) {
+      const err = await validateUploadFile(file);
+      if (err) rejected.push(err);
+      else accepted.push(file);
+    }
+    if (accepted.length > 0) {
+      setFiles((prev) => [...prev, ...accepted]);
+    }
+    setErrorMessage(rejected.length > 0 ? rejected.join('; ') : null);
+  };
+
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const dropped = Array.from(e.dataTransfer.files);
-    if (dropped.length > 0) {
-      setFiles((prev) => [...prev, ...dropped]);
-      setErrorMessage(null);
-    }
+    void addFiles(Array.from(e.dataTransfer.files));
   };
 
   const onSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
-    if (selected.length > 0) {
-      setFiles((prev) => [...prev, ...selected]);
-      setErrorMessage(null);
-    }
+    void addFiles(selected);
   };
 
   const removeFile = (index: number) => {
