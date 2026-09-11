@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -46,6 +47,14 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 	ctx := context.Background()
 	start := time.Now()
 	acker := newIngestAck(msg)
+	// Settle on panic so the delivery cannot sit unacked; the row stays 'processing'
+	// and the stale sweep retries it, which is bounded, unlike requeueing a panic.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Consumer] PANIC during ingest documentId=%s: %v\n%s", event.DocumentID, r, debug.Stack())
+			acker.ack()
+		}
+	}()
 	log.Printf("[Consumer] processing upload documentId=%s", event.DocumentID)
 
 	if p.ackIfStale(acker, event.DocumentID, gen) {

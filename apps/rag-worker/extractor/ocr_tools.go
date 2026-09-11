@@ -100,6 +100,26 @@ func runCaptureDiscard(stop func() bool, name string, args ...string) error {
 	return err
 }
 
+// cappedBuffer keeps the process draining after the cap so the child never blocks
+// on a full pipe; the excess is discarded rather than buffered.
+type cappedBuffer struct {
+	buf bytes.Buffer
+	max int
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if room := c.max - c.buf.Len(); room > 0 {
+		if n > room {
+			p = p[:room]
+		}
+		c.buf.Write(p)
+	}
+	return n, nil
+}
+
+func (c *cappedBuffer) String() string { return c.buf.String() }
+
 func runCaptureOutput(stop func() bool, capture bool, name string, args ...string) (stdout string, err error) {
 	if err := checkPaused(stop); err != nil {
 		return "", err
@@ -111,7 +131,9 @@ func runCaptureOutput(stop func() bool, capture bool, name string, args ...strin
 	cmd := exec.CommandContext(ctx, name, args...)
 	configureKillGroup(cmd)
 	cmd.WaitDelay = 200 * time.Millisecond
-	var out, stderr bytes.Buffer
+	var stderr bytes.Buffer
+	// 4 bytes is the widest UTF-8 rune, so whatever survives trimToLimit is always captured.
+	out := cappedBuffer{max: maxExtractedChars() * 4}
 	if capture {
 		cmd.Stdout = &out
 		cmd.Stderr = &stderr

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,6 +77,21 @@ func TestTrimToLimit(t *testing.T) {
 	got := trimToLimit("hello")
 	if got != "hel" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestCappedBuffer_keepsWhatTrimToLimitWouldKeep(t *testing.T) {
+	t.Setenv("MAX_EXTRACTED_CHARS", "4")
+
+	c := cappedBuffer{max: maxExtractedChars() * 4}
+	// Widest possible runes, so the cap is reached with exactly the limit of runes.
+	full := strings.Repeat("😀", 8)
+	n, err := c.Write([]byte(full))
+	if err != nil || n != len(full) {
+		t.Fatalf("write returned (%d, %v), want (%d, nil)", n, err, len(full))
+	}
+	if got, want := trimToLimit(c.String()), trimToLimit(full); got != want {
+		t.Fatalf("capped output %q, want %q", got, want)
 	}
 }
 

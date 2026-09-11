@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -212,6 +213,13 @@ func ocrPagesParallel(pdfPath, dir string, start, total int, langs, prior, ocrLa
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// A panic here must abort the run, not leave the page checkpointed as done.
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[Extractor] OCR page worker panic: %v\n%s", r, debug.Stack())
+					recordErr(fmt.Errorf("ocr page worker panic: %v", r))
+				}
+			}()
 			for page := range pageCh {
 				if aborted.Load() {
 					return

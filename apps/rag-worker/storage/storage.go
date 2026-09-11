@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"apps/rag-worker/models"
@@ -43,16 +44,17 @@ func (s *Store) InsertChunks(ctx context.Context, chunks []models.DocumentChunk)
 	defer tx.Rollback(ctx)
 
 	insertChunk := ragsql.Must("insert_chunk.sql")
+	batch := &pgx.Batch{}
 	for _, chunk := range chunks {
-		_, err := tx.Exec(ctx, insertChunk,
+		batch.Queue(insertChunk,
 			chunk.DocumentID,
 			chunk.ChunkIndex,
 			chunk.Content,
 			vectorLiteral(chunk.Embedding),
 		)
-		if err != nil {
-			return fmt.Errorf("insert chunk %d: %w", chunk.ChunkIndex, err)
-		}
+	}
+	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return fmt.Errorf("insert chunks %d-%d: %w", chunks[0].ChunkIndex, chunks[len(chunks)-1].ChunkIndex, err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
