@@ -6,12 +6,15 @@ import {
   type DocumentSummary,
 } from '@ragpolyglot-shared';
 import { DocumentActions } from '../components/DocumentActions';
+import { DocumentSummaryPanel } from '../components/DocumentSummaryPanel';
 import { DocumentTitleEditor } from '../components/DocumentTitleEditor';
 import { ButtonLink } from '../components/Button';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
 import { loadDocument, loadDocumentChunks } from '../lib/documents';
 import { chunkAnchorId, parseChunkNavigationTarget } from '../lib/chunkAnchor';
+
+type DetailTab = 'chunks' | 'summary';
 
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +30,7 @@ function DocumentDetail({ id }: { id: string }) {
   const { documents, loading: listLoading, rename } = useDocuments();
   const listDoc = documents.find((d) => d.id === id);
 
+  const [tab, setTab] = useState<DetailTab>('chunks');
   const [fetched, setFetched] = useState<DocumentSummary | null>(null);
   const [chunks, setChunks] = useState<DocumentChunk[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +46,10 @@ function DocumentDetail({ id }: { id: string }) {
   const inList = listDoc !== undefined;
   const loading = listLoading || (!inList && !fetched && !error);
   const chunksLoading =
-    doc?.status === 'ready' && chunks === null && !chunksError;
+    doc?.status === 'ready' &&
+    tab === 'chunks' &&
+    chunks === null &&
+    !chunksError;
 
   useEffect(() => {
     if (listLoading || inList) return;
@@ -66,13 +73,19 @@ function DocumentDetail({ id }: { id: string }) {
   }, [id, inList, listLoading]);
 
   useEffect(() => {
-    if (doc?.status !== 'ready') return;
+    if (
+      doc?.status !== 'ready' ||
+      tab !== 'chunks' ||
+      chunks !== null ||
+      chunksError
+    ) {
+      return;
+    }
 
     let cancelled = false;
     void loadDocumentChunks(id)
       .then((data) => {
         if (cancelled) return;
-        setChunksError(null);
         setChunks(data);
       })
       .catch((e) => {
@@ -86,7 +99,7 @@ function DocumentDetail({ id }: { id: string }) {
     return () => {
       cancelled = true;
     };
-  }, [id, doc?.status]);
+  }, [id, doc?.status, tab, chunks, chunksError]);
 
   useEffect(() => {
     scrolledChunkRef.current = null;
@@ -123,7 +136,7 @@ function DocumentDetail({ id }: { id: string }) {
   }
 
   const progressLabel = formatDocumentProgressLabel(doc);
-  const readyChunks = doc.status === 'ready' ? chunks : null;
+  const ready = doc.status === 'ready';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 min-w-0">
@@ -145,7 +158,7 @@ function DocumentDetail({ id }: { id: string }) {
             }}
           />
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {doc.status === 'ready' && (
+            {ready && (
               <ButtonLink
                 to={`/agent?documentId=${encodeURIComponent(doc.id)}`}
                 variant="secondary"
@@ -170,56 +183,90 @@ function DocumentDetail({ id }: { id: string }) {
         )}
       </header>
 
-      {doc.status !== 'ready' ? (
+      {!ready ? (
         <p className="text-gray-400 text-sm">
           Extracted text is available after processing completes.
         </p>
-      ) : chunksLoading ? (
-        <PageSpinner />
-      ) : chunksError ? (
-        <p className="text-sm text-red-400">{chunksError}</p>
-      ) : !readyChunks || readyChunks.length === 0 ? (
-        <p className="text-gray-400 text-sm">
-          No chunks stored for this document.
-        </p>
       ) : (
-        <section className="space-y-3">
-          <p className="text-sm text-gray-400">
-            {readyChunks.length} chunk{readyChunks.length === 1 ? '' : 's'}{' '}
-            (indexed text used for search)
-          </p>
-          <ul className="space-y-3 min-w-0">
-            {readyChunks.map((chunk) => (
-              <li
-                key={chunk.chunkIndex}
-                id={chunkAnchorId(chunk.chunkIndex)}
-                ref={(el) => {
-                  if (
-                    el &&
-                    targetChunkIndex !== null &&
-                    chunk.chunkIndex === targetChunkIndex
-                  ) {
-                    scrollToChunk(chunk.chunkIndex, el);
-                  }
-                }}
-                className={`rounded-lg border px-4 py-3 min-w-0 max-w-full scroll-mt-24 ${
-                  targetChunkIndex === chunk.chunkIndex
-                    ? 'border-indigo-500 bg-indigo-950/30 ring-1 ring-indigo-500/40'
-                    : 'border-gray-800 bg-gray-900'
-                }`}
-              >
-                <p className="text-xs font-medium text-gray-500 mb-2">
-                  Chunk {chunk.chunkIndex + 1}
-                </p>
-                <div className="min-w-0 max-w-full overflow-x-auto">
-                  <p className="text-sm text-gray-200 whitespace-pre-wrap wrap-anywhere leading-relaxed">
-                    {chunk.content}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <>
+          <nav
+            className="flex gap-1 border-b border-gray-800"
+            aria-label="Document sections"
+          >
+            <button
+              type="button"
+              onClick={() => setTab('chunks')}
+              className={`px-3 py-2 text-sm border-b-2 -mb-px transition ${
+                tab === 'chunks'
+                  ? 'border-indigo-500 text-white'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Chunks
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('summary')}
+              className={`px-3 py-2 text-sm border-b-2 -mb-px transition ${
+                tab === 'summary'
+                  ? 'border-indigo-500 text-white'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Summary
+            </button>
+          </nav>
+
+          {tab === 'summary' ? (
+            <DocumentSummaryPanel doc={doc} />
+          ) : chunksLoading ? (
+            <PageSpinner />
+          ) : chunksError ? (
+            <p className="text-sm text-red-400">{chunksError}</p>
+          ) : !chunks || chunks.length === 0 ? (
+            <p className="text-gray-400 text-sm">
+              No chunks stored for this document.
+            </p>
+          ) : (
+            <section className="space-y-3">
+              <p className="text-sm text-gray-400">
+                {chunks.length} chunk{chunks.length === 1 ? '' : 's'} (indexed
+                text used for search)
+              </p>
+              <ul className="space-y-3 min-w-0">
+                {chunks.map((chunk) => (
+                  <li
+                    key={chunk.chunkIndex}
+                    id={chunkAnchorId(chunk.chunkIndex)}
+                    ref={(el) => {
+                      if (
+                        el &&
+                        targetChunkIndex !== null &&
+                        chunk.chunkIndex === targetChunkIndex
+                      ) {
+                        scrollToChunk(chunk.chunkIndex, el);
+                      }
+                    }}
+                    className={`rounded-lg border px-4 py-3 min-w-0 max-w-full scroll-mt-24 ${
+                      targetChunkIndex === chunk.chunkIndex
+                        ? 'border-indigo-500 bg-indigo-950/30 ring-1 ring-indigo-500/40'
+                        : 'border-gray-800 bg-gray-900'
+                    }`}
+                  >
+                    <p className="text-xs font-medium text-gray-500 mb-2">
+                      Chunk {chunk.chunkIndex + 1}
+                    </p>
+                    <div className="min-w-0 max-w-full overflow-x-auto">
+                      <p className="text-sm text-gray-200 whitespace-pre-wrap wrap-anywhere leading-relaxed">
+                        {chunk.content}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

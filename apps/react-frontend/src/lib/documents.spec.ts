@@ -74,6 +74,56 @@ describe('mapApiDocuments', () => {
       },
     ]);
   });
+
+  it('maps summarize fields', () => {
+    expect(
+      mapApiDocuments([
+        {
+          id: '1',
+          title: 'A',
+          status: 'ready',
+          summarizeStatus: 'running',
+          summarizeDone: 1,
+          summarizeTotal: 4,
+        },
+        {
+          id: '2',
+          title: 'B',
+          status: 'ready',
+          summarizeStatus: null,
+        },
+        {
+          id: '3',
+          title: 'C',
+          status: 'ready',
+          summarizeStatus: 'nope',
+        },
+      ]),
+    ).toEqual([
+      {
+        id: '1',
+        title: 'A',
+        status: 'ready',
+        summarizeStatus: 'running',
+        summarizeDone: 1,
+        summarizeTotal: 4,
+        createdAt: undefined,
+      },
+      {
+        id: '2',
+        title: 'B',
+        status: 'ready',
+        summarizeStatus: null,
+        createdAt: undefined,
+      },
+      {
+        id: '3',
+        title: 'C',
+        status: 'ready',
+        createdAt: undefined,
+      },
+    ]);
+  });
 });
 
 describe('mapApiChunks', () => {

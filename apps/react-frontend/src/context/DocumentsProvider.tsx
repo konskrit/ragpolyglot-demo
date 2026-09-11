@@ -12,11 +12,19 @@ import { deleteJson, getJson, postJson } from '../api/client';
 import {
   isDocumentProgressStage,
   isActiveDocumentStatus,
+  isActiveSummarizeStatus,
+  isSummarizeStatus,
   normalizeDocumentStatus,
   type DocumentStatusUpdate,
   type DocumentSummary,
 } from '@ragpolyglot-shared';
-import { mapApiDocument, mapApiDocuments } from '../lib/documents';
+import {
+  mapApiDocument,
+  mapApiDocuments,
+  pauseSummarize as pauseSummarizeRequest,
+  resumeSummarize as resumeSummarizeRequest,
+  startSummarize as startSummarizeRequest,
+} from '../lib/documents';
 import {
   subscribeDocument,
   unsubscribeDocument,
@@ -35,6 +43,9 @@ interface DocumentsContextValue {
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   rename: (id: string, title: string) => Promise<DocumentSummary>;
+  startSummarize: (id: string) => Promise<DocumentSummary>;
+  pauseSummarize: (id: string) => Promise<DocumentSummary>;
+  resumeSummarize: (id: string) => Promise<DocumentSummary>;
   connected: boolean;
 }
 
@@ -50,7 +61,12 @@ function subscribeActiveDocuments(
   subscribed: Set<string>,
 ): void {
   for (const doc of docs) {
-    if (!isActiveDocumentStatus(doc.status)) continue;
+    if (
+      !isActiveDocumentStatus(doc.status) &&
+      !isActiveSummarizeStatus(doc.summarizeStatus)
+    ) {
+      continue;
+    }
     if (subscribed.has(doc.id)) continue;
     subscribed.add(doc.id);
     subscribeDocument(doc.id);
@@ -98,7 +114,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       if (!mapped) {
         throw new Error(invalidMessage);
       }
-      setDocuments((prev) => prev.map((doc) => (doc.id === id ? mapped : doc)));
+      setDocuments((prev) => {
+        const exists = prev.some((d) => d.id === id);
+        if (!exists) return [...prev, mapped];
+        return prev.map((doc) => (doc.id === id ? mapped : doc));
+      });
       return mapped;
     } catch (e) {
       await refresh();
@@ -152,6 +172,38 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       postJson(`/api/documents/${encodeURIComponent(id)}/rename`, { title }),
       'Invalid rename response',
     );
+  }
+
+  async function startSummarize(id: string): Promise<DocumentSummary> {
+    const mapped = await applyMappedUpdate(
+      id,
+      startSummarizeRequest(id),
+      'Invalid summarize response',
+    );
+    subscribedRef.current.add(id);
+    subscribeDocument(id);
+    return mapped;
+  }
+
+  async function pauseSummarize(id: string): Promise<DocumentSummary> {
+    const mapped = await applyMappedUpdate(
+      id,
+      pauseSummarizeRequest(id),
+      'Invalid summarize pause response',
+    );
+    subscribeDocument(id);
+    return mapped;
+  }
+
+  async function resumeSummarize(id: string): Promise<DocumentSummary> {
+    const mapped = await applyMappedUpdate(
+      id,
+      resumeSummarizeRequest(id),
+      'Invalid summarize resume response',
+    );
+    subscribedRef.current.add(id);
+    subscribeDocument(id);
+    return mapped;
   }
 
   const refreshFromEffect = useEffectEvent(() => {
@@ -211,7 +263,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     };
   }, [connected]);
 
-  const hasActive = documents.some((d) => isActiveDocumentStatus(d.status));
+  const hasActive = documents.some(
+    (d) =>
+      isActiveDocumentStatus(d.status) ||
+      isActiveSummarizeStatus(d.summarizeStatus),
+  );
 
   useEffect(() => {
     if (!hasActive || onAgentPage) return;
@@ -225,9 +281,35 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
   useWebSocketEvent<DocumentStatusUpdate>(
     'document:status-update',
-    ({ documentId, status, progressStage, progressDone, progressTotal }) => {
-      const normalized = normalizeDocumentStatus(status);
-      if (!normalized) return;
+    (update) => {
+      const {
+        documentId,
+        status,
+        progressStage,
+        progressDone,
+        progressTotal,
+        summarizeStatus,
+        summarizeDone,
+        summarizeTotal,
+        summarizeError,
+      } = update;
+
+      const hasSummarize = Object.prototype.hasOwnProperty.call(
+        update,
+        'summarizeStatus',
+      );
+
+      if (
+        hasSummarize &&
+        (summarizeStatus === null || summarizeStatus === 'failed')
+      ) {
+        void refresh();
+        return;
+      }
+
+      const normalized =
+        status !== undefined ? normalizeDocumentStatus(status) : null;
+      if (status !== undefined && !normalized) return;
 
       if (
         normalized === 'failed' ||
@@ -247,28 +329,49 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         }
         return prev.map((doc) => {
           if (doc.id !== documentId) return doc;
+
+          let next = doc;
           if (
             normalized === 'processing' &&
-            doc.status !== 'processing' &&
-            doc.status !== 'uploading'
+            (doc.status === 'processing' || doc.status === 'uploading')
           ) {
-            return doc;
+            next = {
+              ...next,
+              status: normalized,
+              progressStage: isDocumentProgressStage(progressStage)
+                ? progressStage
+                : undefined,
+              progressDone,
+              progressTotal,
+            };
           }
-          return {
-            ...doc,
-            status: normalized,
-            progressStage: isDocumentProgressStage(progressStage)
-              ? progressStage
-              : undefined,
-            progressDone,
-            progressTotal,
-          };
+
+          if (hasSummarize) {
+            next = {
+              ...next,
+              summarizeStatus: isSummarizeStatus(summarizeStatus)
+                ? summarizeStatus
+                : next.summarizeStatus,
+              summarizeDone:
+                summarizeDone !== undefined
+                  ? summarizeDone
+                  : next.summarizeDone,
+              summarizeTotal:
+                summarizeTotal !== undefined
+                  ? summarizeTotal
+                  : next.summarizeTotal,
+              summarizeError:
+                summarizeError !== undefined
+                  ? summarizeError
+                  : next.summarizeError,
+            };
+          }
+
+          return next;
         });
       });
 
-      if (missing) {
-        void refresh();
-      }
+      if (missing) void refresh();
     },
   );
 
@@ -285,6 +388,9 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
         pause,
         resume,
         rename,
+        startSummarize,
+        pauseSummarize,
+        resumeSummarize,
         connected,
       }}
     >

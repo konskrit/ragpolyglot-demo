@@ -7,9 +7,10 @@ import type {
 import {
   isDocumentProgressStage,
   isOcrEngine,
+  isSummarizeStatus,
   normalizeDocumentStatus,
 } from '@ragpolyglot-shared';
-import { getJson } from '../api/client';
+import { getJson, postJson } from '../api/client';
 
 function mapDocumentSummary(item: unknown): DocumentSummary | null {
   if (!item || typeof item !== 'object') return null;
@@ -31,6 +32,17 @@ function mapDocumentSummary(item: unknown): DocumentSummary | null {
       typeof row.progressDone === 'number' ? row.progressDone : undefined,
     progressTotal:
       typeof row.progressTotal === 'number' ? row.progressTotal : undefined,
+    summarizeStatus: isSummarizeStatus(row.summarizeStatus)
+      ? row.summarizeStatus
+      : row.summarizeStatus === null
+        ? null
+        : undefined,
+    summarizeDone:
+      typeof row.summarizeDone === 'number' ? row.summarizeDone : undefined,
+    summarizeTotal:
+      typeof row.summarizeTotal === 'number' ? row.summarizeTotal : undefined,
+    summarizeError:
+      typeof row.summarizeError === 'string' ? row.summarizeError : undefined,
     ocrLang: typeof row.ocrLang === 'string' ? row.ocrLang : undefined,
     ocrEngine: isOcrEngine(row.ocrEngine) ? row.ocrEngine : undefined,
     createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
@@ -81,6 +93,32 @@ export function loadDocumentChunks(id: string): Promise<DocumentChunk[]> {
   return getJson<unknown>(
     `/api/documents/${encodeURIComponent(id)}/chunks`,
   ).then(mapApiChunks);
+}
+
+export async function loadDocumentSummary(id: string): Promise<string | null> {
+  const data = await getJson<{ summary?: string | null }>(
+    `/api/documents/${encodeURIComponent(id)}/summary`,
+  );
+  const text = data?.summary?.trim();
+  return text || null;
+}
+
+export function startSummarize(id: string): Promise<DocumentSummary | null> {
+  return postJson<unknown>(
+    `/api/documents/${encodeURIComponent(id)}/summarize`,
+  ).then(mapApiDocument);
+}
+
+export function pauseSummarize(id: string): Promise<DocumentSummary | null> {
+  return postJson<unknown>(
+    `/api/documents/${encodeURIComponent(id)}/summarize/pause`,
+  ).then(mapApiDocument);
+}
+
+export function resumeSummarize(id: string): Promise<DocumentSummary | null> {
+  return postJson<unknown>(
+    `/api/documents/${encodeURIComponent(id)}/summarize/resume`,
+  ).then(mapApiDocument);
 }
 
 const ocrLanguagesCache = new Map<string, Promise<OcrLanguageOption[]>>();
