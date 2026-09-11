@@ -13,14 +13,17 @@ import type { ChatCompletePayload, Message } from '@ragpolyglot-shared';
 export function AgentChat({
   conversationId,
   initialMessages,
+  documentIds,
   onTurnComplete,
 }: {
   conversationId: string;
   initialMessages: Message[];
+  documentIds: string[];
   onTurnComplete: () => void;
 }) {
   const { documents } = useDocuments();
-  const hasDocuments = documents.some((d) => d.status === 'ready');
+  const hasDocuments =
+    documentIds.length > 0 || documents.some((d) => d.status === 'ready');
 
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -124,7 +127,11 @@ export function AgentChat({
       { role: 'assistant', text: '' },
     ]);
 
-    emitWebSocket('chat:query', { query, conversationId });
+    emitWebSocket('chat:query', {
+      query,
+      conversationId,
+      ...(documentIds.length > 0 ? { documentIds } : {}),
+    });
   };
 
   if (!hasDocuments && messages.length === 0) {
@@ -174,7 +181,9 @@ export function AgentChat({
           }}
           placeholder={
             hasDocuments
-              ? 'Ask about your documents...'
+              ? documentIds.length > 0
+                ? 'Ask about the selected documents...'
+                : 'Ask about your documents...'
               : 'Upload a ready document to continue this chat'
           }
           disabled={!hasDocuments || loading}

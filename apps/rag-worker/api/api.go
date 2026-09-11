@@ -98,6 +98,12 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	docIDs, err := normalizeDocumentIDs(req.DocumentIDs)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid documentIds"})
+		return
+	}
+
 	topK := ClampTopK(req.TopK, s.defaultTopK)
 
 	vec, err := embedding.EmbedQuery(req.Query, s.allowFallback)
@@ -107,7 +113,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hits, err := s.store.SearchSimilar(r.Context(), vec, topK)
+	hits, err := s.store.SearchSimilar(r.Context(), vec, topK, docIDs)
 	if err != nil {
 		log.Printf("[API] vector search failed: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "search failed"})
@@ -119,6 +125,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	s.store.LogSystem(r.Context(), "vector_search", "", duration, map[string]any{
 		"topK":        topK,
 		"resultCount": len(hits),
+		"scoped":      len(docIDs) > 0,
 	})
 
 	writeJSON(w, http.StatusOK, models.SearchResponse{
@@ -219,6 +226,12 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 		return nil, false
 	}
 
+	docIDs, err := normalizeDocumentIDs(req.DocumentIDs)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid documentIds"})
+		return nil, false
+	}
+
 	topK := ClampTopK(req.TopK, s.defaultTopK)
 
 	vec, err := embedding.EmbedQuery(req.Query, s.allowFallback)
@@ -228,7 +241,7 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 		return nil, false
 	}
 
-	hits, err := s.store.SearchSimilar(ctx, vec, topK)
+	hits, err := s.store.SearchSimilar(ctx, vec, topK, docIDs)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, false

@@ -39,7 +39,7 @@ describe('ragCacheKey', () => {
   it('uses lowercase trimmed query hash, topK, and userId', async () => {
     const { ragCacheKey } = await import('./config');
     const hash = createHash('sha256')
-      .update('hello world|topK=5|documents=0')
+      .update('hello world|topK=5|documents=0|scope=*')
       .digest('hex');
     expect(ragCacheKey('  Hello World  ', 'user-1', 5)).toBe(
       `rag:query:${hash}:user-1`,
@@ -59,5 +59,15 @@ describe('ragCacheKey', () => {
   it('differs by topK', async () => {
     const { ragCacheKey } = await import('./config');
     expect(ragCacheKey('q', 'u', 5)).not.toBe(ragCacheKey('q', 'u', 10));
+  });
+
+  it('differs by document scope', async () => {
+    const { ragCacheKey } = await import('./config');
+    expect(ragCacheKey('q', 'u', 5, 0, ['a'])).not.toBe(
+      ragCacheKey('q', 'u', 5, 0),
+    );
+    expect(ragCacheKey('q', 'u', 5, 0, ['a'])).not.toBe(
+      ragCacheKey('q', 'u', 5, 0, ['b']),
+    );
   });
 });

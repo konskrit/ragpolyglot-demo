@@ -68,8 +68,9 @@ type TextChunk struct {
 }
 
 type SearchRequest struct {
-	Query string `json:"query"`
-	TopK  int    `json:"topK"`
+	Query       string   `json:"query"`
+	TopK        int      `json:"topK"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
 }
 
 type SearchHit struct {
@@ -87,8 +88,9 @@ type SearchResponse struct {
 }
 
 type ChatRequest struct {
-	Query string `json:"query"`
-	TopK  int    `json:"topK"`
+	Query       string   `json:"query"`
+	TopK        int      `json:"topK"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
 }
 
 type ChatResponse struct {

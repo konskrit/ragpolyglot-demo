@@ -1,18 +1,43 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AgentChat } from '../components/AgentChat';
+import { ChatDocumentScope } from '../components/ChatDocumentScope';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { useConversations } from '../hooks/useConversations';
+import { useDocuments } from '../context/DocumentsProvider';
 import type { Message } from '@ragpolyglot-shared';
 
 export function AgentPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const seed = searchParams.get('documentId')?.trim() || '';
+  const { documents } = useDocuments();
   const { conversations, loading, error, refresh, loadMessages, remove } =
     useConversations();
   const [conversationId, setConversationId] = useState<string>(() =>
     crypto.randomUUID(),
   );
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
+  const [documentIds, setDocumentIds] = useState<string[]>(() =>
+    seed ? [seed] : [],
+  );
+  const skipRestoreRef = useRef(Boolean(seed));
   const restoredRef = useRef(false);
   const openSeqRef = useRef(0);
+
+  const readyIds = new Set(
+    documents.filter((d) => d.status === 'ready').map((d) => d.id),
+  );
+  const scopeIds =
+    documentIds.length === 0
+      ? []
+      : documentIds.filter((id) => readyIds.has(id));
+
+  const clearSeedParam = () => {
+    if (!searchParams.has('documentId')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('documentId');
+    setSearchParams(next, { replace: true });
+  };
 
   const openConversation = async (id: string) => {
     const seq = ++openSeqRef.current;
@@ -34,16 +59,26 @@ export function AgentPage() {
   });
 
   useEffect(() => {
-    if (restoredRef.current || loading || !latestId) return;
+    if (skipRestoreRef.current || restoredRef.current || loading || !latestId) {
+      return;
+    }
     restoredRef.current = true;
     restoreLatest(latestId);
   }, [loading, latestId]);
 
+  const setScope = (ids: string[]) => {
+    setDocumentIds(ids);
+    clearSeedParam();
+  };
+
   const startNew = () => {
     openSeqRef.current++;
     restoredRef.current = true;
+    skipRestoreRef.current = true;
     setConversationId(crypto.randomUUID());
     setInitialMessages([]);
+    setDocumentIds([]);
+    clearSeedParam();
   };
 
   const deleteConversation = async (id: string) => {
@@ -64,8 +99,8 @@ export function AgentPage() {
         Ask questions grounded in your uploaded documents.
       </p>
       <p className="text-sm text-gray-500 mb-8">
-        Answers are generated from retrieved document chunks using the
-        configured LLM.
+        Answers use retrieved chunks from the configured LLM. Use the context
+        panel to search all documents or a selected subset.
       </p>
       <div className="flex gap-4 items-stretch">
         <ConversationSidebar
@@ -82,9 +117,15 @@ export function AgentPage() {
             key={conversationId}
             conversationId={conversationId}
             initialMessages={initialMessages}
+            documentIds={scopeIds}
             onTurnComplete={() => void refresh()}
           />
         </div>
+        <ChatDocumentScope
+          documents={documents}
+          selectedIds={scopeIds}
+          onChange={setScope}
+        />
       </div>
     </div>
   );

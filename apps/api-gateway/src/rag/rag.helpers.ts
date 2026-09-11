@@ -6,6 +6,17 @@ export function clampTopK(topK: number): number {
   return topK;
 }
 
+/** Empty/omitted → undefined (all docs). Sorted unique lowercase ids. */
+export function normalizeDocumentIds(
+  ids?: readonly string[] | null,
+): string[] | undefined {
+  if (!ids?.length) return undefined;
+  const out = [
+    ...new Set(ids.map((id) => id.trim().toLowerCase()).filter(Boolean)),
+  ].sort();
+  return out.length > 0 ? out : undefined;
+}
+
 export function toSources(hits: RagSearchHit[]): Source[] {
   return hits.map((h) => ({
     documentId: h.documentId,

@@ -54,8 +54,10 @@ export function ragCacheKey(
   userId = 'anonymous',
   topK?: number,
   documentsVersion = 0,
+  documentIds?: readonly string[],
 ): string {
-  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}|documents=${documentsVersion}`;
+  const scope = documentIds?.length ? documentIds.join(',') : '*';
+  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}|documents=${documentsVersion}|scope=${scope}`;
   const hash = createHash('sha256').update(normalized).digest('hex');
   return `rag:query:${hash}:${userId}`;
 }

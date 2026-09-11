@@ -77,10 +77,15 @@ func (s *Store) CountChunks(ctx context.Context, documentID string) (int64, erro
 	return n, err
 }
 
-func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int) ([]models.SearchHit, error) {
+func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int, documentIDs []string) ([]models.SearchHit, error) {
+	var scope any
+	if len(documentIDs) > 0 {
+		scope = documentIDs
+	}
 	rows, err := s.pool.Query(ctx, ragsql.Must("search_similar.sql"),
 		vectorLiteral(embedding),
 		topK,
+		scope,
 	)
 	if err != nil {
 		return nil, err

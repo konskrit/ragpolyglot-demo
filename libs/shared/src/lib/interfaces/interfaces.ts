@@ -131,6 +131,7 @@ export interface RAGQueryDto {
   query: string;
   topK?: number;
   userId?: string;
+  documentIds?: string[];
 }
 
 export interface RagSearchHit {

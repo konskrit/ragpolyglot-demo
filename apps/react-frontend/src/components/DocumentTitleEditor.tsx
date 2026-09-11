@@ -15,29 +15,31 @@ export function DocumentTitleEditor({
 
   if (!editing) {
     return (
-      <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-2">
         <h1 className="text-2xl font-semibold text-white min-w-0 break-words">
           {doc.title}
         </h1>
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setEditing(true);
-          }}
-          className="text-sm text-indigo-400 hover:text-indigo-300 shrink-0"
-        >
-          Rename
-        </button>
-        <StatusBadge status={doc.status} />
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setEditing(true);
+            }}
+            className="text-sm text-indigo-400 hover:text-indigo-300"
+          >
+            Rename
+          </button>
+          <StatusBadge status={doc.status} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-1 min-w-0 flex-1">
+    <div className="space-y-2 min-w-0 flex-1">
       <form
-        className="flex flex-wrap items-center gap-2 min-w-0"
+        className="space-y-2 min-w-0"
         action={async (formData) => {
           const next = String(formData.get('title') ?? '').trim();
           if (!next) {
@@ -70,15 +72,17 @@ export function DocumentTitleEditor({
             }
           }}
           aria-label="Document title"
-          className="min-w-0 flex-1 max-w-md rounded-lg border border-gray-700 bg-gray-950 px-3 py-1.5 text-2xl font-semibold text-white"
+          className="w-full min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-1.5 text-2xl font-semibold text-white"
         />
-        <TitleFormActions
-          onCancel={() => {
-            setError(null);
-            setEditing(false);
-          }}
-        />
-        <StatusBadge status={doc.status} />
+        <div className="flex flex-wrap items-center gap-3">
+          <TitleFormActions
+            onCancel={() => {
+              setError(null);
+              setEditing(false);
+            }}
+          />
+          <StatusBadge status={doc.status} />
+        </div>
       </form>
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>

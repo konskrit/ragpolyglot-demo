@@ -8,7 +8,7 @@ import {
 import { Config, ragCacheKey, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
 import { RedisService } from '../core/redis.service';
 import { RAGQueryDto, RAGResult, RagSearchHit } from '@ragpolyglot-shared';
-import { clampTopK, toSources } from './rag.helpers';
+import { clampTopK, normalizeDocumentIds, toSources } from './rag.helpers';
 
 const RAG_CHAT_TIMEOUT_MS = 120_000;
 
@@ -38,11 +38,13 @@ export class RagService {
 
     const query = queryDto.query.trim();
     const topK = clampTopK(queryDto.topK ?? Config.defaultTopK);
+    const documentIds = normalizeDocumentIds(queryDto.documentIds);
     const cacheKey = ragCacheKey(
       query,
       queryDto.userId || 'anonymous',
       topK,
       await this.documentsVersion(),
+      documentIds,
     );
 
     const cached = await this.readCache(cacheKey);
@@ -60,7 +62,11 @@ export class RagService {
           'Content-Type': 'application/json',
           Accept: 'application/x-ndjson',
         },
-        body: JSON.stringify({ query, topK }),
+        body: JSON.stringify({
+          query,
+          topK,
+          ...(documentIds ? { documentIds } : {}),
+        }),
         signal: this.withTimeout(signal, RAG_CHAT_TIMEOUT_MS),
       });
 

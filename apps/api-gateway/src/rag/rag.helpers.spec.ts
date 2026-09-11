@@ -1,4 +1,4 @@
-import { clampTopK, toSources } from './rag.helpers';
+import { clampTopK, normalizeDocumentIds, toSources } from './rag.helpers';
 import type { RagSearchHit } from '@ragpolyglot-shared';
 
 describe('clampTopK', () => {
@@ -6,6 +6,20 @@ describe('clampTopK', () => {
     expect(clampTopK(1)).toBe(5);
     expect(clampTopK(7)).toBe(7);
     expect(clampTopK(99)).toBe(10);
+  });
+});
+
+describe('normalizeDocumentIds', () => {
+  it('returns undefined for empty input', () => {
+    expect(normalizeDocumentIds(undefined)).toBeUndefined();
+    expect(normalizeDocumentIds([])).toBeUndefined();
+  });
+
+  it('dedupes, trims, lowercases, and sorts', () => {
+    expect(normalizeDocumentIds([' B ', 'a', 'b', '', 'A'])).toEqual([
+      'a',
+      'b',
+    ]);
   });
 });
 

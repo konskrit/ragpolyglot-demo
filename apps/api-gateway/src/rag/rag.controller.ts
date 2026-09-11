@@ -16,18 +16,29 @@ export class RagController {
         message: { type: 'string' },
         userId: { type: 'string' },
         topK: { type: 'integer', minimum: 1 },
+        documentIds: {
+          type: 'array',
+          items: { type: 'string' },
+        },
       },
       required: ['message'],
     },
   })
   @ApiOkResponse({ type: ChatResponseDto })
   async chat(
-    @Body() body: { message: string; userId?: string; topK?: number },
+    @Body()
+    body: {
+      message: string;
+      userId?: string;
+      topK?: number;
+      documentIds?: string[];
+    },
   ) {
     const ragResult = await this.ragService.search({
       query: body.message,
       topK: body.topK,
       userId: body.userId,
+      documentIds: body.documentIds,
     });
 
     return {

@@ -74,7 +74,12 @@ export class ChatGateway implements OnModuleInit {
   @SubscribeMessage('chat:query')
   async handleChatQuery(
     @MessageBody()
-    data: { query: string; conversationId?: string; userId?: string },
+    data: {
+      query: string;
+      conversationId?: string;
+      userId?: string;
+      documentIds?: string[];
+    },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const query = data.query?.trim();
@@ -89,7 +94,11 @@ export class ChatGateway implements OnModuleInit {
 
     try {
       const ragResult = await this.ragService.streamSearch(
-        { query, userId: data.userId },
+        {
+          query,
+          userId: data.userId,
+          documentIds: data.documentIds,
+        },
         (token) => {
           if (abortController.signal.aborted) return;
           client.emit('chat:token', { token, conversationId });

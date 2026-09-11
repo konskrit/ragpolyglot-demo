@@ -7,6 +7,7 @@ import {
 } from '@ragpolyglot-shared';
 import { DocumentActions } from '../components/DocumentActions';
 import { DocumentTitleEditor } from '../components/DocumentTitleEditor';
+import { ButtonLink } from '../components/Button';
 import { PageSpinner } from '../components/PageSpinner';
 import { useDocuments } from '../context/DocumentsProvider';
 import { loadDocument, loadDocumentChunks } from '../lib/documents';
@@ -143,7 +144,21 @@ function DocumentDetail({ id }: { id: string }) {
               return updated;
             }}
           />
-          <DocumentActions doc={doc} onDeleted={() => navigate('/documents')} />
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {doc.status === 'ready' && (
+              <ButtonLink
+                to={`/agent?documentId=${encodeURIComponent(doc.id)}`}
+                variant="secondary"
+                size="sm"
+              >
+                Ask
+              </ButtonLink>
+            )}
+            <DocumentActions
+              doc={doc}
+              onDeleted={() => navigate('/documents')}
+            />
+          </div>
         </div>
         {doc.createdAt && (
           <p className="text-sm text-gray-500">

@@ -19,8 +19,8 @@ export function ConversationSidebar({
   onDelete: (id: string) => void;
 }) {
   return (
-    <aside className="w-64 shrink-0 flex flex-col bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-      <div className="p-3 border-b border-gray-800">
+    <aside className="w-64 shrink-0 flex flex-col h-150 bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+      <div className="p-3 border-b border-gray-800 shrink-0">
         <Button
           variant="secondary"
           size="sm"
@@ -30,8 +30,10 @@ export function ConversationSidebar({
           New chat
         </Button>
       </div>
-      {error && <p className="px-3 py-2 text-xs text-red-400">{error}</p>}
-      <ul className="flex-1 overflow-y-auto p-2 space-y-1">
+      {error && (
+        <p className="px-3 py-2 text-xs text-red-400 shrink-0">{error}</p>
+      )}
+      <ul className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
         {conversations.length === 0 && !error && (
           <li className="px-2 py-6 text-center text-xs text-gray-500">
             {loading ? 'Loading…' : 'No conversations yet'}
