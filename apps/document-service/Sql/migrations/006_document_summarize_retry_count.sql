@@ -1,0 +1,1 @@
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS summarize_retry_count INT NOT NULL DEFAULT 0;

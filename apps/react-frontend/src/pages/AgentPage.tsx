@@ -24,14 +24,6 @@ export function AgentPage() {
   const restoredRef = useRef(false);
   const openSeqRef = useRef(0);
 
-  const readyIds = new Set(
-    documents.filter((d) => d.status === 'ready').map((d) => d.id),
-  );
-  const scopeIds =
-    documentIds.length === 0
-      ? []
-      : documentIds.filter((id) => readyIds.has(id));
-
   const clearSeedParam = () => {
     if (!searchParams.has('documentId')) return;
     const next = new URLSearchParams(searchParams);
@@ -117,13 +109,13 @@ export function AgentPage() {
             key={conversationId}
             conversationId={conversationId}
             initialMessages={initialMessages}
-            documentIds={scopeIds}
+            documentIds={documentIds}
             onTurnComplete={() => void refresh()}
           />
         </div>
         <ChatDocumentScope
           documents={documents}
-          selectedIds={scopeIds}
+          selectedIds={documentIds}
           onChange={setScope}
         />
       </div>

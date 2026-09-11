@@ -71,6 +71,39 @@ public static class DocumentMaintenanceEndpoints
             retried++;
         }
 
-        return Results.Ok(new { retried });
+        var summarizeCandidates = await repo.ListAutoRetrySummarizeCandidatesAsync(
+            retries,
+            age,
+            batch,
+            cancellationToken);
+        var summarizeRetried = 0;
+
+        foreach (var id in summarizeCandidates)
+        {
+            var doc = await repo.ClaimSummarizeAsync(id, cancellationToken);
+            if (doc is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                await messageBroker.PublishDocumentSummarizeAsync(
+                    id,
+                    reset: false,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to publish document.summarize for {DocumentId}", id);
+                await repo.MarkSummarizeFailedAsync(id, "publish_error", cancellationToken);
+                continue;
+            }
+
+            await repo.CompleteSummarizeRetryAsync(id, cancellationToken);
+            summarizeRetried++;
+        }
+
+        return Results.Ok(new { retried, summarizeRetried });
     }
 }

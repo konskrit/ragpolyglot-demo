@@ -23,6 +23,7 @@ public static class DatabaseInitializer
             "migrations/003_document_ocr_lang.sql",
             "migrations/004_document_paused_status.sql",
             "migrations/005_document_summarize_columns.sql",
+            "migrations/006_document_summarize_retry_count.sql",
         })
         {
             await using var cmd = new NpgsqlCommand(SqlScripts.Load(path), connection);

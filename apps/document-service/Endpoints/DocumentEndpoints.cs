@@ -303,8 +303,7 @@ public static class DocumentEndpoints
             return Results.Conflict(new { error = "Only ready documents can be summarized." });
         }
 
-        // Only wipe checkpoint on a fresh start. Failed jobs resume from the
-        // last saved map/reduce checkpoint (Retry must not throw that away).
+        // Fresh start wipes checkpoint; failed resumes it.
         var reset = existing.SummarizeStatus is null;
         var doc = await repo.ClaimSummarizeAsync(id, cancellationToken);
         if (doc is null)
@@ -317,6 +316,11 @@ public static class DocumentEndpoints
             dto?.MaxContextChars,
             reset: reset,
             cancellationToken: cancellationToken);
+
+        if (string.Equals(existing.SummarizeStatus, "failed", StringComparison.Ordinal))
+        {
+            await repo.CompleteSummarizeRetryAsync(id, cancellationToken);
+        }
 
         return Results.Accepted($"/api/documents/{id}", doc);
     }

@@ -127,13 +127,28 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         CancellationToken cancellationToken = default) =>
         ExecuteAsync("documents/fail_stale.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("minutes", minutes));
 
-    public async Task<IReadOnlyList<Guid>> ListAutoRetryCandidatesAsync(
+    public Task<IReadOnlyList<Guid>> ListAutoRetryCandidatesAsync(
         int maxRetries,
         int minAgeMinutes,
         int limit,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ListIdsAsync("documents/list_auto_retry.sql", maxRetries, minAgeMinutes, limit, cancellationToken);
+
+    public Task<IReadOnlyList<Guid>> ListAutoRetrySummarizeCandidatesAsync(
+        int maxRetries,
+        int minAgeMinutes,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        ListIdsAsync("documents/list_auto_retry_summarize.sql", maxRetries, minAgeMinutes, limit, cancellationToken);
+
+    private async Task<IReadOnlyList<Guid>> ListIdsAsync(
+        string sql,
+        int maxRetries,
+        int minAgeMinutes,
+        int limit,
+        CancellationToken cancellationToken)
     {
-        await using var cmd = await CommandAsync("documents/list_auto_retry.sql", cancellationToken);
+        await using var cmd = await CommandAsync(sql, cancellationToken);
         cmd.Parameters.AddWithValue("maxRetries", maxRetries);
         cmd.Parameters.AddWithValue("minAgeMinutes", minAgeMinutes);
         cmd.Parameters.AddWithValue("limit", limit);
@@ -171,6 +186,9 @@ public sealed class DocumentRepository(NpgsqlConnection db)
 
     public Task<Document?> CompleteRetryAsync(Guid id, CancellationToken cancellationToken = default) =>
         QueryDocumentAsync("documents/complete_retry.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
+
+    public async Task CompleteSummarizeRetryAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await ExecuteAsync("documents/complete_summarize_retry.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
 
     public Task<Document?> ClaimSummarizeAsync(Guid id, CancellationToken cancellationToken = default) =>
         QueryDocumentAsync("documents/claim_summarize.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
