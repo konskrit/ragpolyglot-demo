@@ -47,6 +47,7 @@ export class MetricsService {
       }>(loadSql('query-series.sql')),
       this.postgres.query<{
         processed: string;
+        avg_extraction: string | null;
         avg_chunking: string | null;
         avg_embedding: string | null;
       }>(loadSql('ingest-summary.sql')),
@@ -101,6 +102,8 @@ export class MetricsService {
       ingest: {
         processed24h: Number(ing?.processed) || 0,
         failed24h: Number(failures[0]?.count) || 0,
+        avgExtractionMs:
+          ing?.avg_extraction == null ? null : Number(ing.avg_extraction),
         avgChunkingMs:
           ing?.avg_chunking == null ? null : Number(ing.avg_chunking),
         avgEmbeddingMs:

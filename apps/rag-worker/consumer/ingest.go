@@ -109,7 +109,6 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		FilePath:    event.FilePath,
 	}
 	embedDone := 0
-	chunkingStart := time.Now()
 
 	if cp != nil && cp.Stage == "embedding" {
 		job = *cp
@@ -121,21 +120,28 @@ func (p *Processor) ingest(msg amqp.Delivery, event models.DocumentUploadedEvent
 		p.publishProgress(event.DocumentID, "embedding", embedDone, 0)
 		acker.ack()
 		if err := p.withFastIngestSlot(stopIngest, func() {
-			p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
+			p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, nil)
 		}); err != nil {
 			pause()
 		}
 		return
 	}
 
-	if !p.runExtract(ctx, acker, event, gen, &job, cp, stopIngest, fail, pause) {
+	extraction, ok := p.runExtract(ctx, acker, event, gen, &job, cp, stopIngest, fail, pause)
+	if !ok {
 		return
+	}
+
+	// A resumed run only extracted the remaining pages, so it is left out of the metric.
+	var extracted *time.Duration
+	if cp == nil {
+		extracted = &extraction
 	}
 
 	embedDone = syncEmbedDoneFromChunks(ctx, p.store, event.DocumentID, embedDone)
 
 	if err := p.withFastIngestSlot(stopIngest, func() {
-		p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, chunkingStart)
+		p.runEmbedPhase(ctx, acker, event, gen, &job, embedDone, start, extracted)
 	}); err != nil {
 		pause()
 	}

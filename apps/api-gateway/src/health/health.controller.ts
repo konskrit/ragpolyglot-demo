@@ -5,6 +5,7 @@ import { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { RabbitMQService } from '../core/rabbitmq.service';
 import { RedisService } from '../core/redis.service';
+import { PostgresService } from '../core/postgres.service';
 import { Config } from '../core/config';
 import { HealthResponseDto } from '../core/openapi-schemas';
 
@@ -15,6 +16,7 @@ export class HealthController {
     private readonly httpService: HttpService,
     private readonly rabbitMQ: RabbitMQService,
     private readonly redis: RedisService,
+    private readonly postgres: PostgresService,
   ) {}
 
   @Get()
@@ -34,6 +36,7 @@ export class HealthController {
       event_processor,
       redis: this.redis.isReady() ? 'ok' : 'error',
       rabbitmq: this.rabbitMQ.isConnected() ? 'ok' : 'error',
+      postgres: this.postgres.isReady() ? 'ok' : 'error',
     };
 
     const healthy =

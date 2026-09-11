@@ -43,3 +43,10 @@ func TestFetchQueueDepths(t *testing.T) {
 		t.Fatal("unexpected queue included")
 	}
 }
+
+func TestFetchQueueDepths_unavailable(t *testing.T) {
+	runner := &Runner{}
+	if depths := runner.fetchQueueDepths(context.Background()); depths != nil {
+		t.Fatalf("expected nil when unconfigured, got %#v", depths)
+	}
+}

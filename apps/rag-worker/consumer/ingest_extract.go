@@ -27,12 +27,13 @@ func (p *Processor) runExtract(
 	stopIngest func() bool,
 	fail func(string, error),
 	pause func(),
-) bool {
+) (time.Duration, bool) {
 	// Release the fast slot when OCR starts so Kraken does not block pdftotext.
 	if err := waitChanSlot(p.fastIngestSem, stopIngest); err != nil {
 		pause()
-		return false
+		return 0, false
 	}
+	extractStart := time.Now()
 	var releaseFastOnce sync.Once
 	releaseFast := func() {
 		releaseFastOnce.Do(func() { <-p.fastIngestSem })
@@ -65,6 +66,8 @@ func (p *Processor) runExtract(
 				if ocrStartErr != nil {
 					return
 				}
+				// Restart the clock here so the wait for an OCR slot is not billed as extraction.
+				extractStart = time.Now()
 				acker.ack()
 				p.publishProgress(event.DocumentID, "extracting", job.OcrPageDone, job.OcrTotal)
 			})
@@ -83,7 +86,7 @@ func (p *Processor) runExtract(
 		job.Stage = "ocr"
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 			fail("storage_error", err)
-			return false
+			return 0, false
 		}
 	}
 
@@ -112,7 +115,7 @@ func (p *Processor) runExtract(
 	for {
 		if stopIngest() {
 			pause()
-			return false
+			return 0, false
 		}
 		state.StartPage = job.OcrPageDone + 1
 		state.PriorText = job.PartialText
@@ -127,11 +130,11 @@ func (p *Processor) runExtract(
 			if !acker.settled() {
 				acker.ack()
 			}
-			return true
+			return time.Since(extractStart), true
 		}
 		if errors.Is(extractErr, extractor.ErrPaused) {
 			if p.ackIfStale(acker, event.DocumentID, gen) {
-				return false
+				return 0, false
 			}
 			if text != "" {
 				job.PartialText = text
@@ -142,14 +145,14 @@ func (p *Processor) runExtract(
 			}
 			if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 				fail("storage_error", err)
-				return false
+				return 0, false
 			}
 			pause()
-			return false
+			return 0, false
 		}
 		if errors.Is(extractErr, extractor.ErrOcrLanguageNeeded) {
 			fail(extractor.ErrOcrLanguageNeeded.Error(), extractErr)
-			return false
+			return 0, false
 		}
 		if text != "" {
 			job.PartialText = text
@@ -159,7 +162,7 @@ func (p *Processor) runExtract(
 		}
 		if !extractor.IsTransientOCRAbort(extractErr) {
 			fail("chunking_error", extractErr)
-			return false
+			return 0, false
 		}
 
 		if job.OcrPageDone > lastDone {
@@ -169,7 +172,7 @@ func (p *Processor) runExtract(
 		streak++
 		if streak >= ocrAbortRetries {
 			fail("ocr_aborted", extractErr)
-			return false
+			return 0, false
 		}
 		log.Printf(
 			"[Consumer] OCR abort documentId=%s streak=%d/%d: %v; retrying from page %d",
@@ -177,7 +180,7 @@ func (p *Processor) runExtract(
 		)
 		if err := p.store.UpsertCheckpoint(ctx, *job); err != nil {
 			fail("storage_error", err)
-			return false
+			return 0, false
 		}
 		time.Sleep(time.Duration(streak) * ocrAbortBackoff)
 	}

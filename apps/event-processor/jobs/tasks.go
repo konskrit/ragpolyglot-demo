@@ -112,7 +112,9 @@ func (r *Runner) snapshotRedisStats(ctx context.Context) (map[string]any, error)
 	if peak, ok := infoInt(info, "used_memory_peak"); ok {
 		stats["usedMemoryPeakBytes"] = peak
 	}
-	stats["queues"] = normalizeQueueDepths(r.fetchQueueDepths(ctx))
+	if depths := r.fetchQueueDepths(ctx); depths != nil {
+		stats["queues"] = normalizeQueueDepths(depths)
+	}
 
 	r.store.LogSystem(ctx, "redis.stats", 0, stats)
 	return stats, nil

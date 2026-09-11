@@ -154,6 +154,9 @@ export class HealthResponseDto {
   @ApiProperty({ enum: ['ok', 'error'] })
   rabbitmq!: string;
 
+  @ApiProperty({ enum: ['ok', 'error'] })
+  postgres!: string;
+
   @ApiProperty()
   uptime!: number;
 }
@@ -180,6 +183,7 @@ class MetricsQueriesDto {
 class MetricsIngestDto {
   @ApiProperty() processed24h!: number;
   @ApiProperty() failed24h!: number;
+  @ApiPropertyOptional({ nullable: true }) avgExtractionMs!: number | null;
   @ApiPropertyOptional({ nullable: true }) avgChunkingMs!: number | null;
   @ApiPropertyOptional({ nullable: true }) avgEmbeddingMs!: number | null;
 }

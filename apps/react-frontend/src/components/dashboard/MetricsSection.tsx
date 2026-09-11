@@ -18,7 +18,7 @@ export function MetricsSection({
         <>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <MetricCard
-              label="Cache hit rate"
+              label="Cache hit rate (all time)"
               value={
                 metrics.cache.hitRate == null
                   ? '—'
@@ -60,6 +60,7 @@ export function MetricsSection({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <LatencyChart series={metrics.queries.series} />
             <IngestTiming
+              extractionMs={metrics.ingest.avgExtractionMs}
               chunkingMs={metrics.ingest.avgChunkingMs}
               embeddingMs={metrics.ingest.avgEmbeddingMs}
             />
@@ -134,13 +135,16 @@ function LatencyChart({
 }
 
 function IngestTiming({
+  extractionMs,
   chunkingMs,
   embeddingMs,
 }: {
+  extractionMs: number | null;
   chunkingMs: number | null;
   embeddingMs: number | null;
 }) {
   const rows = [
+    { label: 'Extraction', ms: extractionMs },
     { label: 'Chunking', ms: chunkingMs },
     { label: 'Embedding', ms: embeddingMs },
   ];

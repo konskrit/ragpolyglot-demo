@@ -183,6 +183,7 @@ export interface SystemHealth {
   event_processor: string;
   redis: string;
   rabbitmq: string;
+  postgres: string;
 }
 
 export interface MetricsSnapshot {
@@ -199,6 +200,7 @@ export interface MetricsSnapshot {
   ingest: {
     processed24h: number;
     failed24h: number;
+    avgExtractionMs: number | null;
     avgChunkingMs: number | null;
     avgEmbeddingMs: number | null;
   };

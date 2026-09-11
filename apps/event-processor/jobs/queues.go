@@ -27,10 +27,11 @@ type managementQueue struct {
 	Messages int    `json:"messages"`
 }
 
+// Returns nil when depths are unreadable, so a broker outage is not reported as
+// a set of empty queues.
 func (r *Runner) fetchQueueDepths(ctx context.Context) map[string]int {
-	depths := make(map[string]int, len(queueLabels))
 	if strings.TrimSpace(r.rabbitMQManagementURL) == "" {
-		return depths
+		return nil
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -40,29 +41,30 @@ func (r *Runner) fetchQueueDepths(ctx context.Context) map[string]int {
 		nil,
 	)
 	if err != nil {
-		return depths
+		return nil
 	}
 
 	res, err := r.httpClient.Do(req)
 	if err != nil {
-		return depths
+		return nil
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return depths
+		return nil
 	}
 
 	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
-		return depths
+		return nil
 	}
 
 	var queues []managementQueue
 	if err := json.Unmarshal(body, &queues); err != nil {
-		return depths
+		return nil
 	}
 
+	depths := make(map[string]int, len(queueLabels))
 	for _, queue := range queues {
 		if _, ok := queueLabels[queue.Name]; ok {
 			depths[queue.Name] = queue.Messages

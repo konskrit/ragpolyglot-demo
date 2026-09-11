@@ -23,7 +23,7 @@ func (p *Processor) runEmbedPhase(
 	job *storage.IngestCheckpoint,
 	embedDone int,
 	start time.Time,
-	chunkingStart time.Time,
+	extraction *time.Duration,
 ) {
 	stopIngest := func() bool { return p.shouldStopIngest(event.DocumentID, gen) }
 	pause := func() {
@@ -49,6 +49,7 @@ func (p *Processor) runEmbedPhase(
 
 	embedDone = syncEmbedDoneFromChunks(ctx, p.store, event.DocumentID, embedDone)
 
+	chunkingStart := time.Now()
 	textChunks := chunker.ChunkText(job.PartialText)
 	if len(textChunks) == 0 {
 		fail("chunking_error", fmt.Errorf("chunker produced zero chunks"))
@@ -182,11 +183,15 @@ func (p *Processor) runEmbedPhase(
 	}
 
 	total := time.Since(start)
-	p.store.LogSystem(ctx, "document.processed", event.DocumentID, total, map[string]any{
+	meta := map[string]any{
 		"chunkCount":          totalChunks,
 		"chunkingDurationMs":  chunkingDuration.Milliseconds(),
 		"embeddingDurationMs": embeddingDuration.Milliseconds(),
-	})
+	}
+	if extraction != nil {
+		meta["extractionDurationMs"] = extraction.Milliseconds()
+	}
+	p.store.LogSystem(ctx, "document.processed", event.DocumentID, total, meta)
 
 	acker.ack()
 	log.Printf("[Consumer] document %s processed chunks=%d duration=%s", event.DocumentID, totalChunks, total)
