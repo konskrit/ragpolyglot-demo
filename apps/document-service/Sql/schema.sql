@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS documents (
     progress_done INT,
     progress_total INT,
     ocr_lang TEXT,
+    summarize_status TEXT,
+    summarize_done INT,
+    summarize_total INT,
+    summarize_error TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

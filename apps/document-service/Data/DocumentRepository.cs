@@ -48,6 +48,22 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         return chunks;
     }
 
+    public async Task<string?> GetSummaryAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        await using var cmd = await CommandAsync("chunks/get_summary.sql", cancellationToken);
+        cmd.Parameters.AddWithValue("id", documentId);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        if (result is not string content) return null;
+
+        const string prefix = "[Document summary]\n";
+        var trimmed = content.Trim();
+        if (trimmed.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            trimmed = trimmed[prefix.Length..].Trim();
+        }
+        return trimmed.Length == 0 ? null : trimmed;
+    }
+
     public Task<Document?> CreateAsync(string title, string filePath, CancellationToken cancellationToken = default) =>
         QueryDocumentAsync("documents/create.sql", cancellationToken, cmd =>
         {
@@ -156,6 +172,37 @@ public sealed class DocumentRepository(NpgsqlConnection db)
     public Task<Document?> CompleteRetryAsync(Guid id, CancellationToken cancellationToken = default) =>
         QueryDocumentAsync("documents/complete_retry.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
 
+    public Task<Document?> ClaimSummarizeAsync(Guid id, CancellationToken cancellationToken = default) =>
+        QueryDocumentAsync("documents/claim_summarize.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
+
+    public Task<Document?> ClaimSummarizeResumeAsync(Guid id, CancellationToken cancellationToken = default) =>
+        QueryDocumentAsync("documents/claim_summarize_resume.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
+
+    public async Task<bool> MarkSummarizePausedAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await ExecuteAsync("documents/mark_summarize_paused.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id)) > 0;
+
+    public async Task ClearSummarizeAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await ExecuteAsync("documents/clear_summarize.sql", cancellationToken, cmd => cmd.Parameters.AddWithValue("id", id));
+
+    public async Task MarkSummarizeFailedAsync(Guid id, string errorReason, CancellationToken cancellationToken = default) =>
+        await ExecuteAsync("documents/mark_summarize_failed.sql", cancellationToken, cmd =>
+        {
+            cmd.Parameters.AddWithValue("id", id);
+            cmd.Parameters.AddWithValue("errorReason", errorReason);
+        });
+
+    public async Task UpdateSummarizeProgressAsync(
+        Guid id,
+        int done,
+        int total,
+        CancellationToken cancellationToken = default) =>
+        await ExecuteAsync("documents/update_summarize_progress.sql", cancellationToken, cmd =>
+        {
+            cmd.Parameters.AddWithValue("id", id);
+            cmd.Parameters.AddWithValue("done", done);
+            cmd.Parameters.AddWithValue("total", total);
+        });
+
     public async Task PingAsync(CancellationToken cancellationToken = default)
     {
         await using var cmd = await CommandAsync("health/ping.sql", cancellationToken);
@@ -235,7 +282,11 @@ public sealed class DocumentRepository(NpgsqlConnection db)
         ProgressDone = reader.IsDBNull(8) ? null : reader.GetInt32(8),
         ProgressTotal = reader.IsDBNull(9) ? null : reader.GetInt32(9),
         OcrLang = reader.IsDBNull(10) ? null : reader.GetString(10),
-        CreatedAt = reader.GetDateTime(11),
-        UpdatedAt = reader.GetDateTime(12)
+        SummarizeStatus = reader.IsDBNull(11) ? null : reader.GetString(11),
+        SummarizeDone = reader.IsDBNull(12) ? null : reader.GetInt32(12),
+        SummarizeTotal = reader.IsDBNull(13) ? null : reader.GetInt32(13),
+        SummarizeError = reader.IsDBNull(14) ? null : reader.GetString(14),
+        CreatedAt = reader.GetDateTime(15),
+        UpdatedAt = reader.GetDateTime(16)
     };
 }

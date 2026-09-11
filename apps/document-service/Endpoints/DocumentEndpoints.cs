@@ -13,12 +13,16 @@ public static class DocumentEndpoints
         app.MapGet("/api/documents", ListDocuments);
         app.MapGet("/api/documents/{id:guid}", GetDocumentById);
         app.MapGet("/api/documents/{id:guid}/chunks", GetDocumentChunks);
+        app.MapGet("/api/documents/{id:guid}/summary", GetDocumentSummary);
         app.MapPost("/api/documents", CreateDocument);
         app.MapPost("/api/documents/{id:guid}/retry", RetryDocument);
         app.MapPost("/api/documents/{id:guid}/ocr-lang", SetOcrLang);
         app.MapPost("/api/documents/{id:guid}/pause", PauseDocument);
         app.MapPost("/api/documents/{id:guid}/resume", ResumeDocument);
         app.MapPost("/api/documents/{id:guid}/rename", RenameDocument);
+        app.MapPost("/api/documents/{id:guid}/summarize", StartSummarize);
+        app.MapPost("/api/documents/{id:guid}/summarize/pause", PauseSummarize);
+        app.MapPost("/api/documents/{id:guid}/summarize/resume", ResumeSummarize);
         app.MapDelete("/api/documents/{id:guid}", DeleteDocument);
         app.MapDocumentMaintenanceEndpoints();
     }
@@ -39,6 +43,12 @@ public static class DocumentEndpoints
     {
         var chunks = await repo.ListChunksAsync(id, cancellationToken);
         return Results.Ok(chunks);
+    }
+
+    private static async Task<IResult> GetDocumentSummary(Guid id, DocumentRepository repo, CancellationToken cancellationToken)
+    {
+        var content = await repo.GetSummaryAsync(id, cancellationToken);
+        return Results.Ok(new { summary = content });
     }
 
     private static async Task<IResult> CreateDocument(
@@ -271,6 +281,95 @@ public static class DocumentEndpoints
                 ? Results.NotFound(new { error = "Document not found" })
                 : Results.Conflict(new { error = DocumentTitles.DuplicateMessage });
         }
+
+        return Results.Ok(doc);
+    }
+
+    private static async Task<IResult> StartSummarize(
+        Guid id,
+        DocumentSummarizeDto? dto,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        CancellationToken cancellationToken)
+    {
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        if (existing.Status is not DocumentStatus.Ready)
+        {
+            return Results.Conflict(new { error = "Only ready documents can be summarized." });
+        }
+
+        // Only wipe checkpoint on a fresh start. Failed jobs resume from the
+        // last saved map/reduce checkpoint (Retry must not throw that away).
+        var reset = existing.SummarizeStatus is null;
+        var doc = await repo.ClaimSummarizeAsync(id, cancellationToken);
+        if (doc is null)
+        {
+            return Results.Conflict(new { error = "Summarize is already running or paused." });
+        }
+
+        await messageBroker.PublishDocumentSummarizeAsync(
+            id,
+            dto?.MaxContextChars,
+            reset: reset,
+            cancellationToken: cancellationToken);
+
+        return Results.Accepted($"/api/documents/{id}", doc);
+    }
+
+    private static async Task<IResult> PauseSummarize(
+        Guid id,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        CancellationToken cancellationToken)
+    {
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        if (!string.Equals(existing.SummarizeStatus, "running", StringComparison.Ordinal))
+        {
+            return Results.Conflict(new { error = "Only a running summarize job can be paused." });
+        }
+
+        if (!await repo.MarkSummarizePausedAsync(id, cancellationToken))
+        {
+            return Results.Conflict(new { error = "Only a running summarize job can be paused." });
+        }
+
+        await messageBroker.PublishDocumentSummarizePauseAsync(id, cancellationToken);
+        var paused = await repo.GetByIdAsync(id, cancellationToken);
+        return Results.Ok(paused ?? existing with { SummarizeStatus = "paused" });
+    }
+
+    private static async Task<IResult> ResumeSummarize(
+        Guid id,
+        DocumentRepository repo,
+        MessageBroker messageBroker,
+        CancellationToken cancellationToken)
+    {
+        var existing = await repo.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return Results.NotFound(new { error = "Document not found" });
+        }
+
+        var doc = await repo.ClaimSummarizeResumeAsync(id, cancellationToken);
+        if (doc is null)
+        {
+            return Results.Conflict(new { error = "Only a paused summarize job can be resumed." });
+        }
+
+        await messageBroker.PublishDocumentSummarizeAsync(
+            id,
+            reset: false,
+            cancellationToken: cancellationToken);
 
         return Results.Ok(doc);
     }

@@ -18,6 +18,12 @@ public sealed partial class MessageBroker(
     public const string FailedQueue = "document.failed.queue";
     public const string PausedQueue = "document.paused.queue";
     public const string ProgressQueue = "document.progress.queue";
+    public const string SummarizeQueue = "document.summarize.queue";
+    public const string SummarizePauseQueue = "document.summarize.pause.queue";
+    public const string SummarizeProgressQueue = "document.summarize.progress.queue";
+    public const string SummarizeCompletedQueue = "document.summarize.completed.queue";
+    public const string SummarizeFailedQueue = "document.summarize.failed.queue";
+    public const string SummarizePausedQueue = "document.summarize.paused.queue";
 
     private static readonly (string Queue, string RoutingKey)[] Topology =
     [
@@ -28,6 +34,12 @@ public sealed partial class MessageBroker(
         (FailedQueue, "document.failed"),
         (PausedQueue, "document.paused"),
         (ProgressQueue, "document.progress"),
+        (SummarizeQueue, "document.summarize"),
+        (SummarizePauseQueue, "document.summarize.pause"),
+        (SummarizeProgressQueue, "document.summarize.progress"),
+        (SummarizeCompletedQueue, "document.summarize.completed"),
+        (SummarizeFailedQueue, "document.summarize.failed"),
+        (SummarizePausedQueue, "document.summarize.paused"),
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -45,6 +57,7 @@ public sealed partial class MessageBroker(
     private IChannel? _failedChannel;
     private IChannel? _pausedChannel;
     private IChannel? _progressChannel;
+    private IChannel? _summarizeStatusChannel;
     private bool _initialized;
 
     public bool IsConnected => _connection is { IsOpen: true };
@@ -163,11 +176,43 @@ public sealed partial class MessageBroker(
         return SendMessageAsync("document.pause", message, cancellationToken);
     }
 
+    public Task PublishDocumentSummarizeAsync(
+        Guid documentId,
+        int? maxContextChars = null,
+        bool reset = false,
+        CancellationToken cancellationToken = default)
+    {
+        var message = new DocumentSummarizeEvent
+        {
+            DocumentId = documentId,
+            MaxContextChars = maxContextChars,
+            Reset = reset,
+            Timestamp = DateTime.UtcNow
+        };
+
+        return SendMessageAsync("document.summarize", message, cancellationToken);
+    }
+
+    public Task PublishDocumentSummarizePauseAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var message = new DocumentSummarizePauseEvent
+        {
+            DocumentId = documentId,
+            Timestamp = DateTime.UtcNow
+        };
+
+        return SendMessageAsync("document.summarize.pause", message, cancellationToken);
+    }
+
     public async Task StartConsumingAsync(
         Func<DocumentProcessedEvent, Task> onProcessed,
         Func<DocumentFailedEvent, Task> onFailed,
         Func<DocumentPausedEvent, Task> onPaused,
         Func<DocumentProgressEvent, Task> onProgress,
+        Func<DocumentSummarizeProgressEvent, Task> onSummarizeProgress,
+        Func<DocumentSummarizeCompletedEvent, Task> onSummarizeCompleted,
+        Func<DocumentSummarizeFailedEvent, Task> onSummarizeFailed,
+        Func<DocumentSummarizePausedEvent, Task> onSummarizePaused,
         Func<string, Exception, byte[]?, Task> onInvalidPayload,
         CancellationToken cancellationToken = default)
     {
@@ -202,10 +247,17 @@ public sealed partial class MessageBroker(
             _progressChannel = null;
         }
 
+        if (_summarizeStatusChannel is not null)
+        {
+            await _summarizeStatusChannel.DisposeAsync();
+            _summarizeStatusChannel = null;
+        }
+
         _processedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _failedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _pausedChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
         _progressChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
+        _summarizeStatusChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
         await BindConsumerAsync(
             _processedChannel,
@@ -236,6 +288,38 @@ public sealed partial class MessageBroker(
             ProgressQueue,
             "document.progress",
             onProgress,
+            onInvalidPayload,
+            cancellationToken);
+
+        await BindConsumerAsync(
+            _summarizeStatusChannel,
+            SummarizeProgressQueue,
+            "document.summarize.progress",
+            onSummarizeProgress,
+            onInvalidPayload,
+            cancellationToken);
+
+        await BindConsumerAsync(
+            _summarizeStatusChannel,
+            SummarizeCompletedQueue,
+            "document.summarize.completed",
+            onSummarizeCompleted,
+            onInvalidPayload,
+            cancellationToken);
+
+        await BindConsumerAsync(
+            _summarizeStatusChannel,
+            SummarizeFailedQueue,
+            "document.summarize.failed",
+            onSummarizeFailed,
+            onInvalidPayload,
+            cancellationToken);
+
+        await BindConsumerAsync(
+            _summarizeStatusChannel,
+            SummarizePausedQueue,
+            "document.summarize.paused",
+            onSummarizePaused,
             onInvalidPayload,
             cancellationToken);
 
@@ -370,6 +454,11 @@ public sealed partial class MessageBroker(
         if (_progressChannel is not null)
         {
             await _progressChannel.DisposeAsync();
+        }
+
+        if (_summarizeStatusChannel is not null)
+        {
+            await _summarizeStatusChannel.DisposeAsync();
         }
 
         if (_publishingChannel is not null)

@@ -21,6 +21,10 @@ public sealed partial class EventConsumerBackgroundService(
                 onFailed: HandleDocumentFailedAsync,
                 onPaused: HandleDocumentPausedAsync,
                 onProgress: HandleDocumentProgressAsync,
+                onSummarizeProgress: HandleSummarizeProgressAsync,
+                onSummarizeCompleted: HandleSummarizeCompletedAsync,
+                onSummarizeFailed: HandleSummarizeFailedAsync,
+                onSummarizePaused: HandleSummarizePausedAsync,
                 onInvalidPayload: LogInvalidAsync,
                 cancellationToken: stoppingToken);
 
@@ -108,6 +112,54 @@ public sealed partial class EventConsumerBackgroundService(
         await using var scope = scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
         await repo.UpdateProgressAsync(evt.DocumentId, evt.Stage, evt.Done, evt.Total);
+    }
+
+    private async Task HandleSummarizeProgressAsync(DocumentSummarizeProgressEvent evt)
+    {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        await repo.UpdateSummarizeProgressAsync(evt.DocumentId, evt.Done, evt.Total);
+    }
+
+    private async Task HandleSummarizeCompletedAsync(DocumentSummarizeCompletedEvent evt)
+    {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        await repo.ClearSummarizeAsync(evt.DocumentId);
+    }
+
+    private async Task HandleSummarizeFailedAsync(DocumentSummarizeFailedEvent evt)
+    {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        await repo.MarkSummarizeFailedAsync(evt.DocumentId, evt.ErrorReason);
+    }
+
+    private async Task HandleSummarizePausedAsync(DocumentSummarizePausedEvent evt)
+    {
+        if (evt.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException("missing documentId");
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
+        await repo.MarkSummarizePausedAsync(evt.DocumentId);
     }
 
     private async Task LogInvalidAsync(string queue, Exception ex, byte[]? body)

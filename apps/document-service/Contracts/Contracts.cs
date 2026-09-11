@@ -13,6 +13,10 @@ public record Document
     public int? ProgressDone { get; init; }
     public int? ProgressTotal { get; init; }
     public string? OcrLang { get; init; }
+    public string? SummarizeStatus { get; init; }
+    public int? SummarizeDone { get; init; }
+    public int? SummarizeTotal { get; init; }
+    public string? SummarizeError { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
@@ -88,6 +92,53 @@ public record DocumentProgressEvent
     public DateTime Timestamp { get; init; }
 }
 
+public record DocumentSummarizeEvent
+{
+    public string Type => "document.summarize";
+    public Guid DocumentId { get; init; }
+    public int? MaxContextChars { get; init; }
+    public bool Reset { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentSummarizePauseEvent
+{
+    public string Type => "document.summarize.pause";
+    public Guid DocumentId { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentSummarizeProgressEvent
+{
+    public string Type => "document.summarize.progress";
+    public Guid DocumentId { get; init; }
+    public int Done { get; init; }
+    public int Total { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentSummarizeCompletedEvent
+{
+    public string Type => "document.summarize.completed";
+    public Guid DocumentId { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentSummarizeFailedEvent
+{
+    public string Type => "document.summarize.failed";
+    public Guid DocumentId { get; init; }
+    public string ErrorReason { get; init; } = string.Empty;
+    public DateTime Timestamp { get; init; }
+}
+
+public record DocumentSummarizePausedEvent
+{
+    public string Type => "document.summarize.paused";
+    public Guid DocumentId { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
 public record DocumentDeletedEvent
 {
     public string Type => "document.deleted";
@@ -100,3 +151,5 @@ public record DocumentCreateDto(string Title, string FilePath);
 public record DocumentRetryDto(string? OcrLang = null);
 
 public record DocumentRenameDto(string Title);
+
+public record DocumentSummarizeDto(int? MaxContextChars = null);
