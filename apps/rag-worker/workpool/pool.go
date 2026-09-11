@@ -2,6 +2,7 @@ package workpool
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -63,6 +64,10 @@ func (p *Pool) RunWhile(mem int64, stop func() bool, fn func() error) error {
 	}
 	if mem <= 0 {
 		mem = 1
+	}
+	if mem > p.memBudget {
+		return fmt.Errorf("task needs %dMB but the pool budget is %dMB; raise WORK_MEMORY_BUDGET_MB",
+			mem/(1024*1024), p.memBudget/(1024*1024))
 	}
 
 	p.mu.Lock()

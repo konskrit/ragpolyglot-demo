@@ -56,6 +56,8 @@ public static class DocumentEndpoints
         var doc = await repo.CreateAsync(dto.Title.Trim(), dto.FilePath.Trim(), cancellationToken);
         var logger = loggerFactory.CreateLogger("DocumentEndpoints");
 
+        await repo.MarkProcessingAsync(doc.Id, cancellationToken);
+
         if (!await PublishUploadedOrMarkFailedAsync(doc, repo, messageBroker, logger, cancellationToken))
         {
             return Results.Problem(
@@ -63,7 +65,6 @@ public static class DocumentEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        await repo.MarkProcessingAsync(doc.Id, cancellationToken);
         doc = await repo.GetByIdAsync(doc.Id, cancellationToken) ?? doc;
 
         return Results.Created($"/api/documents/{doc.Id}", doc);

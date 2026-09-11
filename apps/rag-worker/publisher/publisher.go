@@ -3,6 +3,7 @@ package publisher
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -13,16 +14,77 @@ import (
 )
 
 type Publisher struct {
-	ch *amqp.Channel
-	mu sync.Mutex
+	url  string
+	mu   sync.Mutex
+	conn *amqp.Connection
+	ch   *amqp.Channel
 }
 
-func New(ch *amqp.Channel) *Publisher {
-	return &Publisher{ch: ch}
+// New blocks until RabbitMQ accepts the first connection, like the rest of the
+// worker's startup. Later drops are re-dialled on the next publish.
+func New(url string) *Publisher {
+	p := &Publisher{url: url, conn: rmq.Connect(url)}
+	if err := p.openChannel(); err != nil {
+		log.Printf("[Publisher] channel setup failed: %v", err)
+		p.drop()
+	}
+	return p
 }
 
 func (p *Publisher) Connected() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.ch != nil && !p.ch.IsClosed()
+}
+
+func (p *Publisher) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.drop()
+}
+
+// liveChannel re-dials once if the current channel is gone. Caller holds mu.
+func (p *Publisher) liveChannel() (*amqp.Channel, error) {
+	if p.ch != nil && !p.ch.IsClosed() {
+		return p.ch, nil
+	}
+	p.drop()
+
+	conn, err := amqp.Dial(p.url)
+	if err != nil {
+		return nil, err
+	}
+	p.conn = conn
+	if err := p.openChannel(); err != nil {
+		p.drop()
+		return nil, err
+	}
+	log.Printf("[Publisher] reconnected")
+	return p.ch, nil
+}
+
+func (p *Publisher) openChannel() error {
+	ch, err := rmq.OpenChannel(p.conn)
+	if err != nil {
+		return err
+	}
+	if err := rmq.SetupTopology(ch); err != nil {
+		_ = ch.Close()
+		return err
+	}
+	p.ch = ch
+	return nil
+}
+
+func (p *Publisher) drop() {
+	if p.ch != nil {
+		_ = p.ch.Close()
+		p.ch = nil
+	}
+	if p.conn != nil {
+		_ = p.conn.Close()
+		p.conn = nil
+	}
 }
 
 func (p *Publisher) PublishProcessed(documentID string, chunkCount int, ocrLang string) error {
@@ -76,7 +138,12 @@ func (p *Publisher) publish(routingKey string, payload any) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	err = p.ch.Publish(
+	ch, err := p.liveChannel()
+	if err != nil {
+		return fmt.Errorf("publish %s: %w", routingKey, err)
+	}
+
+	err = ch.Publish(
 		rmq.ExchangeName,
 		routingKey,
 		false,
@@ -90,6 +157,7 @@ func (p *Publisher) publish(routingKey string, payload any) error {
 		},
 	)
 	if err != nil {
+		p.drop()
 		return fmt.Errorf("publish %s: %w", routingKey, err)
 	}
 	return nil

@@ -17,7 +17,6 @@ import (
 	"apps/rag-worker/config"
 	"apps/rag-worker/consumer"
 	"apps/rag-worker/publisher"
-	rmq "apps/rag-worker/rabbitmq"
 	"apps/rag-worker/storage"
 	"apps/rag-worker/workpool"
 )
@@ -51,21 +50,12 @@ func main() {
 		defer redisClient.Close()
 	}
 
-	rabbitConn := rmq.Connect(cfg.RabbitMQURL)
-	defer rabbitConn.Close()
+	pub := publisher.New(cfg.RabbitMQURL)
+	if !pub.Connected() {
+		log.Fatalf("rabbitmq: publisher setup failed")
+	}
+	defer pub.Close()
 	log.Println("Connected to RabbitMQ")
-
-	pubCh, err := rmq.OpenChannel(rabbitConn)
-	if err != nil {
-		log.Fatalf("rabbitmq: %v", err)
-	}
-	defer pubCh.Close()
-
-	if err := rmq.SetupTopology(pubCh); err != nil {
-		log.Fatalf("rabbitmq topology: %v", err)
-	}
-
-	pub := publisher.New(pubCh)
 
 	wp := workpool.NewPools()
 	proc := consumer.NewProcessor(store, pub, redisClient, cfg.EmbeddingFallback, wp)
