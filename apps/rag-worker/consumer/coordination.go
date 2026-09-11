@@ -60,12 +60,16 @@ func (p *Processor) setDeleted(documentID string, deleted bool) {
 	}
 
 	p.deletedMu.Lock()
-	defer p.deletedMu.Unlock()
 	if deleted {
 		p.deletedRequested[documentID] = struct{}{}
-		return
+	} else {
+		delete(p.deletedRequested, documentID)
 	}
-	delete(p.deletedRequested, documentID)
+	p.deletedMu.Unlock()
+
+	if deleted {
+		p.cancelSummarizeJob(documentID)
+	}
 }
 
 func (p *Processor) deletedRequestedFor(documentID string) bool {

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +54,7 @@ func Complete(ctx context.Context, system, user string, onToken func(string) err
 
 	cfg := openai.DefaultConfig(apiKey)
 	cfg.BaseURL = baseURL
-	cfg.HTTPClient = &http.Client{Timeout: 120 * time.Second}
+	cfg.HTTPClient = chatHTTPClient()
 	client := openai.NewClientWithConfig(cfg)
 
 	req := openai.ChatCompletionRequest{
@@ -145,6 +146,19 @@ func emitToken(onToken func(string) error, token string) error {
 
 func userPrompt(query string, chunks []string) string {
 	return fmt.Sprintf("Context:\n%s\n\nUser question:\n%s", strings.Join(chunks, "\n\n"), query)
+}
+
+// chatHTTPClient: LLM_HTTP_TIMEOUT_SECONDS — unset/≤0 = no client timeout (ctx still cancels).
+func chatHTTPClient() *http.Client {
+	raw := strings.TrimSpace(os.Getenv("LLM_HTTP_TIMEOUT_SECONDS"))
+	if raw == "" {
+		return &http.Client{}
+	}
+	sec, err := strconv.Atoi(raw)
+	if err != nil || sec <= 0 {
+		return &http.Client{}
+	}
+	return &http.Client{Timeout: time.Duration(sec) * time.Second}
 }
 
 func chatBaseURL() string {

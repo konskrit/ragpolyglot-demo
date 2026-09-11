@@ -129,6 +129,45 @@ func (p *Publisher) PublishPaused(documentID string) error {
 	return p.publish(rmq.RoutingPaused, event)
 }
 
+func (p *Publisher) PublishSummarizeProgress(documentID string, done, total int) error {
+	event := models.DocumentSummarizeProgressEvent{
+		Type:       rmq.RoutingSummarizeProgress,
+		DocumentID: documentID,
+		Done:       done,
+		Total:      total,
+		Timestamp:  time.Now().UTC(),
+	}
+	return p.publish(rmq.RoutingSummarizeProgress, event)
+}
+
+func (p *Publisher) PublishSummarizeCompleted(documentID string) error {
+	event := models.DocumentSummarizeCompletedEvent{
+		Type:       rmq.RoutingSummarizeCompleted,
+		DocumentID: documentID,
+		Timestamp:  time.Now().UTC(),
+	}
+	return p.publish(rmq.RoutingSummarizeCompleted, event)
+}
+
+func (p *Publisher) PublishSummarizeFailed(documentID, errorReason string) error {
+	event := models.DocumentSummarizeFailedEvent{
+		Type:        rmq.RoutingSummarizeFailed,
+		DocumentID:  documentID,
+		ErrorReason: errorReason,
+		Timestamp:   time.Now().UTC(),
+	}
+	return p.publish(rmq.RoutingSummarizeFailed, event)
+}
+
+func (p *Publisher) PublishSummarizePaused(documentID string) error {
+	event := models.DocumentSummarizePausedEvent{
+		Type:       rmq.RoutingSummarizePaused,
+		DocumentID: documentID,
+		Timestamp:  time.Now().UTC(),
+	}
+	return p.publish(rmq.RoutingSummarizePaused, event)
+}
+
 func (p *Publisher) publish(routingKey string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {

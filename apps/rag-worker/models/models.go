@@ -55,6 +55,47 @@ type DocumentProgressEvent struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
+type DocumentSummarizeEvent struct {
+	Type            string    `json:"type"`
+	DocumentID      string    `json:"documentId"`
+	MaxContextChars int       `json:"maxContextChars,omitempty"`
+	Reset           bool      `json:"reset,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
+}
+
+type DocumentSummarizePauseEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+type DocumentSummarizeProgressEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Done       int       `json:"done"`
+	Total      int       `json:"total"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+type DocumentSummarizeCompletedEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+type DocumentSummarizeFailedEvent struct {
+	Type        string    `json:"type"`
+	DocumentID  string    `json:"documentId"`
+	ErrorReason string    `json:"errorReason"`
+	Timestamp   time.Time `json:"timestamp"`
+}
+
+type DocumentSummarizePausedEvent struct {
+	Type       string    `json:"type"`
+	DocumentID string    `json:"documentId"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
 type DocumentChunk struct {
 	DocumentID string
 	ChunkIndex int
@@ -91,21 +132,6 @@ type ChatRequest struct {
 	Query       string   `json:"query"`
 	TopK        int      `json:"topK"`
 	DocumentIDs []string `json:"documentIds,omitempty"`
-}
-
-type SummarizeRequest struct {
-	DocumentID      string `json:"documentId"`
-	MaxContextChars int    `json:"maxContextChars,omitempty"`
-	Persist         *bool  `json:"persist,omitempty"`
-}
-
-type SummarizeResponse struct {
-	DocumentID   string `json:"documentId"`
-	Summary      string `json:"summary"`
-	BatchCount   int    `json:"batchCount"`
-	LLMCalls     int    `json:"llmCalls"`
-	Persisted    bool   `json:"persisted"`
-	ContextChars int    `json:"contextChars"`
 }
 
 type ChatResponse struct {

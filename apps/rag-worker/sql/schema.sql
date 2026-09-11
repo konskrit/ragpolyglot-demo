@@ -33,3 +33,16 @@ CREATE TABLE IF NOT EXISTS document_ingest_checkpoints (
 
 ALTER TABLE document_ingest_checkpoints
     ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS document_summarize_checkpoints (
+    document_id UUID PRIMARY KEY,
+    stage TEXT NOT NULL,
+    done INT NOT NULL DEFAULT 0,
+    total INT NOT NULL DEFAULT 0,
+    partials JSONB NOT NULL DEFAULT '[]'::jsonb,
+    context_chars INT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE document_summarize_checkpoints
+    DROP COLUMN IF EXISTS persist;

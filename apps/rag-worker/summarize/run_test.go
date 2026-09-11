@@ -1,9 +1,9 @@
-package api
+package summarize
 
 import "testing"
 
 func TestPackBatchesRespectsLimit(t *testing.T) {
-	batches := packBatches([]string{"aaa", "bbb", "ccc"}, 8)
+	batches := PackBatches([]string{"aaa", "bbb", "ccc"}, 8)
 	if len(batches) != 2 {
 		t.Fatalf("got %d batches: %#v", len(batches), batches)
 	}
@@ -16,14 +16,14 @@ func TestPackBatchesRespectsLimit(t *testing.T) {
 }
 
 func TestPackBatchesSingleFits(t *testing.T) {
-	batches := packBatches([]string{"hello", "world"}, 100)
+	batches := PackBatches([]string{"hello", "world"}, 100)
 	if len(batches) != 1 || len(batches[0]) != 2 {
 		t.Fatalf("got %#v", batches)
 	}
 }
 
 func TestPackBatchesSkipsEmpty(t *testing.T) {
-	batches := packBatches([]string{" ", "x", ""}, 100)
+	batches := PackBatches([]string{" ", "x", ""}, 100)
 	if len(batches) != 1 || batches[0][0] != "x" {
 		t.Fatalf("got %#v", batches)
 	}

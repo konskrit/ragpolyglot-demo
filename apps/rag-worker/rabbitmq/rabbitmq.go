@@ -18,6 +18,13 @@ const (
 	PausedQueue    = "document.paused.queue"
 	ProgressQueue  = "document.progress.queue"
 
+	SummarizeQueue          = "document.summarize.queue"
+	SummarizePauseQueue     = "document.summarize.pause.queue"
+	SummarizeProgressQueue  = "document.summarize.progress.queue"
+	SummarizeCompletedQueue = "document.summarize.completed.queue"
+	SummarizeFailedQueue    = "document.summarize.failed.queue"
+	SummarizePausedQueue    = "document.summarize.paused.queue"
+
 	RoutingUploaded  = "document.uploaded"
 	RoutingDeleted   = "document.deleted"
 	RoutingPause     = "document.pause"
@@ -25,6 +32,13 @@ const (
 	RoutingFailed    = "document.failed"
 	RoutingPaused    = "document.paused"
 	RoutingProgress  = "document.progress"
+
+	RoutingSummarize          = "document.summarize"
+	RoutingSummarizePause     = "document.summarize.pause"
+	RoutingSummarizeProgress  = "document.summarize.progress"
+	RoutingSummarizeCompleted = "document.summarize.completed"
+	RoutingSummarizeFailed    = "document.summarize.failed"
+	RoutingSummarizePaused    = "document.summarize.paused"
 )
 
 func Connect(url string) *amqp.Connection {
@@ -56,13 +70,19 @@ func SetupTopology(ch *amqp.Channel) error {
 	}
 
 	for queue, routingKey := range map[string]string{
-		UploadedQueue:  RoutingUploaded,
-		DeletedQueue:   RoutingDeleted,
-		PauseQueue:     RoutingPause,
-		ProcessedQueue: RoutingProcessed,
-		FailedQueue:    RoutingFailed,
-		PausedQueue:    RoutingPaused,
-		ProgressQueue:  RoutingProgress,
+		UploadedQueue:           RoutingUploaded,
+		DeletedQueue:            RoutingDeleted,
+		PauseQueue:              RoutingPause,
+		ProcessedQueue:          RoutingProcessed,
+		FailedQueue:             RoutingFailed,
+		PausedQueue:             RoutingPaused,
+		ProgressQueue:           RoutingProgress,
+		SummarizeQueue:          RoutingSummarize,
+		SummarizePauseQueue:     RoutingSummarizePause,
+		SummarizeProgressQueue:  RoutingSummarizeProgress,
+		SummarizeCompletedQueue: RoutingSummarizeCompleted,
+		SummarizeFailedQueue:    RoutingSummarizeFailed,
+		SummarizePausedQueue:    RoutingSummarizePaused,
 	} {
 		if _, err := ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
 			return fmt.Errorf("declare queue %s: %w", queue, err)
