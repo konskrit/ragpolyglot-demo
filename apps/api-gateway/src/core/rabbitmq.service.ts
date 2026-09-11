@@ -83,6 +83,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         'document.failed',
         'document.progress',
         'document.paused',
+        'document.summarize.progress',
+        'document.summarize.completed',
+        'document.summarize.failed',
+        'document.summarize.paused',
       ]) {
         await channel.bindQueue(
           Config.gatewayStatusQueue,

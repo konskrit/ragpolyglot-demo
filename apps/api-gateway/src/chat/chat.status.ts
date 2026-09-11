@@ -2,6 +2,7 @@ import {
   isDocumentProgressStage,
   type DocumentStatus,
   type DocumentStatusUpdate,
+  type SummarizeStatus,
 } from '@ragpolyglot-shared';
 
 type StatusEvent = {
@@ -10,16 +11,25 @@ type StatusEvent = {
   stage?: string;
   done?: number;
   total?: number;
+  errorReason?: string;
 };
 
-export function parseDocumentStatusEvent(event: StatusEvent): {
+export type ParsedDocumentStatusEvent = {
   documentId: string;
-  status: DocumentStatus;
+  status?: DocumentStatus;
   progress?: Pick<
     DocumentStatusUpdate,
     'progressStage' | 'progressDone' | 'progressTotal'
   >;
-} | null {
+  summarize?: Pick<
+    DocumentStatusUpdate,
+    'summarizeStatus' | 'summarizeDone' | 'summarizeTotal' | 'summarizeError'
+  >;
+};
+
+export function parseDocumentStatusEvent(
+  event: StatusEvent,
+): ParsedDocumentStatusEvent | null {
   if (!event.documentId) return null;
 
   switch (event.type) {
@@ -38,6 +48,41 @@ export function parseDocumentStatusEvent(event: StatusEvent): {
           progressStage: event.stage,
           progressDone: event.done ?? 0,
           progressTotal: event.total ?? 0,
+        },
+      };
+    case 'document.summarize.progress':
+      return {
+        documentId: event.documentId,
+        summarize: {
+          summarizeStatus: 'running' satisfies SummarizeStatus,
+          summarizeDone: event.done ?? 0,
+          summarizeTotal: event.total ?? 0,
+          summarizeError: undefined,
+        },
+      };
+    case 'document.summarize.completed':
+      return {
+        documentId: event.documentId,
+        summarize: {
+          summarizeStatus: null,
+          summarizeDone: undefined,
+          summarizeTotal: undefined,
+          summarizeError: undefined,
+        },
+      };
+    case 'document.summarize.failed':
+      return {
+        documentId: event.documentId,
+        summarize: {
+          summarizeStatus: 'failed',
+          summarizeError: event.errorReason,
+        },
+      };
+    case 'document.summarize.paused':
+      return {
+        documentId: event.documentId,
+        summarize: {
+          summarizeStatus: 'paused',
         },
       };
     default:

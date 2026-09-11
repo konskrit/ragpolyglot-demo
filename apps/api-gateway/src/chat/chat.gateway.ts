@@ -17,11 +17,7 @@ import { RabbitMQService } from '../core/rabbitmq.service';
 import { RedisService } from '../core/redis.service';
 import { RagService } from '../rag/rag.service';
 import { ConversationService } from './conversation.service';
-import {
-  type DocumentStatus,
-  type DocumentStatusUpdate,
-  type Source,
-} from '@ragpolyglot-shared';
+import { type DocumentStatusUpdate, type Source } from '@ragpolyglot-shared';
 import { randomUUID } from 'crypto';
 import { parseDocumentStatusEvent } from './chat.status';
 
@@ -51,16 +47,21 @@ export class ChatGateway implements OnModuleInit {
       if (!msg?.content) return;
 
       try {
-        const parsed = parseDocumentStatusEvent(
-          JSON.parse(msg.content.toString()),
-        );
+        const event = JSON.parse(msg.content.toString()) as {
+          type?: string;
+        };
+        const parsed = parseDocumentStatusEvent(event);
         if (!parsed) return;
-        this.emitDocumentStatusUpdate(
-          parsed.documentId,
-          parsed.status,
-          parsed.progress,
-        );
-        if (parsed.status === 'ready') {
+        this.emitDocumentStatusUpdate({
+          documentId: parsed.documentId,
+          status: parsed.status,
+          ...parsed.progress,
+          ...parsed.summarize,
+        });
+        if (
+          parsed.status === 'ready' ||
+          event.type === 'document.summarize.completed'
+        ) {
           void this.redis.incr(RAG_DOCUMENTS_VERSION_KEY);
         }
       } catch (err) {
@@ -196,23 +197,24 @@ export class ChatGateway implements OnModuleInit {
   }
 
   private emitDocumentStatusUpdate(
-    documentId: string,
-    status: DocumentStatus,
-    progress?: Pick<
-      DocumentStatusUpdate,
-      'progressStage' | 'progressDone' | 'progressTotal'
-    >,
+    update: Omit<DocumentStatusUpdate, 'timestamp'>,
   ): void {
     const payload: DocumentStatusUpdate = {
-      documentId,
-      status,
+      ...update,
       timestamp: new Date().toISOString(),
-      ...progress,
     };
 
-    this.server.to(`doc:${documentId}`).emit('document:status-update', payload);
-    if (status !== 'processing') {
-      this.logger.log(`Emitted status "${status}" for doc:${documentId}`);
+    this.server
+      .to(`doc:${update.documentId}`)
+      .emit('document:status-update', payload);
+    if (update.status && update.status !== 'processing') {
+      this.logger.log(
+        `Emitted status "${update.status}" for doc:${update.documentId}`,
+      );
+    } else if (update.summarizeStatus !== undefined) {
+      this.logger.log(
+        `Emitted summarize "${String(update.summarizeStatus)}" for doc:${update.documentId}`,
+      );
     }
   }
 

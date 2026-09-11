@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   DOCUMENT_PROGRESS_STAGES,
   DOCUMENT_STATUSES,
+  SUMMARIZE_STATUSES,
 } from '@ragpolyglot-shared';
 
 export class DocumentSummaryDto {
@@ -28,6 +29,18 @@ export class DocumentSummaryDto {
 
   @ApiPropertyOptional()
   progressTotal?: number;
+
+  @ApiPropertyOptional({ enum: SUMMARIZE_STATUSES, nullable: true })
+  summarizeStatus?: string | null;
+
+  @ApiPropertyOptional()
+  summarizeDone?: number;
+
+  @ApiPropertyOptional()
+  summarizeTotal?: number;
+
+  @ApiPropertyOptional()
+  summarizeError?: string;
 
   @ApiPropertyOptional({ example: 'grc' })
   ocrLang?: string;

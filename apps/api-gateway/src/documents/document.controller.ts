@@ -50,6 +50,17 @@ export class DocumentController {
     return this.documentService.getDocumentChunks(id);
   }
 
+  @Get(':id/summary')
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: { summary: { type: 'string', nullable: true } },
+    },
+  })
+  getSummary(@Param('id') id: string) {
+    return this.documentService.getDocumentSummary(id);
+  }
+
   @Post('upload')
   @ApiConsumes('multipart/form-data')
   @ApiBody({

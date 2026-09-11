@@ -44,4 +44,59 @@ describe('parseDocumentStatusEvent', () => {
     ).toBeNull();
     expect(parseDocumentStatusEvent({ type: 'document.processed' })).toBeNull();
   });
+
+  it('maps summarize events without forcing document status', () => {
+    expect(
+      parseDocumentStatusEvent({
+        type: 'document.summarize.progress',
+        documentId: '1',
+        done: 2,
+        total: 5,
+      }),
+    ).toEqual({
+      documentId: '1',
+      summarize: {
+        summarizeStatus: 'running',
+        summarizeDone: 2,
+        summarizeTotal: 5,
+        summarizeError: undefined,
+      },
+    });
+    expect(
+      parseDocumentStatusEvent({
+        type: 'document.summarize.completed',
+        documentId: '1',
+      }),
+    ).toEqual({
+      documentId: '1',
+      summarize: {
+        summarizeStatus: null,
+        summarizeDone: undefined,
+        summarizeTotal: undefined,
+        summarizeError: undefined,
+      },
+    });
+    expect(
+      parseDocumentStatusEvent({
+        type: 'document.summarize.failed',
+        documentId: '1',
+        errorReason: 'llm_error',
+      }),
+    ).toEqual({
+      documentId: '1',
+      summarize: {
+        summarizeStatus: 'failed',
+        summarizeError: 'llm_error',
+      },
+    });
+    expect(
+      parseDocumentStatusEvent({
+        type: 'document.summarize.paused',
+        documentId: '1',
+      }),
+    ).toEqual({
+      documentId: '1',
+      summarize: { summarizeStatus: 'paused' },
+    });
+  });
 });

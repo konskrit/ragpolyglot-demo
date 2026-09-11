@@ -17,8 +17,10 @@ import {
   DocumentChunk,
   DocumentCreateDto,
   DocumentRenameDto,
+  DocumentSummarizeDto,
   OcrLanguageOption,
   isOcrLanguageCode,
+  isSummarizeStatus,
 } from '@ragpolyglot-shared';
 import { shouldDiscardUploadAfterFailure } from './document-upload';
 
@@ -52,6 +54,48 @@ export class DocumentService {
       this.httpService.get<DocumentChunk[]>(this.docsUrl(id, '/chunks')),
     );
     return res.data;
+  }
+
+  async getDocumentSummary(id: string): Promise<{ summary: string | null }> {
+    const res = await firstValueFrom(
+      this.httpService.get<{ summary: string | null }>(
+        this.docsUrl(id, '/summary'),
+      ),
+    );
+    return res.data ?? { summary: null };
+  }
+
+  async startSummarize(
+    id: string,
+    body: DocumentSummarizeDto = {},
+  ): Promise<Document> {
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(this.docsUrl(id, '/summarize'), {
+        maxContextChars: body.maxContextChars,
+      } satisfies DocumentSummarizeDto),
+    );
+    this.logger.log(`Document summarize queued: ${id}`);
+    return this.toPublicDocument(res.data);
+  }
+
+  async pauseSummarize(id: string): Promise<Document> {
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(
+        this.docsUrl(id, '/summarize/pause'),
+      ),
+    );
+    this.logger.log(`Document summarize pause requested: ${id}`);
+    return this.toPublicDocument(res.data);
+  }
+
+  async resumeSummarize(id: string): Promise<Document> {
+    const res = await firstValueFrom(
+      this.httpService.post<DocumentRecord>(
+        this.docsUrl(id, '/summarize/resume'),
+      ),
+    );
+    this.logger.log(`Document summarize resume queued: ${id}`);
+    return this.toPublicDocument(res.data);
   }
 
   async getOcrLanguages(): Promise<OcrLanguageOption[]> {
@@ -226,6 +270,12 @@ export class DocumentService {
       progressStage: doc.progressStage,
       progressDone: doc.progressDone,
       progressTotal: doc.progressTotal,
+      summarizeStatus: isSummarizeStatus(doc.summarizeStatus)
+        ? doc.summarizeStatus
+        : null,
+      summarizeDone: doc.summarizeDone,
+      summarizeTotal: doc.summarizeTotal,
+      summarizeError: doc.summarizeError,
       uploadedBy: doc.uploadedBy,
       ocrLang: doc.ocrLang,
       createdAt: doc.createdAt,
