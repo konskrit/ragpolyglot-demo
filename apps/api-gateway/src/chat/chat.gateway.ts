@@ -20,6 +20,8 @@ import { ConversationService } from './conversation.service';
 import { type DocumentStatusUpdate, type Source } from '@ragpolyglot-shared';
 import { randomUUID } from 'crypto';
 import { parseDocumentStatusEvent } from './chat.status';
+import { clearDeepJob, setDeepJob } from './chat-deep-job';
+import { normalizeDocumentIds } from '../rag/rag.helpers';
 
 @Injectable()
 @WebSocketGateway({
@@ -32,7 +34,12 @@ export class ChatGateway implements OnModuleInit {
   private readonly abortControllers = new Map<string, AbortController>();
   private readonly inflightQueries = new Map<
     string,
-    { conversationId: string; query: string }
+    {
+      conversationId: string;
+      query: string;
+      mode: 'fast' | 'deep';
+      documentIds?: string[];
+    }
   >();
 
   constructor(
@@ -80,6 +87,7 @@ export class ChatGateway implements OnModuleInit {
       conversationId?: string;
       userId?: string;
       documentIds?: string[];
+      mode?: 'fast' | 'deep';
     },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
@@ -87,45 +95,130 @@ export class ChatGateway implements OnModuleInit {
     if (!query) return;
 
     const conversationId = data.conversationId?.trim() || randomUUID();
-    const interruptKey = `${client.id}:${conversationId}`;
+    const mode = data.mode === 'deep' ? 'deep' : 'fast';
+    const documentIds = normalizeDocumentIds(data.documentIds);
+    const interruptKey = chatInterruptKey(mode, client.id, conversationId);
+    const room = chatRoom(conversationId);
+
+    client.join(room);
+
+    if (mode === 'deep' && this.abortControllers.has(interruptKey)) {
+      client.emit('chat:token', {
+        token:
+          'A deep search is already running for this conversation. Wait for it to finish, or press Stop.',
+        conversationId,
+      });
+      client.emit('chat:complete', {
+        conversationId,
+        sources: [],
+        error: true,
+        interrupted: false,
+      });
+      return;
+    }
 
     const abortController = new AbortController();
     this.abortControllers.set(interruptKey, abortController);
-    this.inflightQueries.set(interruptKey, { conversationId, query });
+    this.inflightQueries.set(interruptKey, {
+      conversationId,
+      query,
+      mode,
+      documentIds,
+    });
+
+    let deepStarted = false;
 
     try {
+      if (mode === 'deep') {
+        await this.conversations.beginTurn(conversationId, query, documentIds);
+        deepStarted = true;
+        await setDeepJob(this.redis, conversationId, {
+          query,
+          done: 0,
+          total: 0,
+        });
+        this.emitToChat(conversationId, 'chat:started', {
+          conversationId,
+          mode,
+          query,
+        });
+      }
+
       const ragResult = await this.ragService.streamSearch(
         {
           query,
           userId: data.userId,
-          documentIds: data.documentIds,
+          documentIds,
+          mode,
         },
         (token) => {
           if (abortController.signal.aborted) return;
-          client.emit('chat:token', { token, conversationId });
+          this.emitToChat(conversationId, 'chat:token', {
+            token,
+            conversationId,
+          });
         },
         abortController.signal,
+        (done, total) => {
+          if (abortController.signal.aborted) return;
+          void (async () => {
+            await setDeepJob(this.redis, conversationId, {
+              query,
+              done,
+              total,
+            });
+            if (abortController.signal.aborted) {
+              await clearDeepJob(this.redis, conversationId);
+            }
+          })();
+          this.emitToChat(conversationId, 'chat:progress', {
+            conversationId,
+            done,
+            total,
+          });
+        },
       );
 
       if (abortController.signal.aborted) {
+        if (deepStarted) {
+          await clearDeepJob(this.redis, conversationId);
+        }
         return;
       }
 
       this.inflightQueries.delete(interruptKey);
-      await this.persistTurn(
-        conversationId,
-        query,
-        ragResult.answer,
-        ragResult.sources,
-      );
+      if (mode === 'deep') {
+        await this.completeDeepAssistant(
+          conversationId,
+          ragResult.answer,
+          ragResult.sources,
+        );
+        await clearDeepJob(this.redis, conversationId);
+      } else {
+        await this.persistTurn(
+          conversationId,
+          query,
+          ragResult.answer,
+          ragResult.sources,
+          documentIds,
+        );
+        this.emitToChat(conversationId, 'chat:started', {
+          conversationId,
+          mode,
+          query,
+        });
+      }
 
-      client.emit('chat:complete', {
+      this.emitToChat(conversationId, 'chat:complete', {
         conversationId,
         sources: ragResult.sources,
         cacheHit: ragResult.cacheHit ?? false,
       });
     } catch (error) {
       if (abortController.signal.aborted) {
+        if (deepStarted) {
+          await clearDeepJob(this.redis, conversationId);
+        }
         return;
       }
 
@@ -137,10 +230,29 @@ export class ChatGateway implements OnModuleInit {
           : 'Sorry, I encountered an error processing your request.';
 
       this.inflightQueries.delete(interruptKey);
-      await this.persistTurn(conversationId, query, errorMessage, []);
+      if (mode === 'deep' && deepStarted) {
+        await this.completeDeepAssistant(conversationId, errorMessage, []);
+        await clearDeepJob(this.redis, conversationId);
+      } else if (mode === 'fast') {
+        await this.persistTurn(
+          conversationId,
+          query,
+          errorMessage,
+          [],
+          documentIds,
+        );
+        this.emitToChat(conversationId, 'chat:started', {
+          conversationId,
+          mode,
+          query,
+        });
+      }
 
-      client.emit('chat:token', { token: errorMessage, conversationId });
-      client.emit('chat:complete', {
+      this.emitToChat(conversationId, 'chat:token', {
+        token: errorMessage,
+        conversationId,
+      });
+      this.emitToChat(conversationId, 'chat:complete', {
         conversationId,
         sources: [],
         error: true,
@@ -160,21 +272,37 @@ export class ChatGateway implements OnModuleInit {
     const conversationId = data.conversationId?.trim();
     if (!conversationId) return;
 
-    const interruptKey = `${client.id}:${conversationId}`;
-    this.abortControllers.get(interruptKey)?.abort();
+    const deepKey = chatInterruptKey('deep', client.id, conversationId);
+    const fastKey = chatInterruptKey('fast', client.id, conversationId);
+    this.abortControllers.get(deepKey)?.abort();
+    this.abortControllers.get(fastKey)?.abort();
 
-    const inflight = this.inflightQueries.get(interruptKey);
+    const inflight =
+      this.inflightQueries.get(deepKey) ?? this.inflightQueries.get(fastKey);
     if (!inflight) return;
-    this.inflightQueries.delete(interruptKey);
+    this.inflightQueries.delete(deepKey);
+    this.inflightQueries.delete(fastKey);
+    this.abortControllers.delete(deepKey);
+    this.abortControllers.delete(fastKey);
 
-    await this.persistTurn(
-      inflight.conversationId,
-      inflight.query,
-      '(interrupted)',
-      [],
-    );
+    if (inflight.mode === 'deep') {
+      await this.completeDeepAssistant(
+        inflight.conversationId,
+        '(interrupted)',
+        [],
+      );
+      await clearDeepJob(this.redis, conversationId);
+    } else {
+      await this.persistTurn(
+        inflight.conversationId,
+        inflight.query,
+        '(interrupted)',
+        [],
+        inflight.documentIds,
+      );
+    }
 
-    client.emit('chat:complete', {
+    this.emitToChat(conversationId, 'chat:complete', {
       conversationId,
       sources: [],
       interrupted: true,
@@ -194,6 +322,20 @@ export class ChatGateway implements OnModuleInit {
     if (!documentId) return;
 
     client.join(`doc:${documentId}`);
+  }
+
+  @SubscribeMessage('subscribe:conversation')
+  handleSubscribeConversation(
+    @MessageBody() data: { conversationId: string },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const conversationId = data.conversationId?.trim();
+    if (!conversationId) return;
+    client.join(chatRoom(conversationId));
+  }
+
+  private emitToChat(conversationId: string, event: string, payload: unknown) {
+    this.server.to(chatRoom(conversationId)).emit(event, payload);
   }
 
   private emitDocumentStatusUpdate(
@@ -223,6 +365,7 @@ export class ChatGateway implements OnModuleInit {
     query: string,
     answer: string,
     sources: Source[],
+    documentIds?: string[],
   ): Promise<void> {
     try {
       await this.conversations.persistTurn(
@@ -230,6 +373,7 @@ export class ChatGateway implements OnModuleInit {
         query,
         answer,
         sources,
+        documentIds,
       );
     } catch (err) {
       this.logger.warn(
@@ -237,4 +381,36 @@ export class ChatGateway implements OnModuleInit {
       );
     }
   }
+
+  private async completeDeepAssistant(
+    conversationId: string,
+    answer: string,
+    sources: Source[],
+  ): Promise<void> {
+    try {
+      await this.conversations.completeAssistant(
+        conversationId,
+        answer,
+        sources,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to persist deep assistant: ${(err as Error).message}`,
+      );
+    }
+  }
+}
+
+function chatRoom(conversationId: string): string {
+  return `chat:${conversationId}`;
+}
+
+function chatInterruptKey(
+  mode: 'fast' | 'deep',
+  clientId: string,
+  conversationId: string,
+): string {
+  return mode === 'deep'
+    ? `deep:${conversationId}`
+    : `${clientId}:${conversationId}`;
 }

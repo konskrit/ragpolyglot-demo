@@ -39,7 +39,7 @@ describe('ragCacheKey', () => {
   it('uses lowercase trimmed query hash, topK, and userId', async () => {
     const { ragCacheKey } = await import('./config');
     const hash = createHash('sha256')
-      .update('hello world|topK=5|documents=0|scope=*')
+      .update('hello world|topK=5|documents=0|scope=*|mode=fast|p=mode1')
       .digest('hex');
     expect(ragCacheKey('  Hello World  ', 'user-1', 5)).toBe(
       `rag:query:${hash}:user-1`,

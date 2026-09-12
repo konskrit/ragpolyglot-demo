@@ -122,6 +122,12 @@ type SearchHit struct {
 	Similarity    float64 `json:"similarity"`
 }
 
+type DocumentSummaryHit struct {
+	DocumentID    string
+	DocumentTitle string
+	Content       string
+}
+
 type SearchResponse struct {
 	Query   string      `json:"query"`
 	TopK    int         `json:"topK"`
@@ -131,6 +137,7 @@ type SearchResponse struct {
 type ChatRequest struct {
 	Query       string   `json:"query"`
 	TopK        int      `json:"topK"`
+	Mode        string   `json:"mode,omitempty"`
 	DocumentIDs []string `json:"documentIds,omitempty"`
 }
 
@@ -145,6 +152,12 @@ type ChatResponse struct {
 type ChatStreamTokenEvent struct {
 	Type  string `json:"type"`
 	Token string `json:"token"`
+}
+
+type ChatStreamProgressEvent struct {
+	Type  string `json:"type"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
 }
 
 type ChatStreamDoneEvent struct {

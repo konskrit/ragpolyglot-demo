@@ -1,8 +1,20 @@
 import type { RagSearchHit, Source } from '@ragpolyglot-shared';
 
+export type ChatMode = 'fast' | 'deep';
+
+export function normalizeChatMode(mode?: string | null): ChatMode {
+  return mode?.trim().toLowerCase() === 'deep' ? 'deep' : 'fast';
+}
+
 export function clampTopK(topK: number): number {
   if (topK < 5) return 5;
   if (topK > 10) return 10;
+  return topK;
+}
+
+export function clampChatTopK(topK: number): number {
+  if (topK < 10) return 10;
+  if (topK > 40) return 40;
   return topK;
 }
 

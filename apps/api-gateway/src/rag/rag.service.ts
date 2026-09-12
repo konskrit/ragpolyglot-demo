@@ -8,12 +8,19 @@ import {
 import { Config, ragCacheKey, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
 import { RedisService } from '../core/redis.service';
 import { RAGQueryDto, RAGResult, RagSearchHit } from '@ragpolyglot-shared';
-import { clampTopK, normalizeDocumentIds, toSources } from './rag.helpers';
+import {
+  clampChatTopK,
+  clampTopK,
+  normalizeChatMode,
+  normalizeDocumentIds,
+  toSources,
+} from './rag.helpers';
 
-const RAG_CHAT_TIMEOUT_MS = 120_000;
+const FAST_CHAT_TIMEOUT_MS = 120_000;
 
 type StreamEvent =
   | { type: 'token'; token: string }
+  | { type: 'progress'; done: number; total: number }
   | { type: 'done'; answer: string; sources?: RagSearchHit[] }
   | { type: 'error'; error: string };
 
@@ -31,13 +38,18 @@ export class RagService {
     queryDto: RAGQueryDto,
     onToken: (token: string) => void,
     signal?: AbortSignal,
+    onProgress?: (done: number, total: number) => void,
   ): Promise<RAGResult> {
     if (!queryDto?.query?.trim()) {
       throw new BadRequestException('Query is required');
     }
 
     const query = queryDto.query.trim();
-    const topK = clampTopK(queryDto.topK ?? Config.defaultTopK);
+    const mode = normalizeChatMode(queryDto.mode);
+    const topK =
+      mode === 'deep'
+        ? clampChatTopK(queryDto.topK ?? Config.defaultChatTopK)
+        : clampTopK(queryDto.topK ?? Config.defaultTopK);
     const documentIds = normalizeDocumentIds(queryDto.documentIds);
     const cacheKey = ragCacheKey(
       query,
@@ -45,6 +57,7 @@ export class RagService {
       topK,
       await this.documentsVersion(),
       documentIds,
+      mode,
     );
 
     const cached = await this.readCache(cacheKey);
@@ -65,9 +78,13 @@ export class RagService {
         body: JSON.stringify({
           query,
           topK,
+          mode,
           ...(documentIds ? { documentIds } : {}),
         }),
-        signal: this.withTimeout(signal, RAG_CHAT_TIMEOUT_MS),
+        signal: this.withTimeout(
+          signal,
+          mode === 'deep' ? 0 : FAST_CHAT_TIMEOUT_MS,
+        ),
       });
 
       if (!res.ok) {
@@ -83,10 +100,10 @@ export class RagService {
         throw new BadGatewayException('Chat service unavailable');
       }
 
-      const result = await this.readChatStream(res.body, onToken);
+      const result = await this.readChatStream(res.body, onToken, onProgress);
       await this.writeCache(cacheKey, result);
       this.logger.log(
-        `RAG chat complete queryLen=${query.length} sources=${result.sources.length}`,
+        `RAG chat complete mode=${mode} queryLen=${query.length} sources=${result.sources.length}`,
       );
       return result;
     } catch (err) {
@@ -98,6 +115,7 @@ export class RagService {
   private async readChatStream(
     body: ReadableStream<Uint8Array>,
     onToken: (token: string) => void,
+    onProgress?: (done: number, total: number) => void,
   ): Promise<RAGResult> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -113,6 +131,10 @@ export class RagService {
         return;
       }
 
+      if (event.type === 'progress') {
+        onProgress?.(event.done, event.total);
+        return;
+      }
       if (event.type === 'token') {
         if (event.token) onToken(event.token);
         return;
@@ -180,7 +202,10 @@ export class RagService {
   private withTimeout(
     signal: AbortSignal | undefined,
     ms: number,
-  ): AbortSignal {
+  ): AbortSignal | undefined {
+    if (ms <= 0) {
+      return signal;
+    }
     const timeout = AbortSignal.timeout(ms);
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
   }

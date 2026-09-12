@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"apps/rag-worker/embedding"
@@ -19,21 +20,25 @@ const maxJSONBodyBytes = 1 << 20
 type Server struct {
 	store         *storage.Store
 	defaultTopK   int
+	chatTopK      int
 	allowFallback bool
 	rabbitOK      func() bool
 }
 
 type chatPrep struct {
-	query  string
-	topK   int
-	hits   []models.SearchHit
-	chunks []string
+	query     string
+	mode      string
+	topK      int
+	hits      []models.SearchHit
+	summaries []string
+	evidence  []string
 }
 
-func NewServer(store *storage.Store, defaultTopK int, allowFallback bool, rabbitOK func() bool) *Server {
+func NewServer(store *storage.Store, defaultTopK, chatTopK int, allowFallback bool, rabbitOK func() bool) *Server {
 	return &Server{
 		store:         store,
 		defaultTopK:   defaultTopK,
+		chatTopK:      chatTopK,
 		allowFallback: allowFallback,
 		rabbitOK:      rabbitOK,
 	}
@@ -144,7 +149,17 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	answer, err := llm.Generate(ctx, prep.query, prep.chunks)
+	chunks, err := answerChunks(ctx, prep, nil)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		log.Printf("[API] chat map failed: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "llm unavailable"})
+		return
+	}
+
+	answer, err := llm.Generate(ctx, prep.query, chunks)
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -191,11 +206,27 @@ func (s *Server) chatStream(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	answer, err := llm.GenerateStream(ctx, prep.query, prep.chunks, func(tok string) error {
+	chunks, err := answerChunks(ctx, prep, func(done, total int) error {
+		return writeEvent(models.ChatStreamProgressEvent{
+			Type:  "progress",
+			Done:  done,
+			Total: total,
+		})
+	})
+	if err != nil {
+		if ctx.Err() != nil || isClientGone(err) {
+			return
+		}
+		log.Printf("[API] chat stream map failed: %v", err)
+		_ = writeEvent(models.ChatStreamErrorEvent{Type: "error", Error: "llm unavailable"})
+		return
+	}
+
+	answer, err := llm.GenerateStream(ctx, prep.query, chunks, func(tok string) error {
 		return writeEvent(models.ChatStreamTokenEvent{Type: "token", Token: tok})
 	})
 	if err != nil {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || isClientGone(err) {
 			return
 		}
 		log.Printf("[API] chat stream generate failed: %v", err)
@@ -232,7 +263,11 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 		return nil, false
 	}
 
+	mode := NormalizeChatMode(req.Mode)
 	topK := ClampTopK(req.TopK, s.defaultTopK)
+	if mode == "deep" {
+		topK = ClampChatTopK(req.TopK, s.chatTopK)
+	}
 
 	vec, err := embedding.EmbedQuery(req.Query, s.allowFallback)
 	if err != nil {
@@ -251,22 +286,43 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 		return nil, false
 	}
 
-	chunks := buildContextChunks(hits)
+	prep := &chatPrep{
+		query:    req.Query,
+		mode:     mode,
+		topK:     topK,
+		hits:     hits,
+		evidence: buildContextChunks(hits),
+	}
+	if mode != "deep" {
+		return prep, true
+	}
 
-	return &chatPrep{
-		query:  req.Query,
-		topK:   topK,
-		hits:   hits,
-		chunks: chunks,
-	}, true
+	summaryIDs := uniqueDocumentIDs(hits)
+	if len(summaryIDs) == 0 {
+		summaryIDs = docIDs
+	}
+	summaryHits, err := s.store.ListSummaries(ctx, summaryIDs)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, false
+		}
+		log.Printf("[API] chat summaries failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "search failed"})
+		return nil, false
+	}
+	prep.summaries = buildSummaryChunks(summaryHits)
+	return prep, true
 }
 
 func (s *Server) logChat(ctx context.Context, start time.Time, prep *chatPrep) {
 	duration := time.Since(start)
 	s.store.LogQuery(ctx, prep.query, prep.topK, len(prep.hits), duration)
 	s.store.LogSystem(ctx, "rag_chat", "", duration, map[string]any{
-		"topK":        prep.topK,
-		"resultCount": len(prep.hits),
+		"mode":          prep.mode,
+		"topK":          prep.topK,
+		"resultCount":   len(prep.hits),
+		"summaryCount":  len(prep.summaries),
+		"evidenceCount": len(prep.evidence),
 	})
 }
 
@@ -274,4 +330,14 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func isClientGone(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "client disconnected")
 }

@@ -41,6 +41,15 @@ func GenerateStream(ctx context.Context, query string, contextChunks []string, o
 
 // Complete runs a chat completion with an explicit system + user message.
 func Complete(ctx context.Context, system, user string, onToken func(string) error) (string, error) {
+	return complete(ctx, system, user, 0, onToken)
+}
+
+// CompleteMax is Complete with a max output token cap (0 = model default).
+func CompleteMax(ctx context.Context, system, user string, maxTokens int, onToken func(string) error) (string, error) {
+	return complete(ctx, system, user, maxTokens, onToken)
+}
+
+func complete(ctx context.Context, system, user string, maxTokens int, onToken func(string) error) (string, error) {
 	model, err := modelName()
 	if err != nil {
 		return "", err
@@ -64,6 +73,9 @@ func Complete(ctx context.Context, system, user string, onToken func(string) err
 			{Role: openai.ChatMessageRoleUser, Content: user},
 		},
 		Stream: true,
+	}
+	if maxTokens > 0 {
+		req.MaxTokens = maxTokens
 	}
 
 	var lastErr error
@@ -120,6 +132,13 @@ func streamOnce(
 			return b.String(), emitted, nil
 		}
 		if recvErr != nil {
+			// Local OpenAI-compatible servers often end a finished stream with a
+			// non-EOF error after tokens were already delivered.
+			if b.Len() > 0 &&
+				!errors.Is(recvErr, context.Canceled) &&
+				!errors.Is(recvErr, context.DeadlineExceeded) {
+				return b.String(), emitted, nil
+			}
 			return b.String(), emitted, recvErr
 		}
 		if len(resp.Choices) == 0 {

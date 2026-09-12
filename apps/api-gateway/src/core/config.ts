@@ -43,11 +43,16 @@ export const Config = {
 
   defaultTopK: Number(process.env.RAG_TOP_K) || 5,
 
+  defaultChatTopK: Number(process.env.RAG_CHAT_TOP_K) || 20,
+
   documentEventsExchange: 'document.events',
   gatewayStatusQueue: 'gateway.document-status.queue',
 } as const;
 
 export const RAG_DOCUMENTS_VERSION_KEY = 'rag:documents:version';
+
+/** Bump when chat retrieval/prompt assembly changes shape. */
+const RAG_CACHE_PIPELINE = 'mode1';
 
 export function ragCacheKey(
   query: string,
@@ -55,9 +60,10 @@ export function ragCacheKey(
   topK?: number,
   documentsVersion = 0,
   documentIds?: readonly string[],
+  mode = 'fast',
 ): string {
   const scope = documentIds?.length ? documentIds.join(',') : '*';
-  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}|documents=${documentsVersion}|scope=${scope}`;
+  const normalized = `${query.trim().toLowerCase()}|topK=${topK ?? ''}|documents=${documentsVersion}|scope=${scope}|mode=${mode}|p=${RAG_CACHE_PIPELINE}`;
   const hash = createHash('sha256').update(normalized).digest('hex');
   return `rag:query:${hash}:${userId}`;
 }

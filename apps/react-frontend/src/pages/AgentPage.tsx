@@ -5,13 +5,18 @@ import { ChatDocumentScope } from '../components/ChatDocumentScope';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { useConversations } from '../hooks/useConversations';
 import { useDocuments } from '../context/DocumentsProvider';
-import type { Message } from '@ragpolyglot-shared';
+import { useWebSocketEvent } from '../hooks/useWebSocket';
+import type {
+  ChatCompletePayload,
+  ChatStartedPayload,
+  Message,
+} from '@ragpolyglot-shared';
 
 export function AgentPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const seed = searchParams.get('documentId')?.trim() || '';
   const { documents } = useDocuments();
-  const { conversations, loading, error, refresh, loadMessages, remove } =
+  const { conversations, loading, error, refresh, loadConversation, remove } =
     useConversations();
   const [conversationId, setConversationId] = useState<string>(() =>
     crypto.randomUUID(),
@@ -34,10 +39,12 @@ export function AgentPage() {
   const openConversation = async (id: string) => {
     const seq = ++openSeqRef.current;
     try {
-      const messages = await loadMessages(id);
+      const { messages, documentIds: scopeIds } = await loadConversation(id);
       if (seq !== openSeqRef.current) return;
       setConversationId(id);
       setInitialMessages(messages);
+      setDocumentIds(scopeIds);
+      clearSeedParam();
     } catch (e) {
       if (seq !== openSeqRef.current) return;
       console.error('Failed to load conversation', e);
@@ -57,6 +64,14 @@ export function AgentPage() {
     restoredRef.current = true;
     restoreLatest(latestId);
   }, [loading, latestId]);
+
+  useWebSocketEvent<ChatStartedPayload>('chat:started', () => {
+    void refresh();
+  });
+
+  useWebSocketEvent<ChatCompletePayload>('chat:complete', () => {
+    void refresh();
+  });
 
   const setScope = (ids: string[]) => {
     setDocumentIds(ids);
@@ -110,7 +125,6 @@ export function AgentPage() {
             conversationId={conversationId}
             initialMessages={initialMessages}
             documentIds={documentIds}
-            onTurnComplete={() => void refresh()}
           />
         </div>
         <ChatDocumentScope

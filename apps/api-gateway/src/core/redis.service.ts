@@ -80,6 +80,15 @@ export class RedisService implements OnModuleDestroy {
       this.logger.warn(`Redis INCR failed: ${(err as Error).message}`);
     }
   }
+
+  async del(key: string): Promise<void> {
+    if (!this.ready) return;
+    try {
+      await this.client.del(key);
+    } catch (err) {
+      this.logger.warn(`Redis DEL failed: ${(err as Error).message}`);
+    }
+  }
 }
 
 function normalizeRedisUrl(url: string): string {

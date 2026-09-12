@@ -143,6 +143,7 @@ export interface DocumentRenameDto {
 export interface RAGQueryDto {
   query: string;
   topK?: number;
+  mode?: 'fast' | 'deep';
   userId?: string;
   documentIds?: string[];
 }
@@ -184,6 +185,7 @@ export interface ConversationSummary {
   title: string;
   createdAt: string;
   updatedAt: string;
+  documentIds?: string[];
 }
 
 export interface ConversationMessage extends Message {
@@ -198,6 +200,25 @@ export interface ChatCompletePayload {
   error?: boolean;
   interrupted?: boolean;
   cacheHit?: boolean;
+}
+
+export interface ChatProgressPayload {
+  conversationId: string;
+  done: number;
+  total: number;
+}
+
+export interface ChatStartedPayload {
+  conversationId: string;
+  mode: 'fast' | 'deep';
+  query: string;
+}
+
+export interface ChatDeepStatus {
+  running: boolean;
+  query?: string;
+  done?: number;
+  total?: number;
 }
 
 export interface SystemHealth {

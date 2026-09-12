@@ -17,6 +17,7 @@ import { loadSql } from '../core/load-sql';
 type ConversationRow = {
   id: string;
   title: string;
+  documentIds?: unknown;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -42,15 +43,21 @@ export class ConversationService {
     return rows.map(toSummary);
   }
 
-  async getMessages(id: string): Promise<ConversationMessage[]> {
+  async get(id: string): Promise<ConversationSummary> {
     await this.ensureReady();
-    const existing = await this.postgres.exec<ConversationRow>(
+    const rows = await this.postgres.exec<ConversationRow>(
       loadSql('get-conversation.sql'),
       [id],
     );
-    if (!existing[0]) {
+    if (!rows[0]) {
       throw new NotFoundException('Conversation not found');
     }
+    return toSummary(rows[0]);
+  }
+
+  async getMessages(id: string): Promise<ConversationMessage[]> {
+    await this.ensureReady();
+    await this.get(id);
     const rows = await this.postgres.exec<MessageRow>(
       loadSql('list-messages.sql'),
       [id],
@@ -73,20 +80,48 @@ export class ConversationService {
     query: string,
     answer: string,
     sources: Source[],
+    documentIds?: string[],
+  ): Promise<void> {
+    await this.beginTurn(conversationId, query, documentIds);
+    await this.completeAssistant(conversationId, answer, sources);
+  }
+
+  async beginTurn(
+    conversationId: string,
+    query: string,
+    documentIds?: string[],
   ): Promise<void> {
     await this.ensureReady();
     const insertMessage = loadSql('insert-message.sql');
     await this.postgres.runInTransaction([
       {
         text: loadSql('upsert-conversation.sql'),
-        params: [conversationId, conversationTitleFromQuery(query)],
+        params: [
+          conversationId,
+          conversationTitleFromQuery(query),
+          toDocumentIdsParam(documentIds),
+        ],
       },
       {
         text: insertMessage,
         params: [conversationId, 'user', query, null],
       },
+    ]);
+  }
+
+  async completeAssistant(
+    conversationId: string,
+    answer: string,
+    sources: Source[],
+  ): Promise<void> {
+    await this.ensureReady();
+    await this.postgres.runInTransaction([
       {
-        text: insertMessage,
+        text: loadSql('touch-conversation.sql'),
+        params: [conversationId],
+      },
+      {
+        text: loadSql('insert-message.sql'),
         params: [
           conversationId,
           'assistant',
@@ -104,16 +139,30 @@ export class ConversationService {
   }
 }
 
+function toDocumentIdsParam(documentIds?: string[]): string {
+  return JSON.stringify(documentIds ?? []);
+}
+
+function parseDocumentIds(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const ids = raw.filter(
+    (id): id is string => typeof id === 'string' && id.trim().length > 0,
+  );
+  return ids.length > 0 ? ids : undefined;
+}
+
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
 function toSummary(row: ConversationRow): ConversationSummary {
+  const documentIds = parseDocumentIds(row.documentIds);
   return {
     id: row.id,
     title: row.title,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    ...(documentIds ? { documentIds } : {}),
   };
 }
 

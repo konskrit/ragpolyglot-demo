@@ -108,6 +108,27 @@ func (s *Store) UpsertChunk(ctx context.Context, chunk models.DocumentChunk) err
 	return err
 }
 
+func (s *Store) ListSummaries(ctx context.Context, documentIDs []string) ([]models.DocumentSummaryHit, error) {
+	if len(documentIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, ragsql.Must("list_summaries.sql"), documentIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.DocumentSummaryHit
+	for rows.Next() {
+		var hit models.DocumentSummaryHit
+		if err := rows.Scan(&hit.DocumentID, &hit.DocumentTitle, &hit.Content); err != nil {
+			return nil, err
+		}
+		out = append(out, hit)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) SearchSimilar(ctx context.Context, embedding []float32, topK int, documentIDs []string) ([]models.SearchHit, error) {
 	var scope any
 	if len(documentIDs) > 0 {

@@ -1,9 +1,13 @@
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY,
     title TEXT NOT NULL,
+    document_ids JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE conversations
+  ADD COLUMN IF NOT EXISTS document_ids JSONB;
 
 CREATE TABLE IF NOT EXISTS messages (
     id BIGSERIAL PRIMARY KEY,

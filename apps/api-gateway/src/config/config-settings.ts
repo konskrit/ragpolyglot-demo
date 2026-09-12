@@ -145,6 +145,16 @@ export const CONFIG_SETTINGS: readonly ConfigSetting[] = [
     services: ['rag-worker'],
   },
   {
+    key: 'RAG_CHAT_TOP_K',
+    kind: 'int',
+    services: ['api-gateway', 'rag-worker'],
+  },
+  {
+    key: 'RAG_CHAT_MAP_CONTEXT_CHARS',
+    kind: 'int',
+    services: ['rag-worker'],
+  },
+  {
     key: 'HTTP_TIMEOUT_MS',
     kind: 'int',
     services: ['api-gateway'],
@@ -157,7 +167,7 @@ export const CONFIG_SETTINGS: readonly ConfigSetting[] = [
   {
     key: 'RAG_TOP_K',
     kind: 'int',
-    services: ['api-gateway'],
+    services: ['api-gateway', 'rag-worker'],
   },
   {
     key: 'MAX_UPLOAD_BYTES',

@@ -16,6 +16,7 @@ type Config struct {
 	RabbitMQURL       string
 	HTTPAddr          string
 	DefaultTopK       int
+	ChatTopK          int
 	EmbeddingFallback bool
 }
 
@@ -33,6 +34,7 @@ func Load() *Config {
 		RabbitMQURL:       getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
 		HTTPAddr:          getEnv("RAG_WORKER_HTTP_ADDR", ":8081"),
 		DefaultTopK:       getEnvInt("RAG_TOP_K", 5),
+		ChatTopK:          getEnvInt("RAG_CHAT_TOP_K", 20),
 		EmbeddingFallback: getEnvBool("EMBEDDING_FALLBACK", false),
 	}
 }

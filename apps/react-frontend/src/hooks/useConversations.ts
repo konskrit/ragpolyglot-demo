@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { deleteJson, getJson } from '../api/client';
 import {
+  mapConversation,
   mapConversationMessages,
   mapConversations,
   toChatMessages,
@@ -39,6 +40,20 @@ export function useConversations() {
     return toChatMessages(mapConversationMessages(data));
   }
 
+  async function loadConversation(
+    id: string,
+  ): Promise<{ messages: Message[]; documentIds: string[] }> {
+    const [messages, summaryRaw] = await Promise.all([
+      loadMessages(id),
+      getJson<unknown>(`/api/conversations/${encodeURIComponent(id)}`),
+    ]);
+    const summary = mapConversation(summaryRaw);
+    return {
+      messages,
+      documentIds: summary?.documentIds ?? [],
+    };
+  }
+
   async function remove(id: string) {
     await deleteJson(`/api/conversations/${encodeURIComponent(id)}`);
     setConversations((prev) => prev.filter((c) => c.id !== id));
@@ -69,5 +84,13 @@ export function useConversations() {
     };
   }, []);
 
-  return { conversations, loading, error, refresh, loadMessages, remove };
+  return {
+    conversations,
+    loading,
+    error,
+    refresh,
+    loadMessages,
+    loadConversation,
+    remove,
+  };
 }

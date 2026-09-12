@@ -120,6 +120,9 @@ export class ConversationSummaryDto {
 
   @ApiProperty({ format: 'date-time' })
   updatedAt!: string;
+
+  @ApiPropertyOptional({ type: [String], format: 'uuid' })
+  documentIds?: string[];
 }
 
 export class ConversationMessageDto {

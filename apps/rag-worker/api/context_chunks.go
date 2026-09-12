@@ -7,16 +7,20 @@ import (
 	"apps/rag-worker/models"
 )
 
-func labelChunk(hit models.SearchHit) string {
-	title := strings.TrimSpace(hit.DocumentTitle)
-	if title == "" {
-		id := hit.DocumentID
-		if len(id) > 8 {
-			id = id[:8]
-		}
-		title = "doc " + id
+func docTitle(title, documentID string) string {
+	title = strings.TrimSpace(title)
+	if title != "" {
+		return title
 	}
-	return fmt.Sprintf("[%s #%d]", title, hit.ChunkIndex+1)
+	id := documentID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return "doc " + id
+}
+
+func labelChunk(hit models.SearchHit) string {
+	return fmt.Sprintf("[%s #%d]", docTitle(hit.DocumentTitle, hit.DocumentID), hit.ChunkIndex+1)
 }
 
 // buildContextChunks labels hits for the LLM prompt. Hits themselves are unchanged for client sources.

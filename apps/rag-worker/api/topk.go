@@ -12,3 +12,17 @@ func ClampTopK(topK, defaultTopK int) int {
 	}
 	return topK
 }
+
+// ClampChatTopK widens retrieve for map-then-answer chat (not /api/search).
+func ClampChatTopK(topK, defaultTopK int) int {
+	if topK == 0 {
+		topK = defaultTopK
+	}
+	if topK < 10 {
+		return 10
+	}
+	if topK > 40 {
+		return 40
+	}
+	return topK
+}

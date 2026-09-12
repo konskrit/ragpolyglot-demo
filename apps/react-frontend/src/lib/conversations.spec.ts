@@ -17,6 +17,7 @@ describe('mapConversations', () => {
           title: 'What is RAG?',
           createdAt: '2026-01-01T00:00:00Z',
           updatedAt: '2026-01-02T00:00:00Z',
+          documentIds: ['doc-1'],
         },
         { id: 'b', title: 'missing dates' },
       ]),
@@ -26,6 +27,7 @@ describe('mapConversations', () => {
         title: 'What is RAG?',
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
+        documentIds: ['doc-1'],
       },
     ]);
   });

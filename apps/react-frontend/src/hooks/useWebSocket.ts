@@ -22,6 +22,7 @@ function getSharedSocket(): Socket {
     });
     socket.on('connect', () => {
       resubscribeDocuments(socket);
+      resubscribeConversations(socket);
     });
     sharedSocket = socket;
   }
@@ -90,4 +91,22 @@ export function subscribeDocument(documentId: string): void {
 
 export function unsubscribeDocument(documentId: string): void {
   subscribedDocumentIds.delete(documentId);
+}
+
+const subscribedConversationIds = new Set<string>();
+
+function resubscribeConversations(socket: Socket): void {
+  for (const conversationId of subscribedConversationIds) {
+    socket.emit('subscribe:conversation', { conversationId });
+  }
+}
+
+export function subscribeConversation(conversationId: string): void {
+  if (!conversationId) return;
+  subscribedConversationIds.add(conversationId);
+  emitWebSocket('subscribe:conversation', { conversationId });
+}
+
+export function unsubscribeConversation(conversationId: string): void {
+  subscribedConversationIds.delete(conversationId);
 }

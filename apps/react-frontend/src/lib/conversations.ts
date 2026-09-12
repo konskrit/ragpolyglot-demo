@@ -10,7 +10,7 @@ function toIso(value: unknown): string | undefined {
   return undefined;
 }
 
-function mapConversation(item: unknown): ConversationSummary | null {
+export function mapConversation(item: unknown): ConversationSummary | null {
   if (!item || typeof item !== 'object') return null;
   const row = item as Record<string, unknown>;
   const createdAt = toIso(row.createdAt);
@@ -23,7 +23,22 @@ function mapConversation(item: unknown): ConversationSummary | null {
   ) {
     return null;
   }
-  return { id: row.id, title: row.title, createdAt, updatedAt };
+  const documentIds = parseDocumentIds(row.documentIds);
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt,
+    updatedAt,
+    ...(documentIds ? { documentIds } : {}),
+  };
+}
+
+function parseDocumentIds(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const ids = raw.filter(
+    (id): id is string => typeof id === 'string' && id.trim().length > 0,
+  );
+  return ids.length > 0 ? ids : undefined;
 }
 
 function mapMessage(item: unknown): ConversationMessage | null {

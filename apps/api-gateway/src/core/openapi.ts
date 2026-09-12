@@ -9,8 +9,11 @@ Not part of OpenAPI — connect with Socket.IO client.
 
 | Direction | Event | Payload |
 | --- | --- | --- |
-| client → server | \`chat:query\` | \`{ message, conversationId?, userId?, topK? }\` |
+| client → server | \`chat:query\` | \`{ query, conversationId?, userId?, documentIds?, mode?: fast\\|deep }\` |
+| client → server | \`subscribe:conversation\` | \`{ conversationId }\` |
+| server → client | \`chat:started\` | \`{ conversationId, mode, query }\` |
 | server → client | \`chat:token\` | \`{ token, conversationId? }\` |
+| server → client | \`chat:progress\` | \`{ conversationId, done, total }\` (deep mode) |
 | server → client | \`chat:complete\` | \`{ conversationId, sources?, error?, interrupted?, cacheHit? }\` |
 | client → server | \`chat:interrupt\` | \`{ conversationId? }\` |
 | client → server | \`subscribe:document\` | \`{ documentId }\` |
