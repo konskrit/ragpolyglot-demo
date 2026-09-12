@@ -33,14 +33,9 @@ export function DocumentSummaryPanel({ doc }: { doc: DocumentSummary }) {
   }, [doc.id]);
 
   useEffect(() => {
-    if (active) {
-      setLoading(false);
-      return;
-    }
+    if (active) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     void loadDocumentSummary(doc.id)
       .then((text) => {
         if (!cancelled) setSummary(text);
@@ -70,7 +65,7 @@ export function DocumentSummaryPanel({ doc }: { doc: DocumentSummary }) {
     }
   };
 
-  if (loading) return <PageSpinner />;
+  if (!active && loading) return <PageSpinner />;
 
   return (
     <section className="space-y-4">

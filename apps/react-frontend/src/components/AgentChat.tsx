@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { emitWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useDocuments } from '../context/DocumentsProvider';
 import { Button, ButtonLink } from './Button';
@@ -103,12 +103,13 @@ export function AgentChat({
     );
   };
 
+  const onRequestTimeout = useEffectEvent(() => {
+    stop('Request timed out.', true);
+  });
+
   useEffect(() => {
     if (!loading) return;
-    const timer = window.setTimeout(
-      () => stop('Request timed out.', true),
-      120_000,
-    );
+    const timer = window.setTimeout(() => onRequestTimeout(), 120_000);
     return () => window.clearTimeout(timer);
   }, [loading]);
 

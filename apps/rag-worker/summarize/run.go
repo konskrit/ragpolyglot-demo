@@ -17,7 +17,7 @@ import (
 
 const (
 	SummaryChunkIndex          = -1
-	defaultSummaryContextChars = 20_000
+	defaultSummaryContextChars = 40_000
 	summarySystem              = "You are a careful document summarizer. Preserve key claims, names, dates, and structure. Do not invent facts."
 	summaryMapInstruction      = "Summarize the following document excerpts. Keep important details; write in the same language as the source when clear."
 	summaryReduceInstruction   = "Combine these partial summaries into one coherent document summary. Keep important details; avoid repetition."
