@@ -14,7 +14,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { connected } = useWebSocketStatus();
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
+    <div className="min-h-dvh bg-gray-950 text-gray-100 flex flex-col">
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <Link
@@ -61,7 +61,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-6xl mx-auto w-full min-w-0 px-4 py-8">
+      <main className="flex-1 max-w-6xl mx-auto w-full min-w-0 px-4 py-6">
         {children}
       </main>
     </div>

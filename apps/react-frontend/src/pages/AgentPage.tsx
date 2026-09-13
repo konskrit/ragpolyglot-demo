@@ -100,12 +100,12 @@ export function AgentPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div>
       <h1 className="text-3xl font-semibold mb-2">Agent Mode</h1>
       <p className="text-gray-400 mb-2">
         Ask questions grounded in your uploaded documents.
       </p>
-      <p className="text-sm text-gray-500 mb-8">
+      <p className="text-sm text-gray-500 mb-4">
         Answers use retrieved chunks from the configured LLM. Use the context
         panel to search all documents or a selected subset.
       </p>

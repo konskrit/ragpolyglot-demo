@@ -15,6 +15,7 @@ import {
   finishAssistantMessage,
 } from '../lib/chatMessages';
 import { mapConversationMessages, toChatMessages } from '../lib/conversations';
+import { AGENT_PANEL_HEIGHT } from '../lib/agentLayout';
 import type {
   ChatCompletePayload,
   ChatDeepStatus,
@@ -50,6 +51,7 @@ export function AgentChat({
   const activeConversationIdRef = useRef<string | null>(null);
   const modeRef = useRef<ChatMode>(mode);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottomRef = useRef(true);
   const pendingTokensRef = useRef('');
   const rafRef = useRef<number | null>(null);
@@ -217,6 +219,9 @@ export function AgentChat({
     const query = input.trim();
 
     setInput('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     setLoading(true);
     setProgress(mode === 'deep' ? 'Deep search starting…' : null);
     stickToBottomRef.current = true;
@@ -238,7 +243,7 @@ export function AgentChat({
   if (!hasDocuments && messages.length === 0) {
     return (
       <div
-        className="flex flex-col h-150 bg-gray-900 rounded-xl border border-gray-800 items-center justify-center text-center p-8"
+        className={`flex flex-col ${AGENT_PANEL_HEIGHT} bg-gray-900 rounded-xl border border-gray-800 items-center justify-center text-center p-8`}
         role="status"
       >
         <p className="text-gray-300 mb-2">No documents available yet.</p>
@@ -252,7 +257,7 @@ export function AgentChat({
 
   return (
     <div
-      className="flex flex-col h-150 bg-gray-900 rounded-xl border border-gray-800"
+      className={`flex flex-col ${AGENT_PANEL_HEIGHT} overflow-hidden bg-gray-900 rounded-xl border border-gray-800`}
       aria-label="Document chat"
     >
       <ChatMessageList
@@ -267,32 +272,47 @@ export function AgentChat({
       />
 
       {progress && (
-        <p className="px-4 py-1 text-xs text-amber-400/90 border-t border-gray-800">
+        <p className="px-4 py-1 text-xs text-amber-400/90 border-t border-gray-800 shrink-0">
           {progress}
         </p>
       )}
 
-      <div className="border-t border-gray-800 p-4 flex gap-2 items-center">
-        <label htmlFor="agent-chat-mode" className="sr-only">
-          Mode
-        </label>
-        <select
-          id="agent-chat-mode"
-          value={mode}
-          disabled={loading}
-          onChange={(e) => setMode(e.target.value as ChatMode)}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-sm text-gray-200 outline-none focus:border-indigo-500 disabled:opacity-50"
-        >
-          <option value="fast">Fast</option>
-          <option value="deep">Deep</option>
-        </select>
+      <div className="border-t border-gray-800 p-3 flex gap-2 items-end shrink-0">
+        <div className="relative shrink-0">
+          <label htmlFor="agent-chat-mode" className="sr-only">
+            Mode
+          </label>
+          <select
+            id="agent-chat-mode"
+            value={mode}
+            disabled={loading}
+            onChange={(e) => setMode(e.target.value as ChatMode)}
+            className="appearance-none h-10 pl-3 pr-8 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none focus:border-indigo-500 disabled:opacity-50"
+          >
+            <option value="fast">Fast</option>
+            <option value="deep">Deep</option>
+          </select>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-base leading-none text-gray-400"
+          >
+            ▾
+          </span>
+        </div>
         <label htmlFor="agent-chat-input" className="sr-only">
           Message
         </label>
-        <input
+        <textarea
           id="agent-chat-input"
+          ref={inputRef}
+          rows={1}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            const el = e.currentTarget;
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -307,14 +327,22 @@ export function AgentChat({
               : 'Upload a ready document to continue this chat'
           }
           disabled={!hasDocuments || loading}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm outline-none focus:border-indigo-500 disabled:opacity-50"
+          className="flex-1 min-h-10 max-h-40 resize-none overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm leading-5 outline-none focus:border-indigo-500 disabled:opacity-50"
         />
         {loading ? (
-          <Button variant="danger" onClick={() => stop('(interrupted)', false)}>
+          <Button
+            variant="danger"
+            className="shrink-0"
+            onClick={() => stop('(interrupted)', false)}
+          >
             Stop
           </Button>
         ) : (
-          <Button onClick={send} disabled={!hasDocuments || !input.trim()}>
+          <Button
+            className="shrink-0"
+            onClick={send}
+            disabled={!hasDocuments || !input.trim()}
+          >
             Send
           </Button>
         )}

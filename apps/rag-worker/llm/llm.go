@@ -15,6 +15,8 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+var ErrEmptyResponse = errors.New("empty LLM response")
+
 const (
 	defaultOpenAIBase = "https://api.openai.com/v1"
 	maxRetries        = 3
@@ -41,15 +43,6 @@ func GenerateStream(ctx context.Context, query string, contextChunks []string, o
 
 // Complete runs a chat completion with an explicit system + user message.
 func Complete(ctx context.Context, system, user string, onToken func(string) error) (string, error) {
-	return complete(ctx, system, user, 0, onToken)
-}
-
-// CompleteMax is Complete with a max output token cap (0 = model default).
-func CompleteMax(ctx context.Context, system, user string, maxTokens int, onToken func(string) error) (string, error) {
-	return complete(ctx, system, user, maxTokens, onToken)
-}
-
-func complete(ctx context.Context, system, user string, maxTokens int, onToken func(string) error) (string, error) {
 	model, err := modelName()
 	if err != nil {
 		return "", err
@@ -74,9 +67,6 @@ func complete(ctx context.Context, system, user string, maxTokens int, onToken f
 		},
 		Stream: true,
 	}
-	if maxTokens > 0 {
-		req.MaxTokens = maxTokens
-	}
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -84,7 +74,7 @@ func complete(ctx context.Context, system, user string, maxTokens int, onToken f
 		if err == nil {
 			answer = strings.TrimSpace(answer)
 			if answer == "" {
-				lastErr = fmt.Errorf("empty LLM response")
+				lastErr = ErrEmptyResponse
 				break
 			}
 			return answer, nil
@@ -125,35 +115,45 @@ func streamOnce(
 	}
 	defer stream.Close()
 
-	var b strings.Builder
+	var content, reasoning strings.Builder
 	for {
 		resp, recvErr := stream.Recv()
 		if errors.Is(recvErr, io.EOF) {
-			return b.String(), emitted, nil
+			return pickStreamAnswer(content.String(), reasoning.String()), emitted, nil
 		}
 		if recvErr != nil {
 			// Local OpenAI-compatible servers often end a finished stream with a
 			// non-EOF error after tokens were already delivered.
-			if b.Len() > 0 &&
+			out := pickStreamAnswer(content.String(), reasoning.String())
+			if out != "" &&
 				!errors.Is(recvErr, context.Canceled) &&
 				!errors.Is(recvErr, context.DeadlineExceeded) {
-				return b.String(), emitted, nil
+				return out, emitted, nil
 			}
-			return b.String(), emitted, recvErr
+			return out, emitted, recvErr
 		}
 		if len(resp.Choices) == 0 {
 			continue
 		}
-		tok := resp.Choices[0].Delta.Content
-		if tok == "" {
-			continue
+		delta := resp.Choices[0].Delta
+		if delta.Content != "" {
+			if emitErr := emitToken(onToken, delta.Content); emitErr != nil {
+				return pickStreamAnswer(content.String(), reasoning.String()), true, emitErr
+			}
+			emitted = true
+			content.WriteString(delta.Content)
 		}
-		if emitErr := emitToken(onToken, tok); emitErr != nil {
-			return b.String(), true, emitErr
+		if delta.ReasoningContent != "" {
+			reasoning.WriteString(delta.ReasoningContent)
 		}
-		emitted = true
-		b.WriteString(tok)
 	}
+}
+
+func pickStreamAnswer(content, reasoning string) string {
+	if strings.TrimSpace(content) != "" {
+		return content
+	}
+	return reasoning
 }
 
 func emitToken(onToken func(string) error, token string) error {

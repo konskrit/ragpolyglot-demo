@@ -43,21 +43,6 @@ func TestChatMapBudgetLeavesRoom(t *testing.T) {
 	}
 }
 
-func TestChatMapMaxTokens(t *testing.T) {
-	t.Setenv("RAG_CHAT_MAP_MAX_TOKENS", "")
-	if chatMapMaxTokens() != defaultChatMapMaxTokens {
-		t.Fatalf("default got %d", chatMapMaxTokens())
-	}
-	t.Setenv("RAG_CHAT_MAP_MAX_TOKENS", "4096")
-	if chatMapMaxTokens() != 4096 {
-		t.Fatalf("env got %d", chatMapMaxTokens())
-	}
-	t.Setenv("RAG_CHAT_MAP_MAX_TOKENS", "10")
-	if chatMapMaxTokens() != defaultChatMapMaxTokens {
-		t.Fatalf("low clamp got %d", chatMapMaxTokens())
-	}
-}
-
 func TestCompressEvidenceSingleBatchUsesPacked(t *testing.T) {
 	big := strings.Repeat("x", chatMapBudget("q")+500)
 	out, err := compressEvidence(t.Context(), "q", []string{big}, nil)

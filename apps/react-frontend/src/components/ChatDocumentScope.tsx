@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DocumentSummary } from '@ragpolyglot-shared';
+import { AGENT_PANEL_HEIGHT } from '../lib/agentLayout';
 
 function chipClass(active: boolean) {
   return `rounded-lg border px-2.5 py-1 text-xs max-w-full truncate ${
@@ -48,7 +49,7 @@ export function ChatDocumentScope({
 
   return (
     <aside
-      className="w-52 shrink-0 flex flex-col gap-2 h-150 rounded-xl border border-gray-800 bg-gray-900 p-3"
+      className={`w-52 shrink-0 flex flex-col gap-2 ${AGENT_PANEL_HEIGHT} rounded-xl border border-gray-800 bg-gray-900 p-3 overflow-hidden`}
       aria-label="Document scope"
     >
       <p className="text-xs font-medium text-gray-400 shrink-0">Context</p>

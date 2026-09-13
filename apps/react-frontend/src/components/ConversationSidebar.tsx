@@ -1,5 +1,6 @@
 import { Button } from './Button';
 import type { ConversationSummary } from '@ragpolyglot-shared';
+import { AGENT_PANEL_HEIGHT } from '../lib/agentLayout';
 
 export function ConversationSidebar({
   conversations,
@@ -19,7 +20,9 @@ export function ConversationSidebar({
   onDelete: (id: string) => void;
 }) {
   return (
-    <aside className="w-64 shrink-0 flex flex-col h-150 bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <aside
+      className={`w-64 shrink-0 flex flex-col ${AGENT_PANEL_HEIGHT} bg-gray-900 rounded-xl border border-gray-800 overflow-hidden`}
+    >
       <div className="p-3 border-b border-gray-800 shrink-0">
         <Button
           variant="secondary"

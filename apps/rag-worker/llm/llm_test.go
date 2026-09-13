@@ -29,3 +29,15 @@ func TestUserPrompt(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestPickStreamAnswer(t *testing.T) {
+	if pickStreamAnswer(" answer ", "think") != " answer " {
+		t.Fatal("prefer content")
+	}
+	if pickStreamAnswer("  ", "think hard") != "think hard" {
+		t.Fatal("fallback reasoning")
+	}
+	if pickStreamAnswer("", "") != "" {
+		t.Fatal("both empty")
+	}
+}

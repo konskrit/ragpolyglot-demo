@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -15,7 +16,6 @@ import (
 
 const (
 	defaultChatMapContextChars = 8_000
-	defaultChatMapMaxTokens    = 2_048
 	chatMapSystem              = "You extract evidence for a retrieval-augmented assistant. Use ONLY the excerpts. Do not invent facts."
 	chatMapInstruction         = "Extract only facts that help answer the user question. At most 8 short bullets. Keep names, numbers, dates. If nothing is relevant, reply with exactly: NONE"
 )
@@ -35,18 +35,6 @@ func chatMapContextChars() int {
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 2000 {
 		return defaultChatMapContextChars
-	}
-	return n
-}
-
-func chatMapMaxTokens() int {
-	raw := strings.TrimSpace(os.Getenv("RAG_CHAT_MAP_MAX_TOKENS"))
-	if raw == "" {
-		return defaultChatMapMaxTokens
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < 256 {
-		return defaultChatMapMaxTokens
 	}
 	return n
 }
@@ -147,8 +135,17 @@ func compressEvidence(
 			query,
 			strings.Join(batch, "\n\n"),
 		)
-		text, err := llm.CompleteMax(ctx, chatMapSystem, user, chatMapMaxTokens(), nil)
+		text, err := llm.Complete(ctx, chatMapSystem, user, nil)
 		if err != nil {
+			// Thinking models sometimes finish a stream with no usable text; skip batch.
+			if errors.Is(err, llm.ErrEmptyResponse) {
+				if onProgress != nil {
+					if err := onProgress(i+1, total); err != nil {
+						return nil, err
+					}
+				}
+				continue
+			}
 			return nil, fmt.Errorf("chat map batch %d: %w", i+1, err)
 		}
 		if !isNoneExtract(text) {
