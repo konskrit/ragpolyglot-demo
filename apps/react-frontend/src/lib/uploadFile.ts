@@ -4,6 +4,25 @@ const ALLOWED_EXTENSIONS = new Set([
   '.markdown',
   '.json',
   '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.tif',
+  '.tiff',
+  '.webp',
+  '.bmp',
+  '.gif',
+]);
+
+const IMAGE_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.tif',
+  '.tiff',
+  '.webp',
+  '.bmp',
+  '.gif',
 ]);
 
 function fileExtension(name: string): string {
@@ -45,6 +64,10 @@ export async function validateUploadFile(file: File): Promise<string | null> {
     if (!startsWithPdfMagic(head)) {
       return `${file.name} is not a valid PDF`;
     }
+    return null;
+  }
+
+  if (IMAGE_EXTENSIONS.has(ext)) {
     return null;
   }
 

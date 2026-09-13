@@ -10,6 +10,14 @@ const ALLOWED_EXTENSIONS = new Set([
   '.markdown',
   '.json',
   '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.tif',
+  '.tiff',
+  '.webp',
+  '.bmp',
+  '.gif',
 ]);
 
 export const uploadInterceptorOptions = {

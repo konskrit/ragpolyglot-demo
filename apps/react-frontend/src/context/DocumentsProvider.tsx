@@ -38,7 +38,7 @@ interface DocumentsContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
-  retry: (id: string, ocrLang?: string) => Promise<void>;
+  retry: (id: string, ocrLang?: string, forceOcr?: boolean) => Promise<void>;
   changeOcrLang: (id: string, ocrLang?: string) => Promise<void>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
@@ -126,11 +126,12 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function retry(id: string, ocrLang?: string) {
+  async function retry(id: string, ocrLang?: string, forceOcr = false) {
     await applyMappedUpdate(
       id,
       postJson(`/api/documents/${encodeURIComponent(id)}/retry`, {
         ocrLang: ocrLang ?? null,
+        forceOcr: forceOcr || undefined,
       }),
       'Invalid retry response',
     );

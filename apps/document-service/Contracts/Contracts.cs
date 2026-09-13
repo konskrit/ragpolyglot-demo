@@ -148,7 +148,7 @@ public record DocumentDeletedEvent
 
 public record DocumentCreateDto(string Title, string FilePath);
 
-public record DocumentRetryDto(string? OcrLang = null);
+public record DocumentRetryDto(string? OcrLang = null, bool ForceOcr = false);
 
 public record DocumentRenameDto(string Title);
 

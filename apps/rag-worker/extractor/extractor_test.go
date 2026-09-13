@@ -8,6 +8,17 @@ import (
 	"testing"
 )
 
+func TestIsImageExt(t *testing.T) {
+	for _, ext := range []string{"png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp", "gif"} {
+		if !isImageExt(ext) {
+			t.Fatalf("expected image ext %q", ext)
+		}
+	}
+	if isImageExt("pdf") || isImageExt("txt") || isImageExt("") {
+		t.Fatal("pdf/txt/empty should not be image ext")
+	}
+}
+
 func TestDetectAndConvertEncoding_UTF8BOM(t *testing.T) {
 	input := append([]byte{0xEF, 0xBB, 0xBF}, []byte("hello")...)
 	got := detectAndConvertEncoding(input)

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { join } from 'path';
 
-const DEFAULT_MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
 function envPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];

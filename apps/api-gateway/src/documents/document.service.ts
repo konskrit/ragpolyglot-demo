@@ -140,7 +140,11 @@ export class DocumentService {
     }
   }
 
-  async retryDocument(id: string, ocrLang?: string): Promise<Document> {
+  async retryDocument(
+    id: string,
+    ocrLang?: string,
+    forceOcr = false,
+  ): Promise<Document> {
     const existing = await firstValueFrom(
       this.httpService.get<DocumentRecord>(this.docsUrl(id)),
     );
@@ -150,6 +154,7 @@ export class DocumentService {
     const res = await firstValueFrom(
       this.httpService.post<DocumentRecord>(this.docsUrl(id, '/retry'), {
         ocrLang: hint,
+        forceOcr,
       }),
     );
 

@@ -119,7 +119,8 @@ public static class DocumentEndpoints
             return Results.BadRequest(new { error = "Choose an OCR language to retry." });
         }
 
-        var resetIngest = IngestRetryPolicy.OcrLangChanged(existing.OcrLang, ocrLang);
+        var resetIngest = dto?.ForceOcr == true
+            || IngestRetryPolicy.OcrLangChanged(existing.OcrLang, ocrLang);
         var doc = await repo.ClaimRetryAsync(id, ocrLang, updateOcrLang: true, cancellationToken);
         if (doc is null)
         {

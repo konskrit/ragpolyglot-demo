@@ -241,6 +241,11 @@ export class OcrLangBodyDto {
     description: 'OCR language code; omit or null to clear',
   })
   ocrLang?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Wipe prior text/chunks and run OCR (skip native PDF text)',
+  })
+  forceOcr?: boolean;
 }
 
 export class DocumentRenameBodyDto {

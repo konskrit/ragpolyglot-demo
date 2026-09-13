@@ -16,10 +16,10 @@ describe('Config.maxUploadBytes', () => {
     jest.resetModules();
   });
 
-  it('defaults to 300 MB when unset', async () => {
+  it('defaults to 1 GB when unset', async () => {
     delete process.env.MAX_UPLOAD_BYTES;
     const { Config } = await import('./config');
-    expect(Config.maxUploadBytes).toBe(300 * 1024 * 1024);
+    expect(Config.maxUploadBytes).toBe(1024 * 1024 * 1024);
   });
 
   it('reads MAX_UPLOAD_BYTES from the environment', async () => {
@@ -31,7 +31,7 @@ describe('Config.maxUploadBytes', () => {
   it('falls back on invalid values', async () => {
     process.env.MAX_UPLOAD_BYTES = 'nope';
     const { Config } = await import('./config');
-    expect(Config.maxUploadBytes).toBe(300 * 1024 * 1024);
+    expect(Config.maxUploadBytes).toBe(1024 * 1024 * 1024);
   });
 });
 

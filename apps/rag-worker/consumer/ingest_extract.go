@@ -54,6 +54,7 @@ func (p *Processor) runExtract(
 	}()
 
 	state := extractor.OCRState{
+		ForceOCR:    event.ResetIngest,
 		ShouldPause: stopIngest,
 		Pool:        p.pools.OCR,
 		PageWorkers: p.ocrWorkerCount,

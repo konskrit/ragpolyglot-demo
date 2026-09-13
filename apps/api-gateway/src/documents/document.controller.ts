@@ -87,7 +87,11 @@ export class DocumentController {
   @ApiBody({ type: OcrLangBodyDto })
   @ApiOkResponse({ type: DocumentSummaryDto })
   retryDocument(@Param('id') id: string, @Body() body?: OcrLangBodyDto) {
-    return this.documentService.retryDocument(id, body?.ocrLang ?? undefined);
+    return this.documentService.retryDocument(
+      id,
+      body?.ocrLang ?? undefined,
+      body?.forceOcr === true,
+    );
   }
 
   @Post(':id/ocr-lang')

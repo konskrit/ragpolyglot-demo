@@ -56,6 +56,22 @@ export const CHAT_ROLES = [
 
 export const OCR_LANGUAGE_NEEDED = 'ocr_language_needed';
 
+const OCRABLE_EXTS = new Set([
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'tif',
+  'tiff',
+  'webp',
+  'bmp',
+  'gif',
+]);
+
+export function isOcrableExt(ext?: string | null): boolean {
+  return Boolean(ext && OCRABLE_EXTS.has(ext.trim().toLowerCase()));
+}
+
 export function showOcrLanguageMenu(
   doc: Partial<
     Pick<
@@ -67,16 +83,7 @@ export function showOcrLanguageMenu(
   if (doc.errorReason === OCR_LANGUAGE_NEEDED) {
     return true;
   }
-  if (doc.fileExt !== 'pdf') {
-    return false;
-  }
-  if (
-    doc.progressStage === 'extracting' ||
-    doc.progressStage === 'waiting_for_ocr'
-  ) {
-    return true;
-  }
-  return Boolean(doc.ocrLang);
+  return isOcrableExt(doc.fileExt);
 }
 
 /** Live OCR lang edits while still in the OCR phase (not embedding yet). */
@@ -88,7 +95,7 @@ export function canChangeOcrLangLive(
     >
   >,
 ): boolean {
-  if (doc.fileExt !== 'pdf') {
+  if (!isOcrableExt(doc.fileExt)) {
     return false;
   }
   if (doc.status === 'failed' && doc.errorReason === OCR_LANGUAGE_NEEDED) {

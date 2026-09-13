@@ -128,7 +128,7 @@ export function FileUploadZone() {
           ref={inputRef}
           type="file"
           multiple
-          accept=".txt,.md,.markdown,.json,.pdf"
+          accept=".txt,.md,.markdown,.json,.pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.bmp,.gif"
           className="hidden"
           onChange={onSelect}
         />

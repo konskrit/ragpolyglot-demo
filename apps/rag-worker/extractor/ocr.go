@@ -3,6 +3,7 @@ package extractor
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,9 +29,11 @@ var (
 type OCRProgressFunc func(done, total int, textSoFar, langs string) error
 
 type OCRState struct {
-	StartPage   int
-	PriorText   string
-	Resolved    string
+	StartPage int
+	PriorText string
+	Resolved  string
+	// ForceOCR skips pdftotext and always runs the OCR pipeline.
+	ForceOCR    bool
 	ShouldPause func() bool
 	OnProgress  OCRProgressFunc
 	Pool        *workpool.Pool
@@ -256,6 +259,91 @@ func ocrOnePage(pdfPath, dir string, page int, langs string, stop func() bool) (
 	return tesseractPage(img, langs, stop)
 }
 
+func extractImage(path, ocrLang string, state OCRState) (string, string, error) {
+	if state.ShouldPause != nil && state.ShouldPause() {
+		return "", "", ErrPaused
+	}
+	if state.OnOCRStart != nil {
+		release, err := state.OnOCRStart()
+		if err != nil {
+			return "", "", err
+		}
+		if release != nil {
+			defer release()
+		}
+	}
+	if state.ShouldPause != nil && state.ShouldPause() {
+		return "", "", ErrPaused
+	}
+
+	stop := state.ShouldPause
+	langs := resolvedOCRLangs(ocrLang, state.Resolved)
+	if langs == "" {
+		script, err := detectScript(path, stop)
+		if err != nil {
+			if errors.Is(err, ErrPaused) {
+				return "", "", err
+			}
+			log.Printf("[Extractor] image OSD failed: %v", err)
+			return "", "", ErrOcrLanguageNeeded
+		}
+		var packErr error
+		langs, packErr = langsForDetectedScript(script)
+		if packErr != nil {
+			return "", "", packErr
+		}
+	}
+
+	if state.OnProgress != nil {
+		if err := state.OnProgress(0, 1, "", langs); err != nil {
+			return "", langs, err
+		}
+	}
+
+	var (
+		text string
+		err  error
+	)
+	if usesKraken(langs) {
+		// Kraken writes sidecar .txt next to the input; keep uploads clean.
+		dir, dirErr := os.MkdirTemp("", "ocr-img-*")
+		if dirErr != nil {
+			return "", langs, dirErr
+		}
+		defer os.RemoveAll(dir)
+		work := filepath.Join(dir, "page"+filepath.Ext(path))
+		if cpErr := copyFile(path, work); cpErr != nil {
+			return "", langs, cpErr
+		}
+		log.Printf("[Extractor] OCR engine=kraken image langs=%s", langs)
+		texts, kerr := krakenPages([]string{work}, stop)
+		if kerr == nil && len(texts) > 0 {
+			text = texts[0]
+		}
+		if kerr != nil || strings.TrimSpace(text) == "" {
+			if kerr != nil {
+				log.Printf("[Extractor] kraken image failed, falling back to tesseract: %v", kerr)
+			} else {
+				log.Printf("[Extractor] kraken image returned no text, falling back to tesseract")
+			}
+			text, err = tesseractPage(path, langs, stop)
+		}
+	} else {
+		log.Printf("[Extractor] OCR engine=tesseract image langs=%s", langs)
+		text, err = tesseractPage(path, langs, stop)
+	}
+	if err != nil {
+		return "", langs, err
+	}
+
+	if state.OnProgress != nil {
+		if err := state.OnProgress(1, 1, text, langs); err != nil {
+			return text, langs, err
+		}
+	}
+	return finishOCRText(text, langs, state.Resolved, ocrLang)
+}
+
 func joinPageText(prior string, pages []string, start, end int) string {
 	var b strings.Builder
 	if prior != "" {
@@ -289,4 +377,19 @@ func removeFiles(paths []string) {
 	for _, p := range paths {
 		os.Remove(p)
 	}
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }

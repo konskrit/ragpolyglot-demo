@@ -47,6 +47,9 @@ func ExtractFromPathWithOCR(filePath, ocrLang string, state OCRState) (text stri
 	if ext == "pdf" {
 		return extractPDF(fullPath, ocrLang, state)
 	}
+	if isImageExt(ext) {
+		return extractImage(fullPath, ocrLang, state)
+	}
 
 	extract := extractors[ext]
 	if extract == nil {
@@ -64,6 +67,15 @@ func ExtractFromPathWithOCR(filePath, ocrLang string, state OCRState) (text stri
 		return "", "", fmt.Errorf("no text extracted")
 	}
 	return out, "", nil
+}
+
+func isImageExt(ext string) bool {
+	switch ext {
+	case "png", "jpg", "jpeg", "tif", "tiff", "webp", "bmp", "gif":
+		return true
+	default:
+		return false
+	}
 }
 
 func envInt(name string, fallback int) int {
@@ -161,7 +173,7 @@ func extractJSON(content []byte) string {
 
 func extractPDF(path, ocrLang string, state OCRState) (string, string, error) {
 	resume := state.StartPage > 1 || strings.TrimSpace(state.PriorText) != "" || strings.TrimSpace(state.Resolved) != ""
-	if resume || strings.TrimSpace(ocrLang) != "" {
+	if state.ForceOCR || resume || strings.TrimSpace(ocrLang) != "" {
 		return runPDFWithOCR(path, ocrLang, state)
 	}
 

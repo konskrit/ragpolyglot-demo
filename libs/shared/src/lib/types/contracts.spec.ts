@@ -60,7 +60,7 @@ describe('shared contracts', () => {
     expect(isOcrEngine('kraken')).toBe(false);
   });
 
-  it('shows the OCR language menu when language is needed or a PDF used OCR', () => {
+  it('shows the OCR language menu for OCR-able files and language-needed errors', () => {
     expect(showOcrLanguageMenu({ errorReason: OCR_LANGUAGE_NEEDED })).toBe(
       true,
     );
@@ -69,40 +69,14 @@ describe('shared contracts', () => {
         fileExt: 'pdf',
         status: 'processing',
       }),
-    ).toBe(false);
-    expect(
-      showOcrLanguageMenu({
-        fileExt: 'pdf',
-        status: 'processing',
-        progressStage: 'embedding',
-      }),
-    ).toBe(false);
-    expect(
-      showOcrLanguageMenu({
-        fileExt: 'pdf',
-        status: 'processing',
-        progressStage: 'extracting',
-      }),
     ).toBe(true);
     expect(
       showOcrLanguageMenu({
-        fileExt: 'pdf',
-        status: 'processing',
-        progressStage: 'waiting_for_ocr',
+        fileExt: 'png',
+        status: 'ready',
       }),
     ).toBe(true);
-    expect(
-      showOcrLanguageMenu({
-        fileExt: 'pdf',
-        status: 'paused',
-        progressStage: 'extracting',
-      }),
-    ).toBe(true);
-    expect(showOcrLanguageMenu({ fileExt: 'pdf', status: 'paused' })).toBe(
-      false,
-    );
     expect(showOcrLanguageMenu({ fileExt: 'pdf', ocrLang: 'ell' })).toBe(true);
-    expect(showOcrLanguageMenu({ fileExt: 'pdf' })).toBe(false);
     expect(showOcrLanguageMenu({ fileExt: 'txt', ocrLang: 'eng' })).toBe(false);
     expect(showOcrLanguageMenu({})).toBe(false);
   });

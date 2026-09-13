@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   OCR_LANGUAGE_NEEDED,
   canChangeOcrLangLive,
+  isOcrableExt,
   ocrLangSelectValue,
   showOcrLanguageMenu,
   type DocumentSummary,
@@ -27,6 +28,7 @@ export function DocumentActions({
 
   const offline = !connected;
   const canRetry = doc.status === 'failed' || doc.status === 'ready';
+  const canForceOcr = canRetry && isOcrableExt(doc.fileExt);
   const canPause = doc.status === 'processing';
   const canResume = doc.status === 'paused';
   const canDelete = canRetry || canResume || canPause;
@@ -145,6 +147,22 @@ export function DocumentActions({
             aria-label={`Resume ${doc.title}`}
           >
             {pending ? '…' : 'Resume'}
+          </Button>
+        )}
+        {canForceOcr && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              void runAction(
+                () => retry(doc.id, selectLang || undefined, true),
+                'Force OCR failed',
+              )
+            }
+            disabled={pending || offline || (needsOcrLanguage && !selectLang)}
+            aria-label={`Force OCR ${doc.title}`}
+          >
+            {pending ? '…' : 'Force OCR'}
           </Button>
         )}
         {canRetry && (

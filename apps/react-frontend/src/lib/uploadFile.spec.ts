@@ -25,8 +25,13 @@ describe('validateUploadFile', () => {
     );
   });
 
-  it('rejects unsupported extensions', async () => {
+  it('accepts common image extensions', async () => {
     const file = new File(['x'], 'img.png');
+    await expect(validateUploadFile(file)).resolves.toBeNull();
+  });
+
+  it('rejects unsupported extensions', async () => {
+    const file = new File(['x'], 'img.exe');
     await expect(validateUploadFile(file)).resolves.toMatch(/Unsupported/);
   });
 });
