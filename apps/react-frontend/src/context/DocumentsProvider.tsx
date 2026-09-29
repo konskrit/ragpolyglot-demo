@@ -211,23 +211,27 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     void refresh();
   });
 
+  const docsFetchGenRef = useRef(0);
+
   useEffect(() => {
+    const gen = ++docsFetchGenRef.current;
     let cancelled = false;
 
     void (async () => {
       try {
         const mapped = await fetchDocuments();
-        if (cancelled) return;
+        if (cancelled || gen !== docsFetchGenRef.current) return;
         setError(null);
         setDocuments(mapped);
         subscribeActiveDocuments(mapped, subscribedRef.current);
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || gen !== docsFetchGenRef.current) return;
         const message =
           e instanceof Error ? e.message : 'Failed to load documents';
         setError(message);
         console.error('Failed to load documents', e);
       } finally {
+        // Initial load owns the spinner even if a newer reconnect fetch superseded it.
         if (!cancelled) setLoading(false);
       }
     })();
@@ -239,23 +243,22 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!connected) return;
+    const gen = ++docsFetchGenRef.current;
     let cancelled = false;
 
     void (async () => {
       try {
         const mapped = await fetchDocuments();
-        if (cancelled) return;
+        if (cancelled || gen !== docsFetchGenRef.current) return;
         setError(null);
         setDocuments(mapped);
         subscribeActiveDocuments(mapped, subscribedRef.current);
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || gen !== docsFetchGenRef.current) return;
         const message =
           e instanceof Error ? e.message : 'Failed to load documents';
         setError(message);
         console.error('Failed to load documents', e);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
 

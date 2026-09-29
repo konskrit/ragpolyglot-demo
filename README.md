@@ -2,7 +2,9 @@
 
 Local polyglot RAG system: upload documents, chunk and embed them, search with pgvector, and chat with an LLM that answers only from retrieved context.
 
-Built as a personal stack and a portfolio piece — event-driven microservices in an Nx monorepo, not a product. Auth is off. Data stays on your machine.
+**Intent:** This is a **demo / portfolio** of a polyglot, event-driven RAG layout — Nest, .NET, Go, React, Postgres/Redis/Rabbit — on purpose. A single TypeScript (or Go) service would be more pragmatic for many real products. The goal here is to show service boundaries, events, and ops across languages, not to claim this is the default way to ship RAG.
+
+Built as a personal stack in an Nx monorepo, not a product. Auth is off. Data stays on your machine.
 
 ## Stack
 

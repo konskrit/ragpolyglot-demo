@@ -55,6 +55,7 @@ export function AgentChat({
   const stickToBottomRef = useRef(true);
   const pendingTokensRef = useRef('');
   const rafRef = useRef<number | null>(null);
+  const deepCompleteSeqRef = useRef(0);
 
   useEffect(() => {
     modeRef.current = mode;
@@ -165,18 +166,18 @@ export function AgentChat({
     activeConversationIdRef.current = null;
 
     const wasDeep = modeRef.current === 'deep';
+    setMessages((prev) => applyChatComplete(prev, pending, payload));
+
     if (wasDeep && !payload.interrupted) {
+      const seq = ++deepCompleteSeqRef.current;
       void getJson<unknown>(
         `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
       )
         .then((rows) => {
+          if (seq !== deepCompleteSeqRef.current) return;
           setMessages(toChatMessages(mapConversationMessages(rows)));
         })
-        .catch(() => {
-          setMessages((prev) => applyChatComplete(prev, pending, payload));
-        });
-    } else {
-      setMessages((prev) => applyChatComplete(prev, pending, payload));
+        .catch(() => undefined);
     }
   });
 
@@ -190,6 +191,7 @@ export function AgentChat({
   const stop = (fallback: string, keepPending: boolean) => {
     const id = activeConversationIdRef.current;
     if (!id) return;
+    deepCompleteSeqRef.current++;
     emitWebSocket('chat:interrupt', { conversationId: id });
     activeConversationIdRef.current = null;
     const pending = clearPending();
@@ -216,6 +218,7 @@ export function AgentChat({
   const send = () => {
     if (!input.trim() || !hasDocuments || loading) return;
 
+    deepCompleteSeqRef.current++;
     const query = input.trim();
 
     setInput('');
