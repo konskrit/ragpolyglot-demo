@@ -5,6 +5,9 @@
   "sourceRoot": "apps/document-service.Tests",
   "tags": ["type:test", "lang:dotnet"],
   "targets": {
+    "build": {
+      "dependsOn": ["restore", "^build"]
+    },
     "test": {
       "executor": "nx:run-commands",
       "dependsOn": [],

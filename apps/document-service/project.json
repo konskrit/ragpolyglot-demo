@@ -1,0 +1,12 @@
+{
+  "name": "document-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/document-service",
+  "tags": ["type:app", "lang:dotnet"],
+  "targets": {
+    "build": {
+      "dependsOn": ["restore", "^build"]
+    }
+  }
+}
