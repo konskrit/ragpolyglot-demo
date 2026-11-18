@@ -41,6 +41,6 @@ npx nx serve api-gateway   # needs Postgres, Redis, RabbitMQ, workers
 npx nx test api-gateway
 ```
 
-Docker: `docker compose up` (port `3000`). Compose/env: [docs/docker-compose.yml](../../docs/docker-compose.yml/README.md).
+Docker: `docker compose up` (port `3000`). Compose/env: root `docker-compose.yml` and `.env.example`.
 
 Integration: `npm run test:integration` (`--profile test` + `apps/api-gateway-e2e`).

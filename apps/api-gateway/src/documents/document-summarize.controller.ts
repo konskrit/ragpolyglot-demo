@@ -28,9 +28,10 @@ export class DocumentSummarizeController {
     @Param('id') id: string,
     @Body() body?: DocumentSummarizeBodyDto,
   ) {
-    const dto: DocumentSummarizeDto = {
-      maxContextChars: body?.maxContextChars,
-    };
+    const dto: DocumentSummarizeDto = {};
+    if (typeof body?.maxContextChars === 'number') {
+      dto.maxContextChars = body.maxContextChars;
+    }
     return this.documentService.startSummarize(id, dto);
   }
 

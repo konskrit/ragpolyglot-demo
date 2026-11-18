@@ -69,10 +69,15 @@ export class DocumentService {
     id: string,
     body: DocumentSummarizeDto = {},
   ): Promise<Document> {
+    const payload: DocumentSummarizeDto = {};
+    if (typeof body.maxContextChars === 'number') {
+      payload.maxContextChars = body.maxContextChars;
+    }
     const res = await firstValueFrom(
-      this.httpService.post<DocumentRecord>(this.docsUrl(id, '/summarize'), {
-        maxContextChars: body.maxContextChars,
-      } satisfies DocumentSummarizeDto),
+      this.httpService.post<DocumentRecord>(
+        this.docsUrl(id, '/summarize'),
+        payload,
+      ),
     );
     this.logger.log(`Document summarize queued: ${id}`);
     return this.toPublicDocument(res.data);

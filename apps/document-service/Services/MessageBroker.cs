@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DocumentService.Contracts;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -45,7 +46,9 @@ public sealed partial class MessageBroker(
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        // Omit null optional fields (e.g. maxContextChars) — JSON null breaks non-pointer ints.
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     private readonly SemaphoreSlim _publishLock = new(1, 1);

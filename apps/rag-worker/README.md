@@ -8,7 +8,7 @@ OCR: Tesseract for most languages; Kraken 7 for Ancient Greek (`grc`). User paus
 
 **Retry / OCR language:** changing `ocrLang` on retry or via `/ocr-lang` sets `resetIngest` on `document.uploaded`. The worker wipes checkpoint + chunks and re-runs OCR from page 1. Same-language retry (and `ocr_aborted` auto-retry) still resumes from checkpoint.
 
-Compose sets `gpus: all` (see root README / [docs/docker-compose.yml](../../docs/docker-compose.yml/README.md)).
+Compose sets `gpus: all` (see root README / `docker-compose.yml`).
 
 HTTP:
 

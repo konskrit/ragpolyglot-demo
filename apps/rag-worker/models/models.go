@@ -56,9 +56,10 @@ type DocumentProgressEvent struct {
 }
 
 type DocumentSummarizeEvent struct {
-	Type            string    `json:"type"`
-	DocumentID      string    `json:"documentId"`
-	MaxContextChars int       `json:"maxContextChars,omitempty"`
+	Type       string `json:"type"`
+	DocumentID string `json:"documentId"`
+	// Pointer so JSON null (C# int?) unmarshals; nil → model default context size.
+	MaxContextChars *int      `json:"maxContextChars,omitempty"`
 	Reset           bool      `json:"reset,omitempty"`
 	Timestamp       time.Time `json:"timestamp"`
 }

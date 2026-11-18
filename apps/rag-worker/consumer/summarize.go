@@ -136,12 +136,16 @@ func (p *Processor) runSummarize(event models.DocumentSummarizeEvent) {
 		return
 	}
 
+	maxChars := 0
+	if event.MaxContextChars != nil {
+		maxChars = *event.MaxContextChars
+	}
 	paused, err := summarize.Run(
 		ctx,
 		p.store,
 		documentID,
 		texts,
-		summarize.ContextChars(event.MaxContextChars),
+		summarize.ContextChars(maxChars),
 		event.Reset,
 		p.allowFallback,
 		func() bool {
