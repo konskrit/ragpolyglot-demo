@@ -56,6 +56,7 @@
     "nx": "23.1.1",
     "postcss": "^8.5.26",
     "prettier": "~3.6.2",
+    "quicktype": "^26.0.0",
     "sass": "^1.102.0",
     "tailwindcss": "^4.3.3",
     "ts-jest": "^29.4.7",
@@ -93,6 +94,8 @@
   "scripts": {
     "prepare": "husky",
     "lint:staged": "lint-staged",
+    "contracts:gen": "node libs/contracts/generate.mjs",
+    "contracts:check": "node libs/contracts/generate.mjs --check",
     "test:integration": "docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile test --env-file .env --env-file .env.test.example -p ragpolyglot-ci up -d --wait --build && nx run api-gateway-e2e:e2e && docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile test -p ragpolyglot-ci down -v --remove-orphans"
   }
 }

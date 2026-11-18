@@ -56,12 +56,13 @@ The UI polls `GET /api/health` and `GET /api/metrics`. Metrics come from Redis c
 
 All browser and third-party traffic goes through the **api-gateway** — not document-service or rag-worker directly.
 
-| Need                         | Where                                                    |
-| ---------------------------- | -------------------------------------------------------- |
-| Interactive REST docs        | http://localhost:3000/docs (Scalar)                      |
-| OpenAPI JSON                 | http://localhost:3000/api/openapi-json                   |
-| TypeScript contracts         | `libs/shared` (`interfaces.ts`, `contracts.ts`)          |
-| Streaming chat + live status | Socket.IO namespace `/ws` (event table in `/docs` intro) |
+| Need                                  | Where                                                    |
+| ------------------------------------- | -------------------------------------------------------- |
+| Interactive REST docs                 | http://localhost:3000/docs (Scalar)                      |
+| OpenAPI JSON                          | http://localhost:3000/api/openapi-json                   |
+| Wire contracts (Rabbit + worker HTTP) | `libs/contracts` → `npm run contracts:gen`               |
+| App/UI TS types                       | `libs/shared` (re-exports wire + Document/WS/metrics)    |
+| Streaming chat + live status          | Socket.IO namespace `/ws` (event table in `/docs` intro) |
 
 Vite proxies `/api` and `/socket.io` only — open `/docs` on port **3000**, not 4200.
 
@@ -113,6 +114,7 @@ Kraken 7 and CUDA torch live in a **separate Docker stage** split into two layer
 
 ```bash
 npx nx run-many -t test --exclude=api-gateway-e2e,react-frontend-e2e
+npm run contracts:check   # also runs unconditionally in CI
 ```
 
 **Integration** (CI — `--profile test` starts `llm-stub`; isolated compose project `ragpolyglot-ci`):
@@ -136,7 +138,8 @@ apps/
   event-processor/    Go job runner + in-process scheduler (`sql/*.sql` embedded)
   react-frontend/     UI (dashboard, upload, agent chat)
 libs/
-  shared/             TS contracts
+  contracts/          JSON Schema wire SoT + quicktype (TS/C#/Go)
+  shared/             App/UI TS types (re-exports generated wire)
 tools/
   llm-stub/           OpenAI-compatible stub for CI
 ```

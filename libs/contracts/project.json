@@ -1,0 +1,23 @@
+{
+  "name": "contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/contracts",
+  "projectType": "library",
+  "tags": ["contracts"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test libs/contracts/generate.test.mjs",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node libs/contracts/generate.mjs",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

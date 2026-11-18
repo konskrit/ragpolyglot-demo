@@ -146,9 +146,11 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentUploadedEvent
         {
+            Type = "document.uploaded",
             DocumentId = documentId,
             FilePath = filePath,
-            OcrLang = ocrLang,
+            UserId = string.Empty,
+            OcrLang = ocrLang ?? string.Empty,
             Retry = retry,
             ResetIngest = resetIngest,
             Timestamp = DateTime.UtcNow
@@ -161,6 +163,7 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentDeletedEvent
         {
+            Type = "document.deleted",
             DocumentId = documentId,
             Timestamp = DateTime.UtcNow
         };
@@ -172,6 +175,7 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentPauseEvent
         {
+            Type = "document.pause",
             DocumentId = documentId,
             Timestamp = DateTime.UtcNow
         };
@@ -187,6 +191,7 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentSummarizeEvent
         {
+            Type = "document.summarize",
             DocumentId = documentId,
             MaxContextChars = maxContextChars,
             Reset = reset,
@@ -200,6 +205,7 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentSummarizePauseEvent
         {
+            Type = "document.summarize.pause",
             DocumentId = documentId,
             Timestamp = DateTime.UtcNow
         };

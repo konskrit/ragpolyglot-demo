@@ -1,0 +1,350 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContractsBundle",
+  "description": "Wire contracts for RabbitMQ document/summarize events and rag-worker HTTP/NDJSON DTOs. Generate with npm run contracts:gen. Not Document entity, Socket.IO, or metrics — those stay in libs/shared.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "documentUploadedEvent": { "$ref": "#/$defs/DocumentUploadedEvent" },
+    "documentDeletedEvent": { "$ref": "#/$defs/DocumentDeletedEvent" },
+    "documentProcessedEvent": { "$ref": "#/$defs/DocumentProcessedEvent" },
+    "documentFailedEvent": { "$ref": "#/$defs/DocumentFailedEvent" },
+    "documentPauseEvent": { "$ref": "#/$defs/DocumentPauseEvent" },
+    "documentPausedEvent": { "$ref": "#/$defs/DocumentPausedEvent" },
+    "documentProgressEvent": { "$ref": "#/$defs/DocumentProgressEvent" },
+    "documentSummarizeEvent": { "$ref": "#/$defs/DocumentSummarizeEvent" },
+    "documentSummarizePauseEvent": {
+      "$ref": "#/$defs/DocumentSummarizePauseEvent"
+    },
+    "documentSummarizeProgressEvent": {
+      "$ref": "#/$defs/DocumentSummarizeProgressEvent"
+    },
+    "documentSummarizeCompletedEvent": {
+      "$ref": "#/$defs/DocumentSummarizeCompletedEvent"
+    },
+    "documentSummarizeFailedEvent": {
+      "$ref": "#/$defs/DocumentSummarizeFailedEvent"
+    },
+    "documentSummarizePausedEvent": {
+      "$ref": "#/$defs/DocumentSummarizePausedEvent"
+    },
+    "documentCreateDto": { "$ref": "#/$defs/DocumentCreateDto" },
+    "documentRetryDto": { "$ref": "#/$defs/DocumentRetryDto" },
+    "documentRenameDto": { "$ref": "#/$defs/DocumentRenameDto" },
+    "documentSummarizeDto": { "$ref": "#/$defs/DocumentSummarizeDto" },
+    "searchRequest": { "$ref": "#/$defs/SearchRequest" },
+    "searchHit": { "$ref": "#/$defs/SearchHit" },
+    "searchResponse": { "$ref": "#/$defs/SearchResponse" },
+    "chatRequest": { "$ref": "#/$defs/ChatRequest" },
+    "chatResponse": { "$ref": "#/$defs/ChatResponse" },
+    "chatStreamTokenEvent": { "$ref": "#/$defs/ChatStreamTokenEvent" },
+    "chatStreamProgressEvent": { "$ref": "#/$defs/ChatStreamProgressEvent" },
+    "chatStreamDoneEvent": { "$ref": "#/$defs/ChatStreamDoneEvent" },
+    "chatStreamErrorEvent": { "$ref": "#/$defs/ChatStreamErrorEvent" }
+  },
+  "$defs": {
+    "DocumentUploadedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "documentId",
+        "filePath",
+        "userId",
+        "ocrLang",
+        "retry",
+        "resetIngest",
+        "timestamp"
+      ],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "filePath": { "type": "string" },
+        "userId": { "type": "string" },
+        "ocrLang": { "type": "string" },
+        "retry": { "type": "boolean" },
+        "resetIngest": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentDeletedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentProcessedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "chunkCount", "ocrLang", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "chunkCount": { "type": "integer" },
+        "ocrLang": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentFailedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "errorReason", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "errorReason": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentPauseEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentPausedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentProgressEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "stage", "done", "total", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "stage": { "type": "string" },
+        "done": { "type": "integer" },
+        "total": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentSummarizeEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "reset", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "maxContextChars": { "type": ["integer", "null"] },
+        "reset": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentSummarizePauseEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentSummarizeProgressEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "done", "total", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "done": { "type": "integer" },
+        "total": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentSummarizeCompletedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentSummarizeFailedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "errorReason", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "errorReason": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentSummarizePausedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "documentId", "timestamp"],
+      "properties": {
+        "type": { "type": "string" },
+        "documentId": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DocumentCreateDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "filePath"],
+      "properties": {
+        "title": { "type": "string" },
+        "filePath": { "type": "string" }
+      }
+    },
+    "DocumentRetryDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ocrLang": { "type": ["string", "null"] },
+        "forceOcr": { "type": "boolean" }
+      }
+    },
+    "DocumentRenameDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string" }
+      }
+    },
+    "DocumentSummarizeDto": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxContextChars": { "type": ["integer", "null"] }
+      }
+    },
+    "SearchRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "topK", "documentIds"],
+      "properties": {
+        "query": { "type": "string" },
+        "topK": { "type": "integer" },
+        "documentIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "SearchHit": {
+      "title": "SearchHit",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documentId",
+        "documentTitle",
+        "chunkIndex",
+        "content",
+        "similarity"
+      ],
+      "properties": {
+        "documentId": { "type": "string" },
+        "documentTitle": { "type": "string" },
+        "chunkIndex": { "type": "integer" },
+        "content": { "type": "string" },
+        "similarity": { "type": "number" }
+      }
+    },
+    "SearchResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "topK", "results"],
+      "properties": {
+        "query": { "type": "string" },
+        "topK": { "type": "integer" },
+        "results": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SearchHit" }
+        }
+      }
+    },
+    "ChatRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "topK", "mode", "documentIds"],
+      "properties": {
+        "query": { "type": "string" },
+        "topK": { "type": "integer" },
+        "mode": { "type": "string" },
+        "documentIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "ChatResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "topK", "answer", "sources"],
+      "properties": {
+        "query": { "type": "string" },
+        "topK": { "type": "integer" },
+        "answer": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SearchHit" }
+        }
+      }
+    },
+    "ChatStreamTokenEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token"],
+      "properties": {
+        "type": { "type": "string" },
+        "token": { "type": "string" }
+      }
+    },
+    "ChatStreamProgressEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "done", "total"],
+      "properties": {
+        "type": { "type": "string" },
+        "done": { "type": "integer" },
+        "total": { "type": "integer" }
+      }
+    },
+    "ChatStreamDoneEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "query", "topK", "answer", "sources"],
+      "properties": {
+        "type": { "type": "string" },
+        "query": { "type": "string" },
+        "topK": { "type": "integer" },
+        "answer": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SearchHit" }
+        }
+      }
+    },
+    "ChatStreamErrorEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "error"],
+      "properties": {
+        "type": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  }
+}

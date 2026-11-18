@@ -41,6 +41,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Contracts codegen check
+        run: npm run contracts:check
+
       - name: Derive Nx SHAs
         id: setSHAs
         uses: nrwl/nx-set-shas@v5

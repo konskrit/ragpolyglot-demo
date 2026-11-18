@@ -11,7 +11,7 @@ NestJS BFF: the **only public HTTP/WebSocket surface** for clients. Proxies docu
 
 - REST shapes are defined in `src/core/openapi-schemas.ts` (`@ApiProperty` classes mirroring `libs/shared`).
 - WebSocket events are **not** OpenAPI operations — see the markdown table at the top of `/docs`.
-- TypeScript source of truth for app code: `libs/shared`.
+- Wire events / rag-worker HTTP DTOs: `libs/contracts` (JSON Schema → quicktype). App/UI TS: `libs/shared`.
 
 ## REST vs WebSocket
 

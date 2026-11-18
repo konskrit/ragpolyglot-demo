@@ -8,6 +8,36 @@ import {
   SummarizeStatus,
 } from '../types/types';
 
+export type {
+  ChatRequest,
+  ChatResponse,
+  ChatStreamDoneEvent,
+  ChatStreamErrorEvent,
+  ChatStreamProgressEvent,
+  ChatStreamTokenEvent,
+  DocumentCreateDto,
+  DocumentDeletedEvent,
+  DocumentFailedEvent,
+  DocumentPauseEvent,
+  DocumentPausedEvent,
+  DocumentProcessedEvent,
+  DocumentProgressEvent,
+  DocumentRenameDto,
+  DocumentRetryDto,
+  DocumentSummarizeCompletedEvent,
+  DocumentSummarizeDto,
+  DocumentSummarizeEvent,
+  DocumentSummarizeFailedEvent,
+  DocumentSummarizePauseEvent,
+  DocumentSummarizePausedEvent,
+  DocumentSummarizeProgressEvent,
+  DocumentUploadedEvent,
+  RagSearchHit,
+  SearchHit,
+  SearchRequest,
+  SearchResponse,
+} from '../generated/wire';
+
 export interface OcrLanguageOption {
   code: OcrLanguageCode;
   label: string;
@@ -69,6 +99,7 @@ export interface DocumentStatusUpdate {
   summarizeTotal?: number;
   summarizeError?: string;
 }
+
 export interface DocumentChunk {
   id?: number;
   documentId: string;
@@ -77,87 +108,12 @@ export interface DocumentChunk {
   createdAt?: string;
 }
 
-export interface DocumentUploadedEvent {
-  type: 'document.uploaded';
-  documentId: string;
-  filePath: string;
-  userId: string;
-  ocrLang?: OcrLanguageCode;
-  retry?: boolean;
-  /** When true, rag-worker wipes checkpoint/chunks and re-runs OCR from page 1. */
-  resetIngest?: boolean;
-  timestamp: string;
-}
-
-export interface DocumentProcessedEvent {
-  type: 'document.processed';
-  documentId: string;
-  chunkCount: number;
-  ocrLang?: string;
-  timestamp: string;
-}
-
-export interface DocumentFailedEvent {
-  type: 'document.failed';
-  documentId: string;
-  errorReason: string;
-  timestamp: string;
-}
-
-export interface DocumentPauseEvent {
-  type: 'document.pause';
-  documentId: string;
-  timestamp: string;
-}
-
-export interface DocumentPausedEvent {
-  type: 'document.paused';
-  documentId: string;
-  timestamp: string;
-}
-
-export interface DocumentProgressEvent {
-  type: 'document.progress';
-  documentId: string;
-  stage: DocumentProgressStage;
-  done: number;
-  total: number;
-  timestamp: string;
-}
-
-export interface DocumentDeletedEvent {
-  type: 'document.deleted';
-  documentId: string;
-  timestamp: string;
-}
-
-export interface DocumentCreateDto {
-  title: string;
-  filePath: string;
-}
-
-export interface DocumentRenameDto {
-  title: string;
-}
-
 export interface RAGQueryDto {
   query: string;
   topK?: number;
   mode?: 'fast' | 'deep';
   userId?: string;
   documentIds?: string[];
-}
-
-export interface DocumentSummarizeDto {
-  maxContextChars?: number;
-}
-
-export interface RagSearchHit {
-  documentId: string;
-  documentTitle?: string;
-  chunkIndex: number;
-  content: string;
-  similarity: number;
 }
 
 export interface Source {
