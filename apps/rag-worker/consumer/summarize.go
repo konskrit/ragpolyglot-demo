@@ -124,13 +124,13 @@ func (p *Processor) runSummarize(event models.DocumentSummarizeEvent) {
 	texts, err := p.store.ListChunkTexts(context.Background(), documentID)
 	if err != nil {
 		log.Printf("[Summarize] list chunks failed id=%s: %v", documentID, err)
-		_ = publishWithRetry("summarize.failed", func() error {
+		publishSummarizeTerminal(documentID, "summarize.failed", func() error {
 			return p.publisher.PublishSummarizeFailed(documentID, "storage_error")
 		})
 		return
 	}
 	if len(texts) == 0 {
-		_ = publishWithRetry("summarize.failed", func() error {
+		publishSummarizeTerminal(documentID, "summarize.failed", func() error {
 			return p.publisher.PublishSummarizeFailed(documentID, "no_chunks")
 		})
 		return
@@ -169,7 +169,7 @@ func (p *Processor) runSummarize(event models.DocumentSummarizeEvent) {
 
 	if paused {
 		p.setSummarizePause(documentID, false)
-		_ = publishWithRetry("summarize.paused", func() error {
+		publishSummarizeTerminal(documentID, "summarize.paused", func() error {
 			return p.publisher.PublishSummarizePaused(documentID)
 		})
 		log.Printf("[Summarize] paused id=%s after %s", documentID, time.Since(start))
@@ -178,15 +178,21 @@ func (p *Processor) runSummarize(event models.DocumentSummarizeEvent) {
 
 	if err != nil {
 		log.Printf("[Summarize] failed id=%s: %v", documentID, err)
-		_ = publishWithRetry("summarize.failed", func() error {
+		publishSummarizeTerminal(documentID, "summarize.failed", func() error {
 			return p.publisher.PublishSummarizeFailed(documentID, "summarize_error")
 		})
 		return
 	}
 
 	p.setSummarizePause(documentID, false)
-	_ = publishWithRetry("summarize.completed", func() error {
+	publishSummarizeTerminal(documentID, "summarize.completed", func() error {
 		return p.publisher.PublishSummarizeCompleted(documentID)
 	})
 	log.Printf("[Summarize] completed id=%s in %s", documentID, time.Since(start))
+}
+
+func publishSummarizeTerminal(documentID, label string, fn func() error) {
+	if err := publishWithRetry(label, fn); err != nil {
+		log.Printf("[Summarize] CRITICAL: %s publish failed documentId=%s: %v", label, documentID, err)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -172,15 +173,19 @@ func (s *Store) LogSystem(ctx context.Context, eventType, documentID string, dur
 		docID = documentID
 	}
 
-	_, _ = s.pool.Exec(ctx, ragsql.Must("log_system.sql"),
+	if _, err := s.pool.Exec(ctx, ragsql.Must("log_system.sql"),
 		eventType, docID, metaJSON, float64(duration.Milliseconds()),
-	)
+	); err != nil {
+		log.Printf("[Store] system_logs write failed eventType=%s documentId=%s: %v", eventType, documentID, err)
+	}
 }
 
 func (s *Store) LogQuery(ctx context.Context, query string, topK, resultCount int, duration time.Duration) {
-	_, _ = s.pool.Exec(ctx, ragsql.Must("log_query.sql"),
+	if _, err := s.pool.Exec(ctx, ragsql.Must("log_query.sql"),
 		query, topK, resultCount, float64(duration.Milliseconds()),
-	)
+	); err != nil {
+		log.Printf("[Store] query_logs write failed: %v", err)
+	}
 }
 
 func vectorLiteral(values []float32) string {

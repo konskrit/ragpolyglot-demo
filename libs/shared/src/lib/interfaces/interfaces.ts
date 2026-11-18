@@ -170,6 +170,7 @@ export interface MetricsSnapshot {
   documents: {
     uploading: number;
     processing: number;
+    paused: number;
     ready: number;
     failed: number;
   };

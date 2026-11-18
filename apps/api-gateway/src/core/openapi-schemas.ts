@@ -207,6 +207,7 @@ class MetricsIngestDto {
 class MetricsDocumentsDto {
   @ApiProperty() uploading!: number;
   @ApiProperty() processing!: number;
+  @ApiProperty() paused!: number;
   @ApiProperty() ready!: number;
   @ApiProperty() failed!: number;
 }

@@ -48,13 +48,13 @@ jobs:
         id: setSHAs
         uses: nrwl/nx-set-shas@v5
 
-      - name: Lint and unit test
+      - name: Lint, build, and unit test
         run: |
           EXCLUDE='react-frontend-e2e,api-gateway-e2e'
           if [ "${{ steps.setSHAs.outputs.noPreviousBuild }}" = "true" ]; then
-            npx nx run-many -t lint test --exclude="$EXCLUDE"
+            npx nx run-many -t lint build test --exclude="$EXCLUDE"
           else
-            npx nx affected -t lint test --exclude="$EXCLUDE"
+            npx nx affected -t lint build test --exclude="$EXCLUDE"
           fi
 
   integration:

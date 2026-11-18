@@ -44,7 +44,8 @@ export class HealthController {
       checks.rag_worker === 'ok' &&
       checks.event_processor === 'ok' &&
       checks.redis === 'ok' &&
-      checks.rabbitmq === 'ok';
+      checks.rabbitmq === 'ok' &&
+      checks.postgres === 'ok';
 
     if (!healthy) {
       res.status(503);

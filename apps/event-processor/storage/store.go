@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,9 +31,11 @@ func (s *Store) LogSystem(ctx context.Context, eventType string, duration time.D
 		metaJSON, _ = json.Marshal(metadata)
 	}
 
-	_, _ = s.pool.Exec(ctx, eventsql.Must("log_system.sql"),
+	if _, err := s.pool.Exec(ctx, eventsql.Must("log_system.sql"),
 		eventType, metaJSON, float64(duration.Milliseconds()),
-	)
+	); err != nil {
+		log.Printf("[Store] system_logs write failed eventType=%s: %v", eventType, err)
+	}
 }
 
 func (s *Store) ArchiveOldLogs(ctx context.Context, retentionDays int) (systemMoved, queryMoved int64, err error) {

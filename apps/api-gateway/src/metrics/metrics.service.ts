@@ -74,6 +74,7 @@ export class MetricsService {
     const documents = {
       uploading: 0,
       processing: 0,
+      paused: 0,
       ready: 0,
       failed: 0,
     };
