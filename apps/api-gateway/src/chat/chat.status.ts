@@ -1,5 +1,6 @@
 import {
   isDocumentProgressStage,
+  WIRE_ROUTING_KEYS,
   type DocumentStatus,
   type DocumentStatusUpdate,
   type SummarizeStatus,
@@ -33,13 +34,13 @@ export function parseDocumentStatusEvent(
   if (!event.documentId) return null;
 
   switch (event.type) {
-    case 'document.processed':
+    case WIRE_ROUTING_KEYS.Processed:
       return { documentId: event.documentId, status: 'ready' };
-    case 'document.failed':
+    case WIRE_ROUTING_KEYS.Failed:
       return { documentId: event.documentId, status: 'failed' };
-    case 'document.paused':
+    case WIRE_ROUTING_KEYS.Paused:
       return { documentId: event.documentId, status: 'paused' };
-    case 'document.progress':
+    case WIRE_ROUTING_KEYS.Progress:
       if (!isDocumentProgressStage(event.stage)) return null;
       return {
         documentId: event.documentId,
@@ -50,7 +51,7 @@ export function parseDocumentStatusEvent(
           progressTotal: event.total ?? 0,
         },
       };
-    case 'document.summarize.progress':
+    case WIRE_ROUTING_KEYS.SummarizeProgress:
       return {
         documentId: event.documentId,
         summarize: {
@@ -60,7 +61,7 @@ export function parseDocumentStatusEvent(
           summarizeError: undefined,
         },
       };
-    case 'document.summarize.completed':
+    case WIRE_ROUTING_KEYS.SummarizeCompleted:
       return {
         documentId: event.documentId,
         summarize: {
@@ -70,7 +71,7 @@ export function parseDocumentStatusEvent(
           summarizeError: undefined,
         },
       };
-    case 'document.summarize.failed':
+    case WIRE_ROUTING_KEYS.SummarizeFailed:
       return {
         documentId: event.documentId,
         summarize: {
@@ -78,7 +79,7 @@ export function parseDocumentStatusEvent(
           summarizeError: event.errorReason,
         },
       };
-    case 'document.summarize.paused':
+    case WIRE_ROUTING_KEYS.SummarizePaused:
       return {
         documentId: event.documentId,
         summarize: {

@@ -17,7 +17,11 @@ import { RabbitMQService } from '../core/rabbitmq.service';
 import { RedisService } from '../core/redis.service';
 import { RagService } from '../rag/rag.service';
 import { ConversationService } from './conversation.service';
-import { type DocumentStatusUpdate, type Source } from '@ragpolyglot-shared';
+import {
+  WIRE_ROUTING_KEYS,
+  type DocumentStatusUpdate,
+  type Source,
+} from '@ragpolyglot-shared';
 import { randomUUID } from 'crypto';
 import { parseDocumentStatusEvent } from './chat.status';
 import { clearDeepJob, setDeepJob } from './chat-deep-job';
@@ -67,7 +71,7 @@ export class ChatGateway implements OnModuleInit {
         });
         if (
           parsed.status === 'ready' ||
-          event.type === 'document.summarize.completed'
+          event.type === WIRE_ROUTING_KEYS.SummarizeCompleted
         ) {
           void this.redis.incr(RAG_DOCUMENTS_VERSION_KEY);
         }

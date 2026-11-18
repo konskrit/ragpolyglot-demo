@@ -5,8 +5,22 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import amqp, { ChannelModel, Channel, ConsumeMessage } from 'amqplib';
-import { ConsumerRegistration } from '@ragpolyglot-shared';
+import { ConsumerRegistration, WIRE_ROUTING_KEYS } from '@ragpolyglot-shared';
 import { Config } from './config';
+
+/** Status fan-out bindings for the gateway WebSocket bridge. */
+const GATEWAY_STATUS_ROUTING_KEYS = [
+  WIRE_ROUTING_KEYS.Processed,
+  WIRE_ROUTING_KEYS.Failed,
+  WIRE_ROUTING_KEYS.Progress,
+  WIRE_ROUTING_KEYS.Paused,
+  WIRE_ROUTING_KEYS.SummarizeProgress,
+  WIRE_ROUTING_KEYS.SummarizeCompleted,
+  WIRE_ROUTING_KEYS.SummarizeFailed,
+  WIRE_ROUTING_KEYS.SummarizePaused,
+] as const;
+
+const GATEWAY_STATUS_PREFETCH = 32;
 
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
@@ -78,16 +92,8 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       });
 
       await channel.assertQueue(Config.gatewayStatusQueue, { durable: true });
-      for (const routingKey of [
-        'document.processed',
-        'document.failed',
-        'document.progress',
-        'document.paused',
-        'document.summarize.progress',
-        'document.summarize.completed',
-        'document.summarize.failed',
-        'document.summarize.paused',
-      ]) {
+      await channel.prefetch(GATEWAY_STATUS_PREFETCH);
+      for (const routingKey of GATEWAY_STATUS_ROUTING_KEYS) {
         await channel.bindQueue(
           Config.gatewayStatusQueue,
           Config.documentEventsExchange,
@@ -154,13 +160,20 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     await channel.consume(
       queueName,
       (msg) => {
-        void Promise.resolve(handler(msg)).catch((err) => {
-          this.logger.error(
-            `Consumer handler failed: ${(err as Error).message}`,
-          );
-        });
+        if (!msg) return;
+        void Promise.resolve(handler(msg))
+          .then(() => {
+            channel.ack(msg);
+          })
+          .catch((err) => {
+            this.logger.error(
+              `Consumer handler failed: ${(err as Error).message}`,
+            );
+            // Drop poison; status events are idempotent fan-out for the UI.
+            channel.nack(msg, false, false);
+          });
       },
-      { noAck: true },
+      { noAck: false },
     );
   }
 
