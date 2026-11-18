@@ -4,10 +4,10 @@ NestJS BFF: the **only public HTTP/WebSocket surface** for clients. Proxies docu
 
 ## API documentation
 
-| URL                 | Purpose                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| `/docs`             | [Scalar](https://scalar.com/) UI — try REST endpoints, see request/response schemas |
-| `/api/openapi-json` | OpenAPI 3 JSON (codegen, Postman, etc.)                                             |
+| URL             | Purpose                                                                             |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `/docs`         | [Scalar](https://scalar.com/) UI — try REST endpoints, see request/response schemas |
+| `/openapi.json` | OpenAPI 3 JSON (codegen, Postman, etc.)                                             |
 
 - REST shapes are defined in `src/core/openapi-schemas.ts` (`@ApiProperty` classes mirroring `libs/shared`).
 - WebSocket events are **not** OpenAPI operations — see the markdown table at the top of `/docs`.

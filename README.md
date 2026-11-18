@@ -30,7 +30,7 @@ Upload → api-gateway → document-service (metadata)
        → gateway WebSocket: document:status-update
 ```
 
-Uploads: `.txt`, `.md`, `.markdown`, `.json`, `.pdf`. PDFs can run OCR (Tesseract by default; Ancient Greek / `grc` uses Kraken 7, with Tesseract fallback). The UI can pause, resume, retry, and set OCR language. Progress stages: `waiting_for_ocr` (queued on the OCR GPU slot), `extracting`, `embedding`. During Kraken ingest, `document.progress` counts **OCR’d** pages (after each batch), not pdftoppm renders.
+Uploads: `.txt`, `.md`, `.markdown`, `.json`, `.pdf`, and images (`.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.webp`, `.bmp`, `.gif`). PDFs and images can run OCR (Tesseract by default; Ancient Greek / `grc` uses Kraken 7, with Tesseract fallback). The UI can pause, resume, retry, and set OCR language. Progress stages: `waiting_for_ocr` (queued on the OCR GPU slot), `extracting`, `embedding`. During Kraken ingest, `document.progress` counts **OCR’d** pages (after each batch), not pdftoppm renders.
 
 ### Chat (RAG + LLM)
 
@@ -59,7 +59,7 @@ All browser and third-party traffic goes through the **api-gateway** — not doc
 | Need                                   | Where                                                    |
 | -------------------------------------- | -------------------------------------------------------- |
 | Interactive REST docs                  | http://localhost:3000/docs (Scalar)                      |
-| OpenAPI JSON                           | http://localhost:3000/api/openapi-json                   |
+| OpenAPI JSON                           | http://localhost:3000/openapi.json                       |
 | Wire contracts (schema + routing keys) | `libs/contracts` → `npm run contracts:gen`               |
 | App/UI TS types                        | `libs/shared` (re-exports wire; Document/metrics local)  |
 | Streaming chat + live status           | Socket.IO namespace `/ws` (event table in `/docs` intro) |
@@ -79,15 +79,15 @@ UI is served by the `react-frontend` container (nginx on `${FRONTEND_PORT:-4200}
 
 Infra only (Postgres on `5433`, Redis, RabbitMQ): `docker compose -f docker-compose.debug.yml up` — use when the apps run on the host.
 
-| Service           | URL                                    |
-| ----------------- | -------------------------------------- |
-| UI                | http://localhost:4200                  |
-| Gateway           | http://localhost:3000                  |
-| API docs (Scalar) | http://localhost:3000/docs             |
-| OpenAPI JSON      | http://localhost:3000/api/openapi-json |
-| RabbitMQ UI       | http://localhost:15672 (guest/guest)   |
-| Document service  | http://localhost:5000                  |
-| RAG worker        | http://localhost:8081                  |
+| Service           | URL                                  |
+| ----------------- | ------------------------------------ |
+| UI                | http://localhost:4200                |
+| Gateway           | http://localhost:3000                |
+| API docs (Scalar) | http://localhost:3000/docs           |
+| OpenAPI JSON      | http://localhost:3000/openapi.json   |
+| RabbitMQ UI       | http://localhost:15672 (guest/guest) |
+| Document service  | http://localhost:5000                |
+| RAG worker        | http://localhost:8081                |
 
 ### LLM (required for chat)
 
