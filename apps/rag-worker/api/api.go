@@ -263,7 +263,11 @@ func (s *Server) prepareChat(w http.ResponseWriter, r *http.Request) (*chatPrep,
 		return nil, false
 	}
 
-	mode := NormalizeChatMode(req.Mode)
+	mode := ""
+	if req.Mode != nil {
+		mode = string(*req.Mode)
+	}
+	mode = NormalizeChatMode(mode)
 	topK := ClampTopK(req.TopK, s.defaultTopK)
 	if mode == "deep" {
 		topK = ClampChatTopK(req.TopK, s.chatTopK)

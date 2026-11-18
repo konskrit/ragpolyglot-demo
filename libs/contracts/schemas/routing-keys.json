@@ -1,0 +1,15 @@
+[
+  { "name": "Uploaded", "key": "document.uploaded" },
+  { "name": "Deleted", "key": "document.deleted" },
+  { "name": "Pause", "key": "document.pause" },
+  { "name": "Processed", "key": "document.processed" },
+  { "name": "Failed", "key": "document.failed" },
+  { "name": "Paused", "key": "document.paused" },
+  { "name": "Progress", "key": "document.progress" },
+  { "name": "Summarize", "key": "document.summarize" },
+  { "name": "SummarizePause", "key": "document.summarize.pause" },
+  { "name": "SummarizeProgress", "key": "document.summarize.progress" },
+  { "name": "SummarizeCompleted", "key": "document.summarize.completed" },
+  { "name": "SummarizeFailed", "key": "document.summarize.failed" },
+  { "name": "SummarizePaused", "key": "document.summarize.paused" }
+]

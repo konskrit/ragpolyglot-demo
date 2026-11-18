@@ -235,6 +235,7 @@ export class MetricsSnapshotDto {
   queues!: Record<string, number>;
 }
 
+/** OpenAPI body — mirrors libs/contracts DocumentRetryDto. */
 export class OcrLangBodyDto {
   @ApiPropertyOptional({
     example: 'grc',
@@ -248,7 +249,14 @@ export class OcrLangBodyDto {
   forceOcr?: boolean;
 }
 
+/** OpenAPI body — mirrors libs/contracts DocumentRenameDto. */
 export class DocumentRenameBodyDto {
   @ApiProperty({ example: 'Aristotle Ethics' })
   title!: string;
+}
+
+/** OpenAPI body — mirrors libs/contracts DocumentSummarizeDto. */
+export class DocumentSummarizeBodyDto {
+  @ApiPropertyOptional({ example: 20000 })
+  maxContextChars?: number | null;
 }

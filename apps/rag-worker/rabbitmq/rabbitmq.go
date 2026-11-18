@@ -24,22 +24,9 @@ const (
 	SummarizeCompletedQueue = "document.summarize.completed.queue"
 	SummarizeFailedQueue    = "document.summarize.failed.queue"
 	SummarizePausedQueue    = "document.summarize.paused.queue"
-
-	RoutingUploaded  = "document.uploaded"
-	RoutingDeleted   = "document.deleted"
-	RoutingPause     = "document.pause"
-	RoutingProcessed = "document.processed"
-	RoutingFailed    = "document.failed"
-	RoutingPaused    = "document.paused"
-	RoutingProgress  = "document.progress"
-
-	RoutingSummarize          = "document.summarize"
-	RoutingSummarizePause     = "document.summarize.pause"
-	RoutingSummarizeProgress  = "document.summarize.progress"
-	RoutingSummarizeCompleted = "document.summarize.completed"
-	RoutingSummarizeFailed    = "document.summarize.failed"
-	RoutingSummarizePaused    = "document.summarize.paused"
 )
+
+// Routing* keys: routing_gen.go (npm run contracts:gen).
 
 func Connect(url string) *amqp.Connection {
 	waiting := false

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ContractsBundle",
-  "description": "Wire contracts for RabbitMQ document/summarize events and rag-worker HTTP/NDJSON DTOs. Generate with npm run contracts:gen. Not Document entity, Socket.IO, or metrics — those stay in libs/shared.",
+  "description": "Wire contracts for RabbitMQ events, rag-worker HTTP/NDJSON, RAG query, Source, and key Socket.IO payloads. Routing keys: routing-keys.json. Document entity / metrics / enums stay in libs/shared. Generate with npm run contracts:gen.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -40,7 +40,13 @@
     "chatStreamTokenEvent": { "$ref": "#/$defs/ChatStreamTokenEvent" },
     "chatStreamProgressEvent": { "$ref": "#/$defs/ChatStreamProgressEvent" },
     "chatStreamDoneEvent": { "$ref": "#/$defs/ChatStreamDoneEvent" },
-    "chatStreamErrorEvent": { "$ref": "#/$defs/ChatStreamErrorEvent" }
+    "chatStreamErrorEvent": { "$ref": "#/$defs/ChatStreamErrorEvent" },
+    "ragQueryDto": { "$ref": "#/$defs/RAGQueryDto" },
+    "source": { "$ref": "#/$defs/Source" },
+    "documentStatusUpdate": { "$ref": "#/$defs/DocumentStatusUpdate" },
+    "chatCompletePayload": { "$ref": "#/$defs/ChatCompletePayload" },
+    "chatProgressPayload": { "$ref": "#/$defs/ChatProgressPayload" },
+    "chatStartedPayload": { "$ref": "#/$defs/ChatStartedPayload" }
   },
   "$defs": {
     "DocumentUploadedEvent": {
@@ -233,7 +239,7 @@
     "SearchRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["query", "topK", "documentIds"],
+      "required": ["query", "topK"],
       "properties": {
         "query": { "type": "string" },
         "topK": { "type": "integer" },
@@ -278,11 +284,11 @@
     "ChatRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["query", "topK", "mode", "documentIds"],
+      "required": ["query", "topK"],
       "properties": {
         "query": { "type": "string" },
         "topK": { "type": "integer" },
-        "mode": { "type": "string" },
+        "mode": { "type": "string", "enum": ["fast", "deep"] },
         "documentIds": {
           "type": "array",
           "items": { "type": "string" }
@@ -308,7 +314,7 @@
       "additionalProperties": false,
       "required": ["type", "token"],
       "properties": {
-        "type": { "type": "string" },
+        "type": { "const": "token" },
         "token": { "type": "string" }
       }
     },
@@ -317,7 +323,7 @@
       "additionalProperties": false,
       "required": ["type", "done", "total"],
       "properties": {
-        "type": { "type": "string" },
+        "type": { "const": "progress" },
         "done": { "type": "integer" },
         "total": { "type": "integer" }
       }
@@ -327,7 +333,7 @@
       "additionalProperties": false,
       "required": ["type", "query", "topK", "answer", "sources"],
       "properties": {
-        "type": { "type": "string" },
+        "type": { "const": "done" },
         "query": { "type": "string" },
         "topK": { "type": "integer" },
         "answer": { "type": "string" },
@@ -342,8 +348,93 @@
       "additionalProperties": false,
       "required": ["type", "error"],
       "properties": {
-        "type": { "type": "string" },
+        "type": { "const": "error" },
         "error": { "type": "string" }
+      }
+    },
+    "RAGQueryDto": {
+      "title": "RAGQueryDto",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query"],
+      "properties": {
+        "query": { "type": "string" },
+        "topK": { "type": "integer" },
+        "mode": { "type": "string", "enum": ["fast", "deep"] },
+        "userId": { "type": "string" },
+        "documentIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "Source": {
+      "title": "Source",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentTitle", "chunkContent", "similarity"],
+      "properties": {
+        "documentId": { "type": "string" },
+        "documentTitle": { "type": "string" },
+        "chunkContent": { "type": "string" },
+        "similarity": { "type": "number" },
+        "chunkIndex": { "type": "integer" }
+      }
+    },
+    "DocumentStatusUpdate": {
+      "title": "DocumentStatusUpdate",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId"],
+      "properties": {
+        "documentId": { "type": "string" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "progressStage": { "type": "string" },
+        "progressDone": { "type": "integer" },
+        "progressTotal": { "type": "integer" },
+        "summarizeStatus": { "type": ["string", "null"] },
+        "summarizeDone": { "type": "integer" },
+        "summarizeTotal": { "type": "integer" },
+        "summarizeError": { "type": "string" }
+      }
+    },
+    "ChatCompletePayload": {
+      "title": "ChatCompletePayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversationId"],
+      "properties": {
+        "conversationId": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Source" }
+        },
+        "error": { "type": "boolean" },
+        "interrupted": { "type": "boolean" },
+        "cacheHit": { "type": "boolean" }
+      }
+    },
+    "ChatProgressPayload": {
+      "title": "ChatProgressPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversationId", "done", "total"],
+      "properties": {
+        "conversationId": { "type": "string" },
+        "done": { "type": "integer" },
+        "total": { "type": "integer" }
+      }
+    },
+    "ChatStartedPayload": {
+      "title": "ChatStartedPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversationId", "mode", "query"],
+      "properties": {
+        "conversationId": { "type": "string" },
+        "mode": { "type": "string", "enum": ["fast", "deep"] },
+        "query": { "type": "string" }
       }
     }
   }

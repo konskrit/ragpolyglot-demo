@@ -4,7 +4,6 @@
   "sourceRoot": "libs/shared/src",
   "projectType": "library",
   "tags": [],
-  "implicitDependencies": ["contracts"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",

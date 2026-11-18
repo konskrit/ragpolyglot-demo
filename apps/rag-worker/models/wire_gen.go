@@ -4,12 +4,34 @@ package models
 
 import "time"
 
-// Wire contracts for RabbitMQ document/summarize events and rag-worker HTTP/NDJSON DTOs.
-// Generate with npm run contracts:gen. Not Document entity, Socket.IO, or metrics — those
-// stay in libs/shared.
+// Wire contracts for RabbitMQ events, rag-worker HTTP/NDJSON, RAG query, Source, and key
+// Socket.IO payloads. Routing keys: routing-keys.json. Document entity / metrics / enums
+// stay in libs/shared. Generate with npm run contracts:gen.
+type ChatCompletePayload struct {
+	CacheHit       *bool    `json:"cacheHit,omitempty"`
+	ConversationID string   `json:"conversationId"`
+	Error          *bool    `json:"error,omitempty"`
+	Interrupted    *bool    `json:"interrupted,omitempty"`
+	Sources        []Source `json:"sources,omitempty"`
+}
+
+type Source struct {
+	ChunkContent  string  `json:"chunkContent"`
+	ChunkIndex    *int    `json:"chunkIndex,omitempty"`
+	DocumentID    string  `json:"documentId"`
+	DocumentTitle string  `json:"documentTitle"`
+	Similarity    float64 `json:"similarity"`
+}
+
+type ChatProgressPayload struct {
+	ConversationID string `json:"conversationId"`
+	Done           int    `json:"done"`
+	Total          int    `json:"total"`
+}
+
 type ChatRequest struct {
-	DocumentIDs []string `json:"documentIds"`
-	Mode        string   `json:"mode"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
+	Mode        *Mode    `json:"mode,omitempty"`
 	Query       string   `json:"query"`
 	TopK        int      `json:"topK"`
 }
@@ -29,28 +51,34 @@ type SearchHit struct {
 	Similarity    float64 `json:"similarity"`
 }
 
+type ChatStartedPayload struct {
+	ConversationID string `json:"conversationId"`
+	Mode           Mode   `json:"mode"`
+	Query          string `json:"query"`
+}
+
 type ChatStreamDoneEvent struct {
-	Answer  string      `json:"answer"`
-	Query   string      `json:"query"`
-	Sources []SearchHit `json:"sources"`
-	TopK    int         `json:"topK"`
-	Type    string      `json:"type"`
+	Answer  string                  `json:"answer"`
+	Query   string                  `json:"query"`
+	Sources []SearchHit             `json:"sources"`
+	TopK    int                     `json:"topK"`
+	Type    ChatStreamDoneEventType `json:"type"`
 }
 
 type ChatStreamErrorEvent struct {
-	Error string `json:"error"`
-	Type  string `json:"type"`
+	Error string                   `json:"error"`
+	Type  ChatStreamErrorEventType `json:"type"`
 }
 
 type ChatStreamProgressEvent struct {
-	Done  int    `json:"done"`
-	Total int    `json:"total"`
-	Type  string `json:"type"`
+	Done  int                         `json:"done"`
+	Total int                         `json:"total"`
+	Type  ChatStreamProgressEventType `json:"type"`
 }
 
 type ChatStreamTokenEvent struct {
-	Token string `json:"token"`
-	Type  string `json:"type"`
+	Token string                   `json:"token"`
+	Type  ChatStreamTokenEventType `json:"type"`
 }
 
 type DocumentCreateDto struct {
@@ -109,6 +137,19 @@ type DocumentRetryDto struct {
 	OcrLang  *string `json:"ocrLang,omitempty"`
 }
 
+type DocumentStatusUpdate struct {
+	DocumentID      string  `json:"documentId"`
+	ProgressDone    *int    `json:"progressDone,omitempty"`
+	ProgressStage   *string `json:"progressStage,omitempty"`
+	ProgressTotal   *int    `json:"progressTotal,omitempty"`
+	Status          *string `json:"status,omitempty"`
+	SummarizeDone   *int    `json:"summarizeDone,omitempty"`
+	SummarizeError  *string `json:"summarizeError,omitempty"`
+	SummarizeStatus *string `json:"summarizeStatus,omitempty"`
+	SummarizeTotal  *int    `json:"summarizeTotal,omitempty"`
+	Timestamp       *string `json:"timestamp,omitempty"`
+}
+
 type DocumentSummarizeCompletedEvent struct {
 	DocumentID string    `json:"documentId"`
 	Timestamp  time.Time `json:"timestamp"`
@@ -165,8 +206,16 @@ type DocumentUploadedEvent struct {
 	UserID      string    `json:"userId"`
 }
 
+type RAGQueryDto struct {
+	DocumentIDs []string `json:"documentIds,omitempty"`
+	Mode        *Mode    `json:"mode,omitempty"`
+	Query       string   `json:"query"`
+	TopK        *int     `json:"topK,omitempty"`
+	UserID      *string  `json:"userId,omitempty"`
+}
+
 type SearchRequest struct {
-	DocumentIDs []string `json:"documentIds"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
 	Query       string   `json:"query"`
 	TopK        int      `json:"topK"`
 }
@@ -176,3 +225,34 @@ type SearchResponse struct {
 	Results []SearchHit `json:"results"`
 	TopK    int         `json:"topK"`
 }
+
+type Mode string
+
+const (
+	Deep Mode = "deep"
+	Fast Mode = "fast"
+)
+
+type ChatStreamDoneEventType string
+
+const (
+	Done ChatStreamDoneEventType = "done"
+)
+
+type ChatStreamErrorEventType string
+
+const (
+	Error ChatStreamErrorEventType = "error"
+)
+
+type ChatStreamProgressEventType string
+
+const (
+	Progress ChatStreamProgressEventType = "progress"
+)
+
+type ChatStreamTokenEventType string
+
+const (
+	Token ChatStreamTokenEventType = "token"
+)

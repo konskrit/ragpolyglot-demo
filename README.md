@@ -56,13 +56,13 @@ The UI polls `GET /api/health` and `GET /api/metrics`. Metrics come from Redis c
 
 All browser and third-party traffic goes through the **api-gateway** — not document-service or rag-worker directly.
 
-| Need                                  | Where                                                    |
-| ------------------------------------- | -------------------------------------------------------- |
-| Interactive REST docs                 | http://localhost:3000/docs (Scalar)                      |
-| OpenAPI JSON                          | http://localhost:3000/api/openapi-json                   |
-| Wire contracts (Rabbit + worker HTTP) | `libs/contracts` → `npm run contracts:gen`               |
-| App/UI TS types                       | `libs/shared` (re-exports wire + Document/WS/metrics)    |
-| Streaming chat + live status          | Socket.IO namespace `/ws` (event table in `/docs` intro) |
+| Need                                   | Where                                                    |
+| -------------------------------------- | -------------------------------------------------------- |
+| Interactive REST docs                  | http://localhost:3000/docs (Scalar)                      |
+| OpenAPI JSON                           | http://localhost:3000/api/openapi-json                   |
+| Wire contracts (schema + routing keys) | `libs/contracts` → `npm run contracts:gen`               |
+| App/UI TS types                        | `libs/shared` (re-exports wire; Document/metrics local)  |
+| Streaming chat + live status           | Socket.IO namespace `/ws` (event table in `/docs` intro) |
 
 Vite proxies `/api` and `/socket.io` only — open `/docs` on port **3000**, not 4200.
 

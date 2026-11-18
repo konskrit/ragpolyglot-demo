@@ -8,9 +8,14 @@ import {
   SummarizeStatus,
 } from '../types/types';
 
+import type { Source } from '../generated/wire';
+
 export type {
+  ChatCompletePayload,
+  ChatProgressPayload,
   ChatRequest,
   ChatResponse,
+  ChatStartedPayload,
   ChatStreamDoneEvent,
   ChatStreamErrorEvent,
   ChatStreamProgressEvent,
@@ -24,6 +29,7 @@ export type {
   DocumentProgressEvent,
   DocumentRenameDto,
   DocumentRetryDto,
+  DocumentStatusUpdate,
   DocumentSummarizeCompletedEvent,
   DocumentSummarizeDto,
   DocumentSummarizeEvent,
@@ -32,11 +38,18 @@ export type {
   DocumentSummarizePausedEvent,
   DocumentSummarizeProgressEvent,
   DocumentUploadedEvent,
+  Mode,
+  RAGQueryDto,
   RagSearchHit,
   SearchHit,
   SearchRequest,
   SearchResponse,
+  Source,
 } from '../generated/wire';
+
+export type { WireRoutingKey } from '../generated/routing';
+
+export { WIRE_ROUTING_KEY_LIST, WIRE_ROUTING_KEYS } from '../generated/routing';
 
 export interface OcrLanguageOption {
   code: OcrLanguageCode;
@@ -86,42 +99,12 @@ export type DocumentSummary = Pick<
   createdAt?: string;
 };
 
-export interface DocumentStatusUpdate {
-  documentId: string;
-  /** Omitted for summarize-only progress updates. */
-  status?: DocumentStatus;
-  timestamp?: string;
-  progressStage?: DocumentProgressStage;
-  progressDone?: number;
-  progressTotal?: number;
-  summarizeStatus?: SummarizeStatus | null;
-  summarizeDone?: number;
-  summarizeTotal?: number;
-  summarizeError?: string;
-}
-
 export interface DocumentChunk {
   id?: number;
   documentId: string;
   chunkIndex: number;
   content: string;
   createdAt?: string;
-}
-
-export interface RAGQueryDto {
-  query: string;
-  topK?: number;
-  mode?: 'fast' | 'deep';
-  userId?: string;
-  documentIds?: string[];
-}
-
-export interface Source {
-  documentId: string;
-  documentTitle: string;
-  chunkContent: string;
-  similarity: number;
-  chunkIndex?: number;
 }
 
 export interface RAGResult {
@@ -148,26 +131,6 @@ export interface ConversationMessage extends Message {
   id: number;
   conversationId: string;
   createdAt: string;
-}
-
-export interface ChatCompletePayload {
-  conversationId: string;
-  sources?: Source[];
-  error?: boolean;
-  interrupted?: boolean;
-  cacheHit?: boolean;
-}
-
-export interface ChatProgressPayload {
-  conversationId: string;
-  done: number;
-  total: number;
-}
-
-export interface ChatStartedPayload {
-  conversationId: string;
-  mode: 'fast' | 'deep';
-  query: string;
 }
 
 export interface ChatDeepStatus {

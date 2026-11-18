@@ -3,17 +3,14 @@ import {
   ApiAcceptedResponse,
   ApiBody,
   ApiOkResponse,
-  ApiProperty,
   ApiTags,
 } from '@nestjs/swagger';
 import type { DocumentSummarizeDto } from '@ragpolyglot-shared';
 import { DocumentService } from './document.service';
-import { DocumentSummaryDto } from '../core/openapi-schemas';
-
-class DocumentSummarizeBodyDto {
-  @ApiProperty({ required: false, example: 20000 })
-  maxContextChars?: number;
-}
+import {
+  DocumentSummarizeBodyDto,
+  DocumentSummaryDto,
+} from '../core/openapi-schemas';
 
 @ApiTags('documents')
 @Controller('documents')

@@ -5,10 +5,35 @@
 
 namespace DocumentService.Contracts
 {
-public partial class ChatRequest
+public partial class ChatCompletePayload
     {
-        public string[] DocumentIds { get; set; }
-        public string Mode { get; set; }
+        public bool? CacheHit { get; set; }
+        public string ConversationId { get; set; }
+        public bool? Error { get; set; }
+        public bool? Interrupted { get; set; }
+        public Source[]? Sources { get; set; }
+    }
+
+    public partial class Source
+    {
+        public string ChunkContent { get; set; }
+        public int? ChunkIndex { get; set; }
+        public string DocumentId { get; set; }
+        public string DocumentTitle { get; set; }
+        public double Similarity { get; set; }
+    }
+
+    public partial class ChatProgressPayload
+    {
+        public string ConversationId { get; set; }
+        public int Done { get; set; }
+        public int Total { get; set; }
+    }
+
+    public partial class ChatRequest
+    {
+        public string[]? DocumentIds { get; set; }
+        public Mode? Mode { get; set; }
         public string Query { get; set; }
         public int TopK { get; set; }
     }
@@ -30,32 +55,39 @@ public partial class ChatRequest
         public double Similarity { get; set; }
     }
 
+    public partial class ChatStartedPayload
+    {
+        public string ConversationId { get; set; }
+        public Mode Mode { get; set; }
+        public string Query { get; set; }
+    }
+
     public partial class ChatStreamDoneEvent
     {
         public string Answer { get; set; }
         public string Query { get; set; }
         public SearchHit[] Sources { get; set; }
         public int TopK { get; set; }
-        public string Type { get; set; }
+        public ChatStreamDoneEventType Type { get; set; }
     }
 
     public partial class ChatStreamErrorEvent
     {
         public string Error { get; set; }
-        public string Type { get; set; }
+        public ChatStreamErrorEventType Type { get; set; }
     }
 
     public partial class ChatStreamProgressEvent
     {
         public int Done { get; set; }
         public int Total { get; set; }
-        public string Type { get; set; }
+        public ChatStreamProgressEventType Type { get; set; }
     }
 
     public partial class ChatStreamTokenEvent
     {
         public string Token { get; set; }
-        public string Type { get; set; }
+        public ChatStreamTokenEventType Type { get; set; }
     }
 
     public partial class DocumentCreateDto
@@ -123,6 +155,20 @@ public partial class ChatRequest
         public string? OcrLang { get; set; }
     }
 
+    public partial class DocumentStatusUpdate
+    {
+        public string DocumentId { get; set; }
+        public int? ProgressDone { get; set; }
+        public string? ProgressStage { get; set; }
+        public int? ProgressTotal { get; set; }
+        public string? Status { get; set; }
+        public int? SummarizeDone { get; set; }
+        public string? SummarizeError { get; set; }
+        public string? SummarizeStatus { get; set; }
+        public int? SummarizeTotal { get; set; }
+        public string? Timestamp { get; set; }
+    }
+
     public partial class DocumentSummarizeCompletedEvent
     {
         public Guid DocumentId { get; set; }
@@ -187,9 +233,18 @@ public partial class ChatRequest
         public string UserId { get; set; }
     }
 
+    public partial class RagQueryDto
+    {
+        public string[]? DocumentIds { get; set; }
+        public Mode? Mode { get; set; }
+        public string Query { get; set; }
+        public int? TopK { get; set; }
+        public string? UserId { get; set; }
+    }
+
     public partial class SearchRequest
     {
-        public string[] DocumentIds { get; set; }
+        public string[]? DocumentIds { get; set; }
         public string Query { get; set; }
         public int TopK { get; set; }
     }
@@ -200,4 +255,14 @@ public partial class ChatRequest
         public SearchHit[] Results { get; set; }
         public int TopK { get; set; }
     }
+
+    public enum Mode { Deep, Fast };
+
+    public enum ChatStreamDoneEventType { Done };
+
+    public enum ChatStreamErrorEventType { Error };
+
+    public enum ChatStreamProgressEventType { Progress };
+
+    public enum ChatStreamTokenEventType { Token };
 }

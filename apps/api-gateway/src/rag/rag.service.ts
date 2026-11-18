@@ -7,7 +7,15 @@ import {
 } from '@nestjs/common';
 import { Config, ragCacheKey, RAG_DOCUMENTS_VERSION_KEY } from '../core/config';
 import { RedisService } from '../core/redis.service';
-import { RAGQueryDto, RAGResult, RagSearchHit } from '@ragpolyglot-shared';
+import type {
+  ChatStreamDoneEvent,
+  ChatStreamErrorEvent,
+  ChatStreamProgressEvent,
+  ChatStreamTokenEvent,
+  RAGQueryDto,
+  RAGResult,
+  RagSearchHit,
+} from '@ragpolyglot-shared';
 import {
   clampChatTopK,
   clampTopK,
@@ -19,10 +27,10 @@ import {
 const FAST_CHAT_TIMEOUT_MS = 120_000;
 
 type StreamEvent =
-  | { type: 'token'; token: string }
-  | { type: 'progress'; done: number; total: number }
-  | { type: 'done'; answer: string; sources?: RagSearchHit[] }
-  | { type: 'error'; error: string };
+  | ChatStreamTokenEvent
+  | ChatStreamProgressEvent
+  | ChatStreamDoneEvent
+  | ChatStreamErrorEvent;
 
 @Injectable()
 export class RagService {
@@ -177,7 +185,16 @@ export class RagService {
 
   private parseStreamEvent(line: string): StreamEvent | undefined {
     try {
-      return JSON.parse(line) as StreamEvent;
+      const event = JSON.parse(line) as { type?: string };
+      if (
+        event?.type === 'token' ||
+        event?.type === 'progress' ||
+        event?.type === 'done' ||
+        event?.type === 'error'
+      ) {
+        return event as StreamEvent;
+      }
+      return undefined;
     } catch {
       return undefined;
     }

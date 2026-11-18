@@ -4,3 +4,10 @@
 /.nx/cache
 /.nx/workspace-data
 package-lock.json
+
+# quicktype outputs — prettier rewrites indent and breaks contracts:check in CI
+libs/shared/src/lib/generated/
+apps/document-service/Contracts/Wire.g.cs
+apps/document-service/Contracts/WireRoutingKeys.g.cs
+apps/rag-worker/models/wire_gen.go
+apps/rag-worker/rabbitmq/routing_gen.go

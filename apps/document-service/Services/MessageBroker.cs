@@ -28,19 +28,19 @@ public sealed partial class MessageBroker(
 
     private static readonly (string Queue, string RoutingKey)[] Topology =
     [
-        (UploadedQueue, "document.uploaded"),
-        (DeletedQueue, "document.deleted"),
-        (PauseQueue, "document.pause"),
-        (ProcessedQueue, "document.processed"),
-        (FailedQueue, "document.failed"),
-        (PausedQueue, "document.paused"),
-        (ProgressQueue, "document.progress"),
-        (SummarizeQueue, "document.summarize"),
-        (SummarizePauseQueue, "document.summarize.pause"),
-        (SummarizeProgressQueue, "document.summarize.progress"),
-        (SummarizeCompletedQueue, "document.summarize.completed"),
-        (SummarizeFailedQueue, "document.summarize.failed"),
-        (SummarizePausedQueue, "document.summarize.paused"),
+        (UploadedQueue, WireRoutingKeys.Uploaded),
+        (DeletedQueue, WireRoutingKeys.Deleted),
+        (PauseQueue, WireRoutingKeys.Pause),
+        (ProcessedQueue, WireRoutingKeys.Processed),
+        (FailedQueue, WireRoutingKeys.Failed),
+        (PausedQueue, WireRoutingKeys.Paused),
+        (ProgressQueue, WireRoutingKeys.Progress),
+        (SummarizeQueue, WireRoutingKeys.Summarize),
+        (SummarizePauseQueue, WireRoutingKeys.SummarizePause),
+        (SummarizeProgressQueue, WireRoutingKeys.SummarizeProgress),
+        (SummarizeCompletedQueue, WireRoutingKeys.SummarizeCompleted),
+        (SummarizeFailedQueue, WireRoutingKeys.SummarizeFailed),
+        (SummarizePausedQueue, WireRoutingKeys.SummarizePaused),
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -146,7 +146,7 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentUploadedEvent
         {
-            Type = "document.uploaded",
+            Type = WireRoutingKeys.Uploaded,
             DocumentId = documentId,
             FilePath = filePath,
             UserId = string.Empty,
@@ -156,31 +156,31 @@ public sealed partial class MessageBroker(
             Timestamp = DateTime.UtcNow
         };
 
-        return SendMessageAsync("document.uploaded", message, cancellationToken);
+        return SendMessageAsync(WireRoutingKeys.Uploaded, message, cancellationToken);
     }
 
     public Task PublishDocumentDeletedAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var message = new DocumentDeletedEvent
         {
-            Type = "document.deleted",
+            Type = WireRoutingKeys.Deleted,
             DocumentId = documentId,
             Timestamp = DateTime.UtcNow
         };
 
-        return SendMessageAsync("document.deleted", message, cancellationToken);
+        return SendMessageAsync(WireRoutingKeys.Deleted, message, cancellationToken);
     }
 
     public Task PublishDocumentPauseAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var message = new DocumentPauseEvent
         {
-            Type = "document.pause",
+            Type = WireRoutingKeys.Pause,
             DocumentId = documentId,
             Timestamp = DateTime.UtcNow
         };
 
-        return SendMessageAsync("document.pause", message, cancellationToken);
+        return SendMessageAsync(WireRoutingKeys.Pause, message, cancellationToken);
     }
 
     public Task PublishDocumentSummarizeAsync(
@@ -191,26 +191,26 @@ public sealed partial class MessageBroker(
     {
         var message = new DocumentSummarizeEvent
         {
-            Type = "document.summarize",
+            Type = WireRoutingKeys.Summarize,
             DocumentId = documentId,
             MaxContextChars = maxContextChars,
             Reset = reset,
             Timestamp = DateTime.UtcNow
         };
 
-        return SendMessageAsync("document.summarize", message, cancellationToken);
+        return SendMessageAsync(WireRoutingKeys.Summarize, message, cancellationToken);
     }
 
     public Task PublishDocumentSummarizePauseAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var message = new DocumentSummarizePauseEvent
         {
-            Type = "document.summarize.pause",
+            Type = WireRoutingKeys.SummarizePause,
             DocumentId = documentId,
             Timestamp = DateTime.UtcNow
         };
 
-        return SendMessageAsync("document.summarize.pause", message, cancellationToken);
+        return SendMessageAsync(WireRoutingKeys.SummarizePause, message, cancellationToken);
     }
 
     public async Task StartConsumingAsync(
@@ -271,7 +271,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _processedChannel,
             ProcessedQueue,
-            "document.processed",
+            WireRoutingKeys.Processed,
             onProcessed,
             onInvalidPayload,
             cancellationToken);
@@ -279,7 +279,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _failedChannel,
             FailedQueue,
-            "document.failed",
+            WireRoutingKeys.Failed,
             onFailed,
             onInvalidPayload,
             cancellationToken);
@@ -287,7 +287,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _pausedChannel,
             PausedQueue,
-            "document.paused",
+            WireRoutingKeys.Paused,
             onPaused,
             onInvalidPayload,
             cancellationToken);
@@ -295,7 +295,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _progressChannel,
             ProgressQueue,
-            "document.progress",
+            WireRoutingKeys.Progress,
             onProgress,
             onInvalidPayload,
             cancellationToken);
@@ -303,7 +303,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _summarizeStatusChannel,
             SummarizeProgressQueue,
-            "document.summarize.progress",
+            WireRoutingKeys.SummarizeProgress,
             onSummarizeProgress,
             onInvalidPayload,
             cancellationToken);
@@ -311,7 +311,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _summarizeStatusChannel,
             SummarizeCompletedQueue,
-            "document.summarize.completed",
+            WireRoutingKeys.SummarizeCompleted,
             onSummarizeCompleted,
             onInvalidPayload,
             cancellationToken);
@@ -319,7 +319,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _summarizeStatusChannel,
             SummarizeFailedQueue,
-            "document.summarize.failed",
+            WireRoutingKeys.SummarizeFailed,
             onSummarizeFailed,
             onInvalidPayload,
             cancellationToken);
@@ -327,7 +327,7 @@ public sealed partial class MessageBroker(
         await BindConsumerAsync(
             _summarizeStatusChannel,
             SummarizePausedQueue,
-            "document.summarize.paused",
+            WireRoutingKeys.SummarizePaused,
             onSummarizePaused,
             onInvalidPayload,
             cancellationToken);
